@@ -33,9 +33,10 @@ describe('manifest.json', () => {
     expect(manifest.action.default_icon).toHaveProperty('128');
   });
 
-  it('should have activeTab and scripting permissions', () => {
+  it('should have activeTab, scripting and webNavigation permissions', () => {
     expect(manifest.permissions).toContain('activeTab');
     expect(manifest.permissions).toContain('scripting');
+    expect(manifest.permissions).toContain('webNavigation');
   });
 
   it('should NOT have host_permissions (uses activeTab instead)', () => {
@@ -56,6 +57,11 @@ describe('manifest.json', () => {
   });
 
   it('should only request minimal permissions', () => {
-    expect(manifest.permissions.length).toBe(2);
+    expect(manifest.permissions.length).toBe(3);
+  });
+
+  it('should have service worker background script', () => {
+    expect(manifest.background).toBeDefined();
+    expect(manifest.background.service_worker).toBe('background/service-worker.js');
   });
 });

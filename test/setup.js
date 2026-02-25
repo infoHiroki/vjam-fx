@@ -10,11 +10,14 @@ globalThis.chrome = {
   },
   tabs: {
     query: vi.fn().mockResolvedValue([{ id: 1, url: 'https://example.com' }]),
+    get: vi.fn().mockResolvedValue({ id: 1, url: 'https://example.com' }),
     sendMessage: vi.fn().mockResolvedValue(undefined),
     onUpdated: { addListener: vi.fn() },
+    onRemoved: { addListener: vi.fn() },
   },
   runtime: {
     getURL: vi.fn((path) => `chrome-extension://fake-id/${path}`),
+    sendMessage: vi.fn().mockResolvedValue({ state: null }),
     onMessage: {
       addListener: vi.fn(),
       removeListener: vi.fn(),
@@ -25,10 +28,17 @@ globalThis.chrome = {
       get: vi.fn().mockResolvedValue({}),
       set: vi.fn().mockResolvedValue(undefined),
     },
+    session: {
+      get: vi.fn().mockResolvedValue({}),
+      set: vi.fn().mockResolvedValue(undefined),
+    },
   },
   action: {
     setIcon: vi.fn(),
     setBadgeText: vi.fn(),
+  },
+  webNavigation: {
+    onCompleted: { addListener: vi.fn() },
   },
 };
 
