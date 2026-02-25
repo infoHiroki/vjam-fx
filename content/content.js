@@ -41,6 +41,8 @@
       // Multi-layer support
       this.activeLayers = new Map(); // name → { preset, container }
       this.activeFilters = new Set();
+      this._osdEl = null;
+      this._osdTimer = null;
     }
 
     createOverlay() {
@@ -113,6 +115,8 @@
 
       // Fade in on next frame
       requestAnimationFrame(() => { layerDiv.style.opacity = '1'; });
+
+      this.showOSD('+ ' + presetName);
     }
 
     _removeLayer(presetName) {
@@ -120,6 +124,7 @@
       if (!layer) return;
 
       this.activeLayers.delete(presetName);
+      this.showOSD('- ' + presetName);
 
       // Fade out then remove
       const container = layer.container;
@@ -288,6 +293,7 @@
       this.clearFilters();
       this.setBlendMode('screen');
       this._stopAutoCycle();
+      this.showOSD('KILL');
     }
 
     /**
@@ -307,6 +313,9 @@
         }
       }
       this._applyFilters();
+
+      const filterList = [...this.activeFilters].join(', ') || 'none';
+      this.showOSD(mode + ' | ' + filterList);
     }
 
     // --- Auto-Cycle ---
@@ -349,6 +358,10 @@
 
       // Randomly change blend + filters
       this.randomizeFX();
+
+      // OSD shows active layers
+      const names = chosen.join(' + ');
+      this.showOSD('Auto: ' + names);
     }
 
     _stopAutoCycle() {
@@ -356,6 +369,29 @@
         clearInterval(this._autoCycleTimer);
         this._autoCycleTimer = null;
       }
+    }
+
+    // --- OSD Feedback ---
+
+    showOSD(text) {
+      if (!this.overlay) return;
+      if (!this._osdEl) {
+        this._osdEl = document.createElement('div');
+        this._osdEl.style.cssText = [
+          'position:absolute', 'bottom:20px', 'left:50%', 'transform:translateX(-50%)',
+          'background:rgba(0,0,0,0.7)', 'color:#fff', 'padding:6px 16px',
+          'border-radius:4px', 'font:13px/1.4 -apple-system,sans-serif',
+          'white-space:nowrap', 'pointer-events:none', 'z-index:1',
+          'transition:opacity 0.3s', 'opacity:0',
+        ].join(';');
+        this.overlay.appendChild(this._osdEl);
+      }
+      this._osdEl.textContent = text;
+      this._osdEl.style.opacity = '1';
+      clearTimeout(this._osdTimer);
+      this._osdTimer = setTimeout(() => {
+        if (this._osdEl) this._osdEl.style.opacity = '0';
+      }, 2000);
     }
 
     getActiveLayerNames() {

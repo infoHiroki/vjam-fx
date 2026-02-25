@@ -4,46 +4,63 @@
  * Syncs state with Service Worker for navigation persistence
  */
 
-const ALL_PRESETS = [
-  { id: 'neon-tunnel', name: 'Neon Tunnel' },
-  { id: 'kaleidoscope', name: 'Kaleidoscope' },
-  { id: 'mandala', name: 'Mandala' },
-  { id: 'infinite-zoom', name: 'Infinite Zoom' },
-  { id: 'laser-tunnel', name: 'Laser Tunnel' },
-  { id: 'cellular', name: 'Cellular' },
-  { id: 'liquid', name: 'Liquid' },
-  { id: 'voronoi', name: 'Voronoi' },
-  { id: 'smoke', name: 'Smoke' },
-  { id: 'moire', name: 'Moire' },
-  { id: 'starfield', name: 'Starfield' },
-  { id: 'hypnotic', name: 'Hypnotic' },
-  { id: 'sacred-geometry', name: 'Sacred Geometry' },
-  { id: 'wireframe-sphere', name: 'Wireframe Sphere' },
-  { id: 'frequency-rings', name: 'Frequency Rings' },
-  { id: 'gradient-sweep', name: 'Gradient Sweep' },
-  { id: 'sine-waves', name: 'Sine Waves' },
-  { id: 'glitch-grid', name: 'Glitch Grid' },
-  { id: 'hexgrid-pulse', name: 'Hexgrid Pulse' },
-  { id: 'grid-warp', name: 'Grid Warp' },
-  { id: 'oil-spill', name: 'Oil Spill' },
-  { id: 'flow-field', name: 'Flow Field' },
-  { id: 'bokeh', name: 'Bokeh' },
-  { id: 'constellation', name: 'Constellation' },
-  { id: 'ant-colony', name: 'Ant Colony' },
-  { id: 'circuit-board', name: 'Circuit Board' },
-  { id: 'crt-monitor', name: 'CRT Monitor' },
-  { id: 'rain', name: 'Rain' },
-  { id: 'terrain', name: 'Terrain' },
-  { id: 'snowfall', name: 'Snowfall' },
-  { id: 'prism', name: 'Prism' },
-  { id: 'fractal-tree', name: 'Fractal Tree' },
-  { id: 'retro-terminal', name: 'Retro Terminal' },
-  { id: 'equalizer', name: 'Equalizer' },
-  { id: 'coral-reef', name: 'Coral Reef' },
-  { id: 'neon-rain', name: 'Neon Rain' },
-  { id: 'cyber-rain-heavy', name: 'Cyber Rain' },
-  { id: 'barcode', name: 'Barcode' },
+const PRESET_CATEGORIES = [
+  { label: 'Tunnels & Zoom', presets: [
+    { id: 'neon-tunnel', name: 'Neon Tunnel' },
+    { id: 'laser-tunnel', name: 'Laser Tunnel' },
+    { id: 'infinite-zoom', name: 'Infinite Zoom' },
+    { id: 'hypnotic', name: 'Hypnotic' },
+  ]},
+  { label: 'Patterns', presets: [
+    { id: 'kaleidoscope', name: 'Kaleidoscope' },
+    { id: 'mandala', name: 'Mandala' },
+    { id: 'sacred-geometry', name: 'Sacred Geometry' },
+    { id: 'moire', name: 'Moire' },
+    { id: 'prism', name: 'Prism' },
+    { id: 'barcode', name: 'Barcode' },
+  ]},
+  { label: 'Organic', presets: [
+    { id: 'cellular', name: 'Cellular' },
+    { id: 'liquid', name: 'Liquid' },
+    { id: 'voronoi', name: 'Voronoi' },
+    { id: 'smoke', name: 'Smoke' },
+    { id: 'oil-spill', name: 'Oil Spill' },
+    { id: 'coral-reef', name: 'Coral Reef' },
+    { id: 'flow-field', name: 'Flow Field' },
+    { id: 'ant-colony', name: 'Ant Colony' },
+  ]},
+  { label: 'Grid & Tech', presets: [
+    { id: 'glitch-grid', name: 'Glitch Grid' },
+    { id: 'hexgrid-pulse', name: 'Hexgrid Pulse' },
+    { id: 'grid-warp', name: 'Grid Warp' },
+    { id: 'circuit-board', name: 'Circuit Board' },
+    { id: 'crt-monitor', name: 'CRT Monitor' },
+    { id: 'retro-terminal', name: 'Retro Terminal' },
+  ]},
+  { label: 'Space & Nature', presets: [
+    { id: 'starfield', name: 'Starfield' },
+    { id: 'constellation', name: 'Constellation' },
+    { id: 'bokeh', name: 'Bokeh' },
+    { id: 'terrain', name: 'Terrain' },
+    { id: 'fractal-tree', name: 'Fractal Tree' },
+    { id: 'snowfall', name: 'Snowfall' },
+  ]},
+  { label: 'Audio Reactive', presets: [
+    { id: 'frequency-rings', name: 'Frequency Rings' },
+    { id: 'equalizer', name: 'Equalizer' },
+    { id: 'sine-waves', name: 'Sine Waves' },
+    { id: 'gradient-sweep', name: 'Gradient Sweep' },
+    { id: 'wireframe-sphere', name: 'Wireframe Sphere' },
+  ]},
+  { label: 'Weather', presets: [
+    { id: 'rain', name: 'Rain' },
+    { id: 'neon-rain', name: 'Neon Rain' },
+    { id: 'cyber-rain-heavy', name: 'Cyber Rain' },
+  ]},
 ];
+
+// Flat list for compatibility
+const ALL_PRESETS = PRESET_CATEGORIES.flatMap(c => c.presets);
 
 const FILTER_NAMES = ['invert', 'hue-rotate', 'grayscale', 'saturate', 'brightness', 'contrast', 'sepia', 'blur'];
 const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion'];
@@ -101,11 +118,17 @@ class PopupController {
     const list = document.getElementById('preset-list');
     if (!list) return;
     list.innerHTML = '';
-    for (const p of this.presets) {
-      const label = document.createElement('label');
-      label.className = 'preset-item';
-      label.innerHTML = `<input type="checkbox" name="preset" value="${p.id}"><span>${p.name}</span>`;
-      list.appendChild(label);
+    for (const cat of PRESET_CATEGORIES) {
+      const header = document.createElement('div');
+      header.className = 'category-header';
+      header.textContent = cat.label;
+      list.appendChild(header);
+      for (const p of cat.presets) {
+        const label = document.createElement('label');
+        label.className = 'preset-item';
+        label.innerHTML = `<input type="checkbox" name="preset" value="${p.id}"><span>${p.name}</span>`;
+        list.appendChild(label);
+      }
     }
   }
 

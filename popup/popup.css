@@ -127,6 +127,18 @@ body {
   border-radius: 6px;
 }
 
+.category-header {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666;
+  padding: 6px 10px 2px;
+  background: #1e1e1e;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 .preset-item {
   display: flex;
   align-items: center;
