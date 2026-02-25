@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "VJam FX — VJ Effects for Any Website",
+  "version": "1.0.0",
+  "description": "Overlay music-reactive VJ visuals on any webpage. Beat detection, 10 presets, blend modes.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "content_scripts": [],
+  "web_accessible_resources": [{
+    "resources": [
+      "lib/p5.min.js",
+      "content/base-preset.js",
+      "content/audio-analyzer.js",
+      "content/content.js",
+      "content/presets/neon-tunnel.js",
+      "content/presets/kaleidoscope.js",
+      "content/presets/mandala.js",
+      "content/presets/sine-waves.js",
+      "content/presets/gradient-sweep.js",
+      "content/presets/moire.js",
+      "content/presets/hypnotic.js",
+      "content/presets/starfield.js",
+      "content/presets/rain.js",
+      "content/presets/barcode.js"
+    ],
+    "matches": ["<all_urls>"]
+  }],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

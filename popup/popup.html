@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+  <title>VJam FX</title>
+</head>
+<body>
+  <div class="popup">
+    <header class="header">
+      <h1>VJam FX</h1>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle">
+        <span class="slider"></span>
+      </label>
+    </header>
+
+    <div class="preset-list" id="preset-list">
+      <label class="preset-item">
+        <input type="radio" name="preset" value="neon-tunnel" checked>
+        <span>Neon Tunnel</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="kaleidoscope">
+        <span>Kaleidoscope</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="mandala">
+        <span>Mandala</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="sine-waves">
+        <span>Sine Waves</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="gradient-sweep">
+        <span>Gradient Sweep</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="moire">
+        <span>Moire</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="hypnotic">
+        <span>Hypnotic</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="starfield">
+        <span>Starfield</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="rain">
+        <span>Rain</span>
+      </label>
+      <label class="preset-item">
+        <input type="radio" name="preset" value="barcode">
+        <span>Barcode</span>
+      </label>
+    </div>
+
+    <div class="controls">
+      <div class="control-row">
+        <label>Blend</label>
+        <select id="blend-mode">
+          <option value="screen">Screen</option>
+          <option value="lighten">Lighten</option>
+          <option value="difference">Difference</option>
+          <option value="exclusion">Exclusion</option>
+        </select>
+      </div>
+      <div class="control-row">
+        <label>Mic</label>
+        <button id="mic-toggle" class="mic-btn on">ON</button>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <a id="vjam-link" href="https://vjam.vercel.app" target="_blank" rel="noopener">
+        Get VJam Full →
+      </a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
