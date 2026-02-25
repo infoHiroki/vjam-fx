@@ -24,9 +24,28 @@ for (const { file } of PRESET_FILES) {
   eval(code);
 }
 
+// Import popup preset list for consistency check
+import { readFileSync as readSync } from 'fs';
+const popupCode = readSync(resolve(__dirname, '../popup/popup.js'), 'utf-8');
+const popupIdMatches = [...popupCode.matchAll(/id:\s*'([^']+)'/g)].map(m => m[1]);
+const popupPresetIds = [...new Set(popupIdMatches)];
+
 describe('Presets', () => {
   it(`should have all ${PRESET_FILES.length} presets loaded`, () => {
     expect(Object.keys(window.VJamFX.presets).length).toBe(PRESET_FILES.length);
+  });
+
+  it('should match popup.js preset list (every file has a popup entry)', () => {
+    for (const { id } of PRESET_FILES) {
+      expect(popupPresetIds).toContain(id);
+    }
+  });
+
+  it('should match popup.js preset list (every popup entry has a file)', () => {
+    const fileIds = PRESET_FILES.map(f => f.id);
+    for (const id of popupPresetIds) {
+      expect(fileIds).toContain(id);
+    }
   });
 
   for (const { id, name } of PRESET_FILES) {
