@@ -1,63 +1,60 @@
 /**
  * VJam FX — Service Worker (Background Script)
  * Persists effect state across page navigations.
- * On navigation complete, re-injects scripts and restarts the effect.
+ * Supports multi-layer presets and CSS filters.
  */
 
-// Per-tab state: { tabId: { active, preset, blendMode, micEnabled } }
+// Per-tab state: { tabId: { active, layers[], blendMode, micEnabled, filters[] } }
 const tabState = new Map();
 
-/**
- * Save state for a tab
- */
 function setState(tabId, state) {
   tabState.set(tabId, { ...state });
 }
 
-/**
- * Get state for a tab
- */
 function getState(tabId) {
   return tabState.get(tabId) || null;
 }
 
-/**
- * Clear state for a tab
- */
 function clearState(tabId) {
   tabState.delete(tabId);
 }
 
-/**
- * Check if a URL is injectable (not restricted)
- */
 function isInjectableUrl(url) {
   if (!url) return false;
   return url.startsWith('http://') || url.startsWith('https://');
 }
 
 /**
- * Inject all scripts and start the effect on a tab
+ * Inject all scripts and start all layers on a tab
  */
 async function injectAndStart(tabId, state) {
   if (!state || !state.active) return false;
 
   try {
-    // Check tab URL
     const tab = await chrome.tabs.get(tabId);
     if (!isInjectableUrl(tab.url)) return false;
 
-    // Inject scripts in order: p5 → base-preset → audio-analyzer → preset → engine
-    const presetFile = `content/presets/${state.preset}.js`;
-    const scripts = [
+    const layers = state.layers || (state.preset ? [state.preset] : []);
+    if (layers.length === 0) return false;
+
+    // Core scripts
+    const coreScripts = [
       'lib/p5.min.js',
       'content/base-preset.js',
       'content/audio-analyzer.js',
-      presetFile,
-      'content/content.js',
     ];
 
-    for (const file of scripts) {
+    // Preset files for all layers + auto-cycle presets
+    const presetSet = new Set(layers);
+    if (state.autoCyclePresets) {
+      for (const id of state.autoCyclePresets) presetSet.add(id);
+    }
+    const presetFiles = [...presetSet].map(id => `content/presets/${id}.js`);
+
+    // Engine last
+    const allScripts = [...coreScripts, ...presetFiles, 'content/content.js'];
+
+    for (const file of allScripts) {
       await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
@@ -65,33 +62,50 @@ async function injectAndStart(tabId, state) {
       });
     }
 
-    // Send start command
+    // Start first layer with config
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      func: (preset, blendMode, micEnabled) => {
-        if (window._vjamFxEngine) {
-          window._vjamFxEngine.handleMessage({
-            action: 'start',
-            preset: preset,
-            blendMode: blendMode,
-            mic: micEnabled,
-          });
+      func: (layers, blendMode, micEnabled, filters, autoCyclePresets) => {
+        if (!window._vjamFxEngine) return;
+        const engine = window._vjamFxEngine;
+
+        // Start first layer
+        engine.handleMessage({
+          action: 'start',
+          preset: layers[0],
+          blendMode: blendMode,
+          mic: micEnabled,
+        });
+
+        // Add remaining layers
+        for (let i = 1; i < layers.length; i++) {
+          engine.handleMessage({ action: 'addLayer', preset: layers[i] });
+        }
+
+        // Restore filters
+        if (filters) {
+          for (const f of filters) {
+            engine.handleMessage({ action: 'setFilter', filter: f, enabled: true });
+          }
+        }
+
+        // Restart auto-cycle if it was active
+        if (autoCyclePresets && autoCyclePresets.length > 0) {
+          engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: 8000 });
         }
       },
-      args: [state.preset, state.blendMode, state.micEnabled],
+      args: [layers, state.blendMode || 'screen', state.micEnabled !== false, state.filters || [], state.autoCyclePresets || null],
     });
 
     return true;
   } catch (e) {
-    // Tab may have been closed or URL restricted
     return false;
   }
 }
 
 // --- Event Listeners ---
 
-// Listen for messages from popup
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'setState') {
     setState(msg.tabId, msg.state);
@@ -103,12 +117,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     clearState(msg.tabId);
     sendResponse({ ok: true });
   }
-  return false; // Synchronous response
+  return false;
 });
 
-// Re-inject on navigation complete (same tab, new page)
+// Re-inject on navigation complete
 chrome.webNavigation.onCompleted.addListener(async (details) => {
-  // Only main frame (not iframes)
   if (details.frameId !== 0) return;
 
   const state = getState(details.tabId);

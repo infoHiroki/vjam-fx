@@ -16,47 +16,28 @@
       </label>
     </header>
 
+    <div class="action-bar">
+      <button id="btn-prev" class="action-btn" title="Previous">◀</button>
+      <button id="btn-next" class="action-btn" title="Next">▶</button>
+      <button id="btn-kill" class="action-btn kill" title="Kill All">Kill</button>
+      <button id="btn-random-fx" class="action-btn" title="Randomize FX">🎲 FX</button>
+      <button id="btn-auto-cycle" class="action-btn" title="Auto Cycle">Auto</button>
+    </div>
+
     <div class="preset-list" id="preset-list">
-      <label class="preset-item">
-        <input type="radio" name="preset" value="neon-tunnel" checked>
-        <span>Neon Tunnel</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="kaleidoscope">
-        <span>Kaleidoscope</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="mandala">
-        <span>Mandala</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="sine-waves">
-        <span>Sine Waves</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="gradient-sweep">
-        <span>Gradient Sweep</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="moire">
-        <span>Moire</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="hypnotic">
-        <span>Hypnotic</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="starfield">
-        <span>Starfield</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="rain">
-        <span>Rain</span>
-      </label>
-      <label class="preset-item">
-        <input type="radio" name="preset" value="barcode">
-        <span>Barcode</span>
-      </label>
+      <!-- Presets injected by popup.js -->
+    </div>
+
+    <div class="section-label">Filters</div>
+    <div class="filter-grid" id="filter-grid">
+      <button class="filter-btn" data-filter="invert">Invert</button>
+      <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
+      <button class="filter-btn" data-filter="grayscale">Gray</button>
+      <button class="filter-btn" data-filter="saturate">Saturate</button>
+      <button class="filter-btn" data-filter="brightness">Bright</button>
+      <button class="filter-btn" data-filter="contrast">Contrast</button>
+      <button class="filter-btn" data-filter="sepia">Sepia</button>
+      <button class="filter-btn" data-filter="blur">Blur</button>
     </div>
 
     <div class="controls">

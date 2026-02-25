@@ -6,7 +6,7 @@ class BarcodePreset extends BasePreset {
     constructor() {
         super();
         this.params = { speed: 1 };
-        this.audio = { bass: 0, mid: 0, treble: 0, rms: 0 };
+        this.audio = { bass: 0, mid: 0, treble: 0, rms: 0, strength: 0 };
         this.beatPulse = 0;
     }
 
@@ -104,6 +104,7 @@ class BarcodePreset extends BasePreset {
         this.audio.mid = audioData.mid || 0;
         this.audio.treble = audioData.treble || 0;
         this.audio.rms = audioData.rms || 0;
+        this.audio.strength = audioData.strength || 0;
     }
 
     onBeat(strength) {

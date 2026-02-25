@@ -59,7 +59,8 @@ class KaleidoscopePreset extends BasePreset {
                 p.push();
                 p.translate(cx, cy);
 
-                for (let i = preset.shapes.length - 1; i >= 0; i--) {
+                let _w = 0;
+                for (let i = 0; i < preset.shapes.length; i++) {
                     const s = preset.shapes[i];
                     s.dist += s.speed * (1 + preset.audio.bass * 2);
                     s.angle += 0.01 + preset.audio.treble * 0.02;
@@ -67,9 +68,9 @@ class KaleidoscopePreset extends BasePreset {
 
                     const maxDist = Math.max(p.width, p.height) * 0.7;
                     if (s.life <= 0 || s.dist > maxDist) {
-                        preset.shapes.splice(i, 1);
                         continue;
                     }
+                    preset.shapes[_w++] = s;
 
                     const alpha = s.life * 65;
                     const size = s.size * (0.6 + preset.audio.mid * 0.4);
@@ -115,6 +116,7 @@ class KaleidoscopePreset extends BasePreset {
                         }
                     }
                 }
+                preset.shapes.length = _w;
 
                 p.pop();
             };

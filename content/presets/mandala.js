@@ -6,7 +6,7 @@ class MandalaPreset extends BasePreset {
     constructor() {
         super();
         this.params = { speed: 1 };
-        this.audio = { bass: 0, mid: 0, treble: 0, rms: 0 };
+        this.audio = { bass: 0, mid: 0, treble: 0, rms: 0, strength: 0 };
         this.beatPulse = 0;
         this.rings = [];
     }
@@ -34,14 +34,17 @@ class MandalaPreset extends BasePreset {
                 const t = p.frameCount * 0.005 * preset.params.speed;
 
                 // Expand existing rings
-                for (let i = preset.rings.length - 1; i >= 0; i--) {
+                let _w = 0;
+                for (let i = 0; i < preset.rings.length; i++) {
                     const ring = preset.rings[i];
                     ring.radius += ring.speed;
                     ring.life -= 0.005;
                     if (ring.life <= 0 || ring.radius > Math.max(p.width, p.height)) {
-                        preset.rings.splice(i, 1);
+                        continue;
                     }
+                    preset.rings[_w++] = ring;
                 }
+                preset.rings.length = _w;
 
                 // Draw rings
                 p.noFill();
@@ -119,6 +122,7 @@ class MandalaPreset extends BasePreset {
         this.audio.mid = audioData.mid || 0;
         this.audio.treble = audioData.treble || 0;
         this.audio.rms = audioData.rms || 0;
+        this.audio.strength = audioData.strength || 0;
     }
 
     onBeat(strength) {

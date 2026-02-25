@@ -6,7 +6,7 @@ class RainPreset extends BasePreset {
     constructor() {
         super();
         this.params = { speed: 1 };
-        this.audio = { bass: 0, mid: 0, treble: 0, rms: 0 };
+        this.audio = { bass: 0, mid: 0, treble: 0, rms: 0, strength: 0 };
         this.beatPulse = 0;
         this.drops = [];
         this.ripples = [];
@@ -69,18 +69,20 @@ class RainPreset extends BasePreset {
 
                 // Draw ripples at bottom
                 p.noFill();
-                for (let i = preset.ripples.length - 1; i >= 0; i--) {
+                let _w = 0;
+                for (let i = 0; i < preset.ripples.length; i++) {
                     const r = preset.ripples[i];
                     r.radius += 0.8;
                     r.life -= 0.02;
                     if (r.life <= 0) {
-                        preset.ripples.splice(i, 1);
                         continue;
                     }
+                    preset.ripples[_w++] = r;
                     p.stroke(210, 15, 60, r.life * 40);
                     p.strokeWeight(1);
                     p.ellipse(r.x, r.y, r.radius * 2, r.radius * 0.5);
                 }
+                preset.ripples.length = _w;
 
                 // Cap ripples
                 if (preset.ripples.length > 100) {
@@ -111,6 +113,7 @@ class RainPreset extends BasePreset {
         this.audio.mid = audioData.mid || 0;
         this.audio.treble = audioData.treble || 0;
         this.audio.rms = audioData.rms || 0;
+        this.audio.strength = audioData.strength || 0;
     }
 
     onBeat(strength) {

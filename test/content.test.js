@@ -220,6 +220,154 @@ describe('VJamFXEngine', () => {
     });
   });
 
+  describe('multi-layer', () => {
+    it('should add a layer', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'addLayer', preset: 'neon-tunnel' });
+      expect(engine.activeLayers.has('neon-tunnel')).toBe(true);
+    });
+
+    it('should remove a layer', () => {
+      engine.startPreset('neon-tunnel');
+      engine.handleMessage({ action: 'removeLayer', preset: 'neon-tunnel' });
+      expect(engine.activeLayers.has('neon-tunnel')).toBe(false);
+    });
+
+    it('should toggle a layer on and off', () => {
+      engine.createOverlay();
+      engine.handleMessage({ action: 'toggleLayer', preset: 'neon-tunnel' });
+      expect(engine.activeLayers.has('neon-tunnel')).toBe(true);
+      engine.handleMessage({ action: 'toggleLayer', preset: 'neon-tunnel' });
+      expect(engine.activeLayers.has('neon-tunnel')).toBe(false);
+    });
+
+    it('should get active layer names', () => {
+      engine.startPreset('neon-tunnel');
+      const names = engine.getActiveLayerNames();
+      expect(names).toContain('neon-tunnel');
+    });
+
+    it('should destroy all layers on stop', () => {
+      engine.startPreset('neon-tunnel');
+      engine.stop();
+      expect(engine.activeLayers.size).toBe(0);
+    });
+  });
+
+  describe('CSS filters', () => {
+    it('should add a filter', () => {
+      engine.createOverlay();
+      engine.handleMessage({ action: 'setFilter', filter: 'invert', enabled: true });
+      expect(engine.activeFilters.has('invert')).toBe(true);
+    });
+
+    it('should remove a filter', () => {
+      engine.createOverlay();
+      engine.setFilter('invert', true);
+      engine.handleMessage({ action: 'setFilter', filter: 'invert', enabled: false });
+      expect(engine.activeFilters.has('invert')).toBe(false);
+    });
+
+    it('should toggle a filter', () => {
+      engine.createOverlay();
+      engine.handleMessage({ action: 'toggleFilter', filter: 'hue-rotate' });
+      expect(engine.activeFilters.has('hue-rotate')).toBe(true);
+      engine.handleMessage({ action: 'toggleFilter', filter: 'hue-rotate' });
+      expect(engine.activeFilters.has('hue-rotate')).toBe(false);
+    });
+
+    it('should apply filter CSS to overlay', () => {
+      engine.createOverlay();
+      engine.setFilter('invert', true);
+      engine.setFilter('blur', true);
+      const overlay = document.querySelector('[data-vjam-fx]');
+      expect(overlay.style.filter).toContain('invert(1)');
+      expect(overlay.style.filter).toContain('blur(3px)');
+    });
+
+    it('should clear all filters', () => {
+      engine.createOverlay();
+      engine.setFilter('invert', true);
+      engine.setFilter('sepia', true);
+      engine.handleMessage({ action: 'clearFilters' });
+      expect(engine.activeFilters.size).toBe(0);
+      const overlay = document.querySelector('[data-vjam-fx]');
+      expect(overlay.style.filter).toBe('none');
+    });
+
+    it('should reject invalid filter names', () => {
+      engine.createOverlay();
+      engine.setFilter('nonexistent', true);
+      expect(engine.activeFilters.size).toBe(0);
+    });
+  });
+
+  describe('kill', () => {
+    it('should clear all layers and filters', () => {
+      engine.startPreset('neon-tunnel');
+      engine.setFilter('invert', true);
+      engine.handleMessage({ action: 'kill' });
+      expect(engine.activeLayers.size).toBe(0);
+      expect(engine.activeFilters.size).toBe(0);
+      expect(engine.blendMode).toBe('screen');
+    });
+
+    it('should keep engine alive after kill', () => {
+      engine.startPreset('neon-tunnel');
+      engine.handleMessage({ action: 'kill' });
+      // Engine should still have overlay, can add new layers
+      expect(engine.overlay).not.toBeNull();
+    });
+  });
+
+  describe('randomizeFX', () => {
+    it('should set a valid blend mode', () => {
+      engine.createOverlay();
+      engine.handleMessage({ action: 'randomizeFX' });
+      expect(['screen', 'lighten', 'difference', 'exclusion']).toContain(engine.blendMode);
+    });
+  });
+
+  describe('auto-cycle', () => {
+    it('should start and stop auto-cycle via messages', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 5000 });
+      expect(engine._autoCycleTimer).not.toBeNull();
+      engine.handleMessage({ action: 'stopAutoCycle' });
+      expect(engine._autoCycleTimer).toBeNull();
+    });
+
+    it('should add layers on auto-cycle tick', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000 });
+      // After startAutoCycle, the first tick runs immediately
+      expect(engine.activeLayers.size).toBeGreaterThan(0);
+      engine._stopAutoCycle();
+    });
+
+    it('should stop auto-cycle on destroy', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000 });
+      engine.destroy();
+      expect(engine._autoCycleTimer).toBeNull();
+    });
+  });
+
+  describe('fade transitions', () => {
+    it('should start layer with opacity 0 and transition', () => {
+      engine.createOverlay();
+      engine._addLayer('neon-tunnel');
+      const layerDiv = document.querySelector('[data-vjam-layer="neon-tunnel"]');
+      // Starts with opacity 0 (rAF mock doesn't actually trigger callback)
+      expect(layerDiv.style.opacity).toBe('0');
+      expect(layerDiv.style.transition).toContain('opacity');
+    });
+  });
+
   describe('auto-initialization', () => {
     it('should have created singleton on window', () => {
       expect(window._vjamFxEngine).toBeDefined();

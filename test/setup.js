@@ -64,12 +64,69 @@ globalThis.p5 = class p5Mock {
       'background', 'fill', 'noFill', 'stroke', 'noStroke', 'strokeWeight',
       'push', 'pop', 'translate', 'rotate', 'scale',
       'circle', 'ellipse', 'rect', 'line', 'arc', 'point',
-      'beginShape', 'endShape', 'vertex',
-      'triangle', 'rectMode',
-      'map',
+      'beginShape', 'endShape', 'vertex', 'curveVertex', 'bezierVertex',
+      'triangle', 'rectMode', 'quad',
+      'map', 'noise', 'noiseSeed', 'noiseDetail',
+      'noSmooth', 'smooth', 'blendMode',
+      'createGraphics', 'image', 'loadFont',
+      'textFont', 'textSize', 'textAlign', 'text', 'textWidth',
+      'strokeCap', 'strokeJoin',
+      'lerp', 'constrain', 'dist', 'abs', 'floor', 'ceil', 'round',
+      'sin', 'cos', 'tan', 'atan2', 'sqrt', 'pow', 'min', 'max',
+      'color', 'lerpColor', 'red', 'green', 'blue', 'alpha', 'hue', 'saturation', 'brightness',
+      'drawingContext',
     ];
     for (const m of methods) this[m] = noop;
     this.map = (v, s1, e1, s2, e2) => s2 + (v - s1) / (e1 - s1) * (e2 - s2);
+    this.random = (a, b) => {
+      if (a === undefined) return Math.random();
+      if (b === undefined) return Math.random() * a;
+      return a + Math.random() * (b - a);
+    };
+    this.noise = () => 0.5;
+    this.constrain = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+    this.lerp = (a, b, t) => a + (b - a) * t;
+    this.dist = (x1, y1, x2, y2) => Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+    this.abs = Math.abs;
+    this.floor = Math.floor;
+    this.ceil = Math.ceil;
+    this.round = Math.round;
+    this.sin = Math.sin;
+    this.cos = Math.cos;
+    this.tan = Math.tan;
+    this.atan2 = Math.atan2;
+    this.sqrt = Math.sqrt;
+    this.pow = Math.pow;
+    this.min = Math.min;
+    this.max = Math.max;
+    this.color = () => ({ levels: [0,0,0,255] });
+    this.lerpColor = () => ({ levels: [128,128,128,255] });
+    this.red = () => 0;
+    this.green = () => 0;
+    this.blue = () => 0;
+    this.HALF_PI = Math.PI / 2;
+    this.QUARTER_PI = Math.PI / 4;
+    this.TAU = Math.PI * 2;
+    this.SQUARE = 'square';
+    this.ROUND = 'round';
+    this.PROJECT = 'project';
+    this.SCREEN = 'screen';
+    this.ADD = 'add';
+    this.BLEND = 'blend';
+    this.LEFT = 'left';
+    this.RIGHT = 'right';
+    this.TOP = 'top';
+    this.BOTTOM = 'bottom';
+    // createGraphics returns a mock graphics context
+    this.createGraphics = (w, h) => {
+      const g = {};
+      for (const m of methods) g[m] = noop;
+      g.width = w || 800;
+      g.height = h || 600;
+      g.remove = noop;
+      return g;
+    };
+    this.drawingContext = { setLineDash: noop, lineDashOffset: 0 };
 
     // Run sketch to capture setup/draw
     if (sketch) sketch(this);

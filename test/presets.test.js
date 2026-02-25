@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 
 // Load base-preset first (presets depend on it)
@@ -9,26 +9,26 @@ eval(baseCode);
 
 const BasePreset = window.VJamFX.BasePreset;
 
-// Load all 10 presets
-const PRESET_FILES = [
-  { file: 'neon-tunnel.js', id: 'neon-tunnel', name: 'NeonTunnel' },
-  { file: 'kaleidoscope.js', id: 'kaleidoscope', name: 'Kaleidoscope' },
-  { file: 'mandala.js', id: 'mandala', name: 'Mandala' },
-  { file: 'sine-waves.js', id: 'sine-waves', name: 'SineWaves' },
-  { file: 'gradient-sweep.js', id: 'gradient-sweep', name: 'GradientSweep' },
-  { file: 'moire.js', id: 'moire', name: 'Moire' },
-  { file: 'hypnotic.js', id: 'hypnotic', name: 'Hypnotic' },
-  { file: 'starfield.js', id: 'starfield', name: 'Starfield' },
-  { file: 'rain.js', id: 'rain', name: 'Rain' },
-  { file: 'barcode.js', id: 'barcode', name: 'Barcode' },
-];
+// Auto-discover all preset files
+const presetsDir = resolve(__dirname, '../content/presets');
+const PRESET_FILES = readdirSync(presetsDir)
+  .filter(f => f.endsWith('.js'))
+  .map(f => ({
+    file: f,
+    id: f.replace('.js', ''),
+    name: f.replace('.js', '').split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(''),
+  }));
 
 for (const { file } of PRESET_FILES) {
-  const code = readFileSync(resolve(__dirname, `../content/presets/${file}`), 'utf-8');
+  const code = readFileSync(resolve(presetsDir, file), 'utf-8');
   eval(code);
 }
 
 describe('Presets', () => {
+  it(`should have all ${PRESET_FILES.length} presets loaded`, () => {
+    expect(Object.keys(window.VJamFX.presets).length).toBe(PRESET_FILES.length);
+  });
+
   for (const { id, name } of PRESET_FILES) {
     describe(name, () => {
       let Cls;
@@ -59,12 +59,13 @@ describe('Presets', () => {
         expect(preset).toBeInstanceOf(BasePreset);
       });
 
-      it('should have audio property', () => {
+      it('should have audio property with all 5 fields', () => {
         expect(preset.audio).toBeDefined();
         expect(preset.audio).toHaveProperty('bass');
         expect(preset.audio).toHaveProperty('mid');
         expect(preset.audio).toHaveProperty('treble');
         expect(preset.audio).toHaveProperty('rms');
+        expect(preset.audio).toHaveProperty('strength');
       });
 
       it('should set up with a container', () => {
@@ -79,6 +80,7 @@ describe('Presets', () => {
         expect(preset.audio.mid).toBe(0.3);
         expect(preset.audio.treble).toBe(0.8);
         expect(preset.audio.rms).toBe(0.4);
+        expect(preset.audio.strength).toBe(0.6);
       });
 
       it('should handle onBeat without errors', () => {
