@@ -1,5 +1,6 @@
 /**
  * VJam FX — Popup Controller
+ * Communicates with MAIN world engine via chrome.scripting.executeScript
  */
 
 class PopupController {
@@ -25,14 +26,66 @@ class PopupController {
   }
 
   async init() {
-    // Get current tab
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tabs.length > 0) {
       this._tabId = tabs[0].id;
+      this._tabUrl = tabs[0].url || '';
     }
 
-    // Bind DOM events
+    // Check if current page supports injection
+    if (this._isRestrictedPage()) {
+      this._showError('Cannot run on this page');
+      return;
+    }
+
+    // Check if engine is already active on this tab
+    await this._syncState();
+
     this._bindEvents();
+  }
+
+  _isRestrictedPage() {
+    const url = this._tabUrl;
+    return !url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')
+      || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('devtools://');
+  }
+
+  _showError(msg) {
+    const popup = document.querySelector('.popup');
+    if (popup) {
+      popup.innerHTML = `<div style="padding:20px;text-align:center;color:#888">${msg}</div>`;
+    }
+  }
+
+  async _syncState() {
+    if (!this._tabId) return;
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        func: () => {
+          if (!window._vjamFxEngine) return null;
+          return {
+            active: window._vjamFxEngine.active,
+            preset: window._vjamFxEngine.currentPresetName,
+            blendMode: window._vjamFxEngine.blendMode,
+          };
+        },
+      });
+      if (result && result.active) {
+        this.isActive = true;
+        this.selectedPreset = result.preset || 'neon-tunnel';
+        // Update UI
+        const toggle = document.getElementById('toggle');
+        if (toggle) toggle.checked = true;
+        const radio = document.querySelector(`input[value="${this.selectedPreset}"]`);
+        if (radio) radio.checked = true;
+        const blendSelect = document.getElementById('blend-mode');
+        if (blendSelect) blendSelect.value = result.blendMode || 'screen';
+      }
+    } catch (e) {
+      // Tab might not allow scripting (chrome:// pages etc.)
+    }
   }
 
   _bindEvents() {
@@ -69,63 +122,93 @@ class PopupController {
         micBtn.textContent = this.micEnabled ? 'ON' : 'OFF';
         micBtn.classList.toggle('on', this.micEnabled);
         if (this.isActive) {
-          this._sendMessage({ action: 'setMic', enabled: this.micEnabled });
+          this._sendCommand({ action: 'setMic', enabled: this.micEnabled });
         }
       });
     }
   }
 
   async toggleEffect(on) {
+    if (!this._tabId) return;
+
     if (on) {
+      try {
       this.isActive = true;
-      // Inject content script
+
+      // Step 1: Inject p5.js into MAIN world (classic script)
       await chrome.scripting.executeScript({
         target: { tabId: this._tabId },
-        files: ['content/content.js'],
+        world: 'MAIN',
+        files: ['lib/p5.min.js'],
       });
-      // Send start message
-      await this._sendMessage({
+
+      // Step 2: Import content.js as ESM module in MAIN world
+      const engineUrl = chrome.runtime.getURL('content/content.js');
+      await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        func: (url) => {
+          if (window._vjamFxEngine) return;
+          return import(url);
+        },
+        args: [engineUrl],
+      });
+
+      // Step 3: Send start command
+      const blendMode = document.getElementById('blend-mode')?.value || 'screen';
+      await this._sendCommand({
         action: 'start',
         preset: this.selectedPreset,
-        blendMode: document.getElementById('blend-mode')?.value || 'screen',
+        blendMode: blendMode,
         mic: this.micEnabled,
       });
+      } catch (e) {
+        this.isActive = false;
+        const toggle = document.getElementById('toggle');
+        if (toggle) toggle.checked = false;
+        console.warn('VJam FX: Failed to inject', e);
+      }
     } else {
-      await this._sendMessage({ action: 'stop' });
+      await this._sendCommand({ action: 'stop' });
       this.isActive = false;
     }
   }
 
   async switchPreset(presetName) {
     this.selectedPreset = presetName;
-    await this._sendMessage({ action: 'switchPreset', preset: presetName });
+    await this._sendCommand({ action: 'switchPreset', preset: presetName });
   }
 
   async changeBlendMode(mode) {
     if (!this.validBlendModes.includes(mode)) return;
-    await this._sendMessage({ action: 'setBlendMode', blendMode: mode });
+    await this._sendCommand({ action: 'setBlendMode', blendMode: mode });
   }
 
-  async _sendMessage(msg) {
+  async _sendCommand(msg) {
     if (!this._tabId) return;
     try {
-      await chrome.tabs.sendMessage(this._tabId, msg);
+      await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        func: (message) => {
+          if (window._vjamFxEngine) {
+            window._vjamFxEngine.handleMessage(message);
+          }
+        },
+        args: [msg],
+      });
     } catch (e) {
-      console.warn('VJam FX: Failed to send message', e);
+      console.warn('VJam FX: Failed to send command', e);
     }
   }
 }
 
-// ESM export for tests
-if (typeof module !== 'undefined' || typeof exports !== 'undefined') {
-  // CommonJS
-} else if (typeof window !== 'undefined') {
-  // Browser popup context - auto-init
+export { PopupController };
+
+// Auto-init in popup context
+if (typeof document !== 'undefined' && document.getElementById) {
   document.addEventListener('DOMContentLoaded', () => {
     const controller = new PopupController();
     controller.init();
   });
 }
-
-// Named export for vitest
-export { PopupController };

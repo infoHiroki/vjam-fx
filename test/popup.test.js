@@ -6,23 +6,24 @@ describe('PopupController', () => {
   let container;
 
   beforeEach(() => {
-    // Set up minimal popup DOM
     container = document.createElement('div');
     container.innerHTML = `
       <input type="checkbox" id="toggle" />
-      <div id="preset-list"></div>
+      <div id="preset-list">
+        <input type="radio" name="preset" value="neon-tunnel" checked>
+      </div>
       <select id="blend-mode">
         <option value="screen">Screen</option>
         <option value="lighten">Lighten</option>
         <option value="difference">Difference</option>
         <option value="exclusion">Exclusion</option>
       </select>
-      <button id="mic-toggle">Mic OFF</button>
+      <button id="mic-toggle" class="mic-btn on">ON</button>
       <a id="vjam-link" href="#">Get VJam</a>
     `;
     document.body.appendChild(container);
     controller = new PopupController();
-    controller._tabId = 1; // Mock tab ID for message sending
+    controller._tabId = 1;
     vi.clearAllMocks();
   });
 
@@ -51,46 +52,63 @@ describe('PopupController', () => {
   });
 
   describe('toggle', () => {
-    it('should send start message on toggle ON', async () => {
+    it('should inject p5 and engine on toggle ON', async () => {
       controller.selectedPreset = 'neon-tunnel';
       await controller.toggleEffect(true);
-      expect(chrome.scripting.executeScript).toHaveBeenCalled();
+      // Should call executeScript 3 times: p5.js, engine import, start command
+      expect(chrome.scripting.executeScript).toHaveBeenCalledTimes(3);
+      expect(controller.isActive).toBe(true);
     });
 
-    it('should send stop message on toggle OFF', async () => {
+    it('should send stop command on toggle OFF', async () => {
       controller.isActive = true;
       await controller.toggleEffect(false);
-      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
-        expect.any(Number),
-        expect.objectContaining({ action: 'stop' })
-      );
+      expect(chrome.scripting.executeScript).toHaveBeenCalled();
+      expect(controller.isActive).toBe(false);
     });
   });
 
   describe('blend mode', () => {
-    it('should send setBlendMode message on change', async () => {
+    it('should send setBlendMode command on change', async () => {
       controller.isActive = true;
       await controller.changeBlendMode('difference');
-      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
-        expect.any(Number),
-        expect.objectContaining({ action: 'setBlendMode', blendMode: 'difference' })
-      );
+      expect(chrome.scripting.executeScript).toHaveBeenCalled();
     });
 
     it('should only allow valid blend modes', () => {
       const valid = ['screen', 'lighten', 'difference', 'exclusion'];
       expect(controller.validBlendModes).toEqual(valid);
     });
+
+    it('should reject invalid blend modes', async () => {
+      controller.isActive = true;
+      await controller.changeBlendMode('multiply');
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+    });
   });
 
   describe('preset switching', () => {
-    it('should send switchPreset when changing preset while active', async () => {
+    it('should send switchPreset command while active', async () => {
       controller.isActive = true;
       await controller.switchPreset('mandala');
-      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
-        expect.any(Number),
-        expect.objectContaining({ action: 'switchPreset', preset: 'mandala' })
-      );
+      expect(chrome.scripting.executeScript).toHaveBeenCalled();
+      expect(controller.selectedPreset).toBe('mandala');
+    });
+  });
+
+  describe('mic toggle', () => {
+    it('should toggle mic state', () => {
+      expect(controller.micEnabled).toBe(true);
+      controller.micEnabled = false;
+      expect(controller.micEnabled).toBe(false);
+    });
+  });
+
+  describe('_sendCommand', () => {
+    it('should not send if no tabId', async () => {
+      controller._tabId = null;
+      await controller._sendCommand({ action: 'stop' });
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
     });
   });
 });

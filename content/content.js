@@ -1,6 +1,6 @@
 /**
  * VJam FX — Content Script Engine
- * Injected into web pages to overlay VJ effects
+ * Loaded as ESM module in page's MAIN world via dynamic import()
  */
 
 const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion'];
@@ -18,6 +18,11 @@ const PRESET_MAP = {
   'barcode': 'BarcodePreset',
 };
 
+// Resolve base URL from module location (chrome-extension://id/content/)
+const BASE_URL = typeof import.meta !== 'undefined' && import.meta.url
+  ? new URL('.', import.meta.url).href
+  : '';
+
 class VJamFXEngine {
   constructor() {
     this.active = false;
@@ -28,7 +33,6 @@ class VJamFXEngine {
     this.audioAnalyzer = null;
     this.micEnabled = true;
     this._rafId = null;
-    this._presetModules = {};
   }
 
   createOverlay() {
@@ -36,16 +40,16 @@ class VJamFXEngine {
 
     const overlay = document.createElement('div');
     overlay.setAttribute('data-vjam-fx', 'overlay');
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 2147483647;
-      pointer-events: none;
-      mix-blend-mode: ${this.blendMode};
-    `.replace(/\s+/g, ' ').trim();
+    overlay.style.cssText = [
+      'position: fixed',
+      'top: 0',
+      'left: 0',
+      'width: 100vw',
+      'height: 100vh',
+      'z-index: 2147483647',
+      'pointer-events: none',
+      `mix-blend-mode: ${this.blendMode}`,
+    ].join('; ');
 
     document.body.appendChild(overlay);
     this.overlay = overlay;
@@ -61,7 +65,6 @@ class VJamFXEngine {
   }
 
   async startPreset(presetName) {
-    // Create overlay if needed
     this.createOverlay();
 
     // Stop existing preset
@@ -73,12 +76,16 @@ class VJamFXEngine {
     this.currentPresetName = presetName;
     this.active = true;
 
-    // Load preset module
+    // Load preset module via ESM dynamic import
     try {
-      const PresetClass = await this._loadPreset(presetName);
-      if (PresetClass) {
-        this.currentPreset = new PresetClass();
-        this.currentPreset.setup(this.overlay);
+      const className = PRESET_MAP[presetName];
+      if (className) {
+        const mod = await import(`${BASE_URL}presets/${presetName}.js`);
+        const PresetClass = mod[className];
+        if (PresetClass) {
+          this.currentPreset = new PresetClass();
+          this.currentPreset.setup(this.overlay);
+        }
       }
     } catch (e) {
       console.warn('VJam FX: Failed to load preset', presetName, e);
@@ -87,7 +94,7 @@ class VJamFXEngine {
     // Start audio if mic enabled
     if (this.micEnabled && !this.audioAnalyzer) {
       try {
-        const { AudioAnalyzer } = await this._importModule('../content/audio-analyzer.js');
+        const { AudioAnalyzer } = await import(`${BASE_URL}audio-analyzer.js`);
         this.audioAnalyzer = new AudioAnalyzer();
         await this.audioAnalyzer.start();
       } catch (e) {
@@ -95,32 +102,7 @@ class VJamFXEngine {
       }
     }
 
-    // Start render loop
     this._startLoop();
-  }
-
-  async _loadPreset(presetName) {
-    const className = PRESET_MAP[presetName];
-    if (!className) return null;
-
-    // Try dynamic import
-    try {
-      const mod = await this._importModule(`../content/presets/${presetName}.js`);
-      return mod[className];
-    } catch (e) {
-      console.warn('VJam FX: Preset import failed', presetName, e);
-      return null;
-    }
-  }
-
-  async _importModule(path) {
-    // In Chrome extension context, use chrome.runtime.getURL for module URLs
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-      const url = chrome.runtime.getURL(path.replace('../', ''));
-      return import(url);
-    }
-    // In test environment, import directly
-    return import(path);
   }
 
   _startLoop() {
@@ -132,7 +114,6 @@ class VJamFXEngine {
         return;
       }
 
-      // Get audio data
       if (this.audioAnalyzer && this.audioAnalyzer.started) {
         const audioData = this.audioAnalyzer.getAudioData();
         if (this.currentPreset) {
@@ -190,10 +171,12 @@ class VJamFXEngine {
   handleMessage(msg) {
     switch (msg.action) {
       case 'start':
+        if (msg.blendMode) this.setBlendMode(msg.blendMode);
+        if (msg.mic !== undefined) this.micEnabled = msg.mic;
         this.startPreset(msg.preset);
         break;
       case 'stop':
-        this.stop();
+        this.destroy();
         break;
       case 'switchPreset':
         this.startPreset(msg.preset);
@@ -210,17 +193,7 @@ class VJamFXEngine {
 
 export { VJamFXEngine };
 
-// Auto-initialize when loaded as content script
+// Auto-initialize when loaded in MAIN world
 if (typeof window !== 'undefined' && !window._vjamFxEngine) {
   window._vjamFxEngine = new VJamFXEngine();
-
-  // Listen for messages from popup
-  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
-    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-      if (msg && msg.action) {
-        window._vjamFxEngine.handleMessage(msg);
-        sendResponse({ ok: true });
-      }
-    });
-  }
 }

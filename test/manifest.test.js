@@ -33,26 +33,29 @@ describe('manifest.json', () => {
     expect(manifest.action.default_icon).toHaveProperty('128');
   });
 
-  it('should have host_permissions for all URLs', () => {
-    expect(manifest.host_permissions).toContain('<all_urls>');
-  });
-
-  it('should have scripting permission', () => {
+  it('should have activeTab and scripting permissions', () => {
+    expect(manifest.permissions).toContain('activeTab');
     expect(manifest.permissions).toContain('scripting');
   });
 
-  it('should have activeTab permission', () => {
-    expect(manifest.permissions).toContain('activeTab');
+  it('should NOT have host_permissions (uses activeTab instead)', () => {
+    expect(manifest.host_permissions).toBeUndefined();
   });
 
-  it('should have web_accessible_resources for p5.js and presets', () => {
+  it('should have web_accessible_resources for p5.js and content modules', () => {
     expect(manifest.web_accessible_resources).toBeDefined();
-    expect(manifest.web_accessible_resources.length).toBeGreaterThan(0);
     const resources = manifest.web_accessible_resources[0].resources;
     expect(resources).toContain('lib/p5.min.js');
+    expect(resources).toContain('content/content.js');
+    expect(resources).toContain('content/base-preset.js');
+    expect(resources).toContain('content/audio-analyzer.js');
   });
 
-  it('should have empty content_scripts (inject on demand)', () => {
+  it('should have empty content_scripts (on-demand injection)', () => {
     expect(manifest.content_scripts).toEqual([]);
+  });
+
+  it('should only request minimal permissions', () => {
+    expect(manifest.permissions.length).toBe(2);
   });
 });

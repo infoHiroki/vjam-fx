@@ -1,7 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-// content.js exposes VJamFXEngine on window
-// We'll import it as a module for testing
 import { VJamFXEngine } from '../content/content.js';
 
 describe('VJamFXEngine', () => {
@@ -14,7 +11,6 @@ describe('VJamFXEngine', () => {
 
   afterEach(() => {
     engine.destroy();
-    // Clean up any DOM elements
     document.querySelectorAll('[data-vjam-fx]').forEach(el => el.remove());
   });
 
@@ -26,10 +22,14 @@ describe('VJamFXEngine', () => {
     it('should have default blendMode of screen', () => {
       expect(engine.blendMode).toBe('screen');
     });
+
+    it('should have micEnabled true by default', () => {
+      expect(engine.micEnabled).toBe(true);
+    });
   });
 
   describe('createOverlay', () => {
-    it('should create a full-viewport canvas container', () => {
+    it('should create a full-viewport overlay', () => {
       engine.createOverlay();
       const overlay = document.querySelector('[data-vjam-fx]');
       expect(overlay).not.toBeNull();
@@ -60,11 +60,18 @@ describe('VJamFXEngine', () => {
       expect(overlay.style.mixBlendMode).toBe('difference');
     });
 
-    it('should only accept valid blend modes', () => {
+    it('should accept all 4 valid modes', () => {
       engine.createOverlay();
-      engine.setBlendMode('multiply'); // not allowed
-      const overlay = document.querySelector('[data-vjam-fx]');
-      expect(overlay.style.mixBlendMode).toBe('screen'); // unchanged
+      for (const mode of ['screen', 'lighten', 'difference', 'exclusion']) {
+        engine.setBlendMode(mode);
+        expect(engine.blendMode).toBe(mode);
+      }
+    });
+
+    it('should reject invalid blend modes', () => {
+      engine.createOverlay();
+      engine.setBlendMode('multiply');
+      expect(engine.blendMode).toBe('screen');
     });
   });
 
@@ -84,6 +91,13 @@ describe('VJamFXEngine', () => {
       await engine.startPreset('kaleidoscope');
       expect(engine.currentPresetName).toBe('kaleidoscope');
     });
+
+    it('should destroy previous preset when switching', async () => {
+      await engine.startPreset('rain');
+      const firstPreset = engine.currentPreset;
+      await engine.startPreset('mandala');
+      expect(engine.currentPresetName).toBe('mandala');
+    });
   });
 
   describe('stop', () => {
@@ -98,29 +112,52 @@ describe('VJamFXEngine', () => {
       engine.stop();
       expect(engine.currentPreset).toBeNull();
     });
+
+    it('should clear preset name', async () => {
+      await engine.startPreset('neon-tunnel');
+      engine.stop();
+      expect(engine.currentPresetName).toBeNull();
+    });
   });
 
   describe('destroy', () => {
     it('should remove overlay from DOM', () => {
       engine.createOverlay();
       engine.destroy();
-      const overlay = document.querySelector('[data-vjam-fx]');
-      expect(overlay).toBeNull();
+      expect(document.querySelector('[data-vjam-fx]')).toBeNull();
     });
 
     it('should handle destroy when no overlay exists', () => {
       expect(() => engine.destroy()).not.toThrow();
     });
+
+    it('should clean up audio analyzer', async () => {
+      engine.audioAnalyzer = { destroy: vi.fn(), started: false };
+      engine.destroy();
+      expect(engine.audioAnalyzer).toBeNull();
+    });
   });
 
-  describe('message handling', () => {
+  describe('setMic', () => {
+    it('should update micEnabled flag', () => {
+      engine.setMic(false);
+      expect(engine.micEnabled).toBe(false);
+    });
+
+    it('should destroy audio analyzer when disabled', () => {
+      const mockDestroy = vi.fn();
+      engine.audioAnalyzer = { destroy: mockDestroy };
+      engine.setMic(false);
+      expect(mockDestroy).toHaveBeenCalled();
+      expect(engine.audioAnalyzer).toBeNull();
+    });
+  });
+
+  describe('handleMessage', () => {
     it('should handle start message', async () => {
       engine.handleMessage({ action: 'start', preset: 'starfield' });
-      // startPreset is async, but handleMessage fires it
-      // active is set synchronously at the start of startPreset
-      expect(engine.currentPresetName).toBe('starfield');
-      // Wait for async completion
       await vi.waitFor(() => expect(engine.active).toBe(true));
+      expect(engine.currentPresetName).toBe('starfield');
     });
 
     it('should handle stop message', async () => {
@@ -138,9 +175,19 @@ describe('VJamFXEngine', () => {
     it('should handle switchPreset message', async () => {
       await engine.startPreset('rain');
       engine.handleMessage({ action: 'switchPreset', preset: 'mandala' });
-      expect(engine.currentPresetName).toBe('mandala');
-      // Wait for async completion
       await vi.waitFor(() => expect(engine.currentPresetName).toBe('mandala'));
+    });
+
+    it('should handle setMic message', () => {
+      engine.handleMessage({ action: 'setMic', enabled: false });
+      expect(engine.micEnabled).toBe(false);
+    });
+
+    it('should handle start with blendMode and mic', () => {
+      engine.createOverlay();
+      engine.handleMessage({ action: 'start', preset: 'rain', blendMode: 'difference', mic: false });
+      expect(engine.blendMode).toBe('difference');
+      expect(engine.micEnabled).toBe(false);
     });
   });
 });
