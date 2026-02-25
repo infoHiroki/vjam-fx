@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class SineWavesPreset extends BasePreset {
     constructor() {
@@ -86,8 +88,6 @@ class SineWavesPreset extends BasePreset {
     }
 }
 
-export { SineWavesPreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['sine-waves'] = SineWavesPreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['sine-waves'] = SineWavesPreset;
+})();

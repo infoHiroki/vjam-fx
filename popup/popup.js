@@ -135,26 +135,26 @@ class PopupController {
       try {
       this.isActive = true;
 
-      // Step 1: Inject p5.js into MAIN world (classic script)
-      await chrome.scripting.executeScript({
-        target: { tabId: this._tabId },
-        world: 'MAIN',
-        files: ['lib/p5.min.js'],
-      });
+      // Inject all scripts into MAIN world (CSP-safe, no dynamic import)
+      // Order: p5.js → base-preset → audio-analyzer → selected preset → engine
+      const presetFile = `content/presets/${this.selectedPreset}.js`;
+      const scripts = [
+        'lib/p5.min.js',
+        'content/base-preset.js',
+        'content/audio-analyzer.js',
+        presetFile,
+        'content/content.js',
+      ];
 
-      // Step 2: Import content.js as ESM module in MAIN world
-      const engineUrl = chrome.runtime.getURL('content/content.js');
-      await chrome.scripting.executeScript({
-        target: { tabId: this._tabId },
-        world: 'MAIN',
-        func: (url) => {
-          if (window._vjamFxEngine) return;
-          return import(url);
-        },
-        args: [engineUrl],
-      });
+      for (const file of scripts) {
+        await chrome.scripting.executeScript({
+          target: { tabId: this._tabId },
+          world: 'MAIN',
+          files: [file],
+        });
+      }
 
-      // Step 3: Send start command
+      // Send start command
       const blendMode = document.getElementById('blend-mode')?.value || 'screen';
       await this._sendCommand({
         action: 'start',
@@ -176,6 +176,16 @@ class PopupController {
 
   async switchPreset(presetName) {
     this.selectedPreset = presetName;
+    // Inject the preset file if not already loaded
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        files: [`content/presets/${presetName}.js`],
+      });
+    } catch (e) {
+      // Already injected or failed — engine will use cached
+    }
     await this._sendCommand({ action: 'switchPreset', preset: presetName });
   }
 

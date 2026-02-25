@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class HypnoticPreset extends BasePreset {
     constructor() {
@@ -90,8 +92,6 @@ class HypnoticPreset extends BasePreset {
     }
 }
 
-export { HypnoticPreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['hypnotic'] = HypnoticPreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['hypnotic'] = HypnoticPreset;
+})();

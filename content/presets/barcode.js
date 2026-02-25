@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class BarcodePreset extends BasePreset {
     constructor() {
@@ -109,8 +111,6 @@ class BarcodePreset extends BasePreset {
     }
 }
 
-export { BarcodePreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['barcode'] = BarcodePreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['barcode'] = BarcodePreset;
+})();

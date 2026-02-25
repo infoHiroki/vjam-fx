@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
-// Load the script as a module for testing
-// In Chrome extension, it's loaded as a regular script via window.VJamFX
-// For tests, we import the module version
-import { BasePreset } from '../content/base-preset.js';
+// Load IIFE script — it registers on window.VJamFX
+const code = readFileSync(resolve(__dirname, '../content/base-preset.js'), 'utf-8');
+eval(code);
+const BasePreset = window.VJamFX.BasePreset;
 
 describe('BasePreset', () => {
   let preset;

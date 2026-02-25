@@ -1,38 +1,42 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { BasePreset } from '../content/base-preset.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
-// Import all presets
-import { NeonTunnelPreset } from '../content/presets/neon-tunnel.js';
-import { KaleidoscopePreset } from '../content/presets/kaleidoscope.js';
-import { MandalaPreset } from '../content/presets/mandala.js';
-import { SineWavesPreset } from '../content/presets/sine-waves.js';
-import { GradientSweepPreset } from '../content/presets/gradient-sweep.js';
-import { MoirePreset } from '../content/presets/moire.js';
-import { HypnoticPreset } from '../content/presets/hypnotic.js';
-import { StarfieldPreset } from '../content/presets/starfield.js';
-import { RainPreset } from '../content/presets/rain.js';
-import { BarcodePreset } from '../content/presets/barcode.js';
+// Load base-preset first (presets depend on it)
+const baseCode = readFileSync(resolve(__dirname, '../content/base-preset.js'), 'utf-8');
+window.VJamFX = { presets: {} };
+eval(baseCode);
 
-const PRESETS = [
-  { name: 'NeonTunnel', Cls: NeonTunnelPreset },
-  { name: 'Kaleidoscope', Cls: KaleidoscopePreset },
-  { name: 'Mandala', Cls: MandalaPreset },
-  { name: 'SineWaves', Cls: SineWavesPreset },
-  { name: 'GradientSweep', Cls: GradientSweepPreset },
-  { name: 'Moire', Cls: MoirePreset },
-  { name: 'Hypnotic', Cls: HypnoticPreset },
-  { name: 'Starfield', Cls: StarfieldPreset },
-  { name: 'Rain', Cls: RainPreset },
-  { name: 'Barcode', Cls: BarcodePreset },
+const BasePreset = window.VJamFX.BasePreset;
+
+// Load all 10 presets
+const PRESET_FILES = [
+  { file: 'neon-tunnel.js', id: 'neon-tunnel', name: 'NeonTunnel' },
+  { file: 'kaleidoscope.js', id: 'kaleidoscope', name: 'Kaleidoscope' },
+  { file: 'mandala.js', id: 'mandala', name: 'Mandala' },
+  { file: 'sine-waves.js', id: 'sine-waves', name: 'SineWaves' },
+  { file: 'gradient-sweep.js', id: 'gradient-sweep', name: 'GradientSweep' },
+  { file: 'moire.js', id: 'moire', name: 'Moire' },
+  { file: 'hypnotic.js', id: 'hypnotic', name: 'Hypnotic' },
+  { file: 'starfield.js', id: 'starfield', name: 'Starfield' },
+  { file: 'rain.js', id: 'rain', name: 'Rain' },
+  { file: 'barcode.js', id: 'barcode', name: 'Barcode' },
 ];
 
+for (const { file } of PRESET_FILES) {
+  const code = readFileSync(resolve(__dirname, `../content/presets/${file}`), 'utf-8');
+  eval(code);
+}
+
 describe('Presets', () => {
-  for (const { name, Cls } of PRESETS) {
+  for (const { id, name } of PRESET_FILES) {
     describe(name, () => {
+      let Cls;
       let preset;
       let container;
 
       beforeEach(() => {
+        Cls = window.VJamFX.presets[id];
         preset = new Cls();
         container = document.createElement('div');
         container.style.width = '800px';
@@ -45,6 +49,10 @@ describe('Presets', () => {
       afterEach(() => {
         preset.destroy();
         container.remove();
+      });
+
+      it('should be registered in VJamFX.presets', () => {
+        expect(Cls).toBeDefined();
       });
 
       it('should extend BasePreset', () => {

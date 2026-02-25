@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class KaleidoscopePreset extends BasePreset {
     constructor() {
@@ -149,8 +151,6 @@ class KaleidoscopePreset extends BasePreset {
     }
 }
 
-export { KaleidoscopePreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['kaleidoscope'] = KaleidoscopePreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['kaleidoscope'] = KaleidoscopePreset;
+})();

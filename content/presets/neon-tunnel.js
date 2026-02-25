@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class NeonTunnelPreset extends BasePreset {
     constructor() {
@@ -125,8 +127,6 @@ class NeonTunnelPreset extends BasePreset {
     }
 }
 
-export { NeonTunnelPreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['neon-tunnel'] = NeonTunnelPreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['neon-tunnel'] = NeonTunnelPreset;
+})();

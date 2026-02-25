@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class MoirePreset extends BasePreset {
     constructor() {
@@ -87,8 +89,6 @@ class MoirePreset extends BasePreset {
     }
 }
 
-export { MoirePreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['moire'] = MoirePreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['moire'] = MoirePreset;
+})();

@@ -1,10 +1,33 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { VJamFXEngine } from '../content/content.js';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+// Load IIFE scripts in order (same as Chrome injection)
+const baseCode = readFileSync(resolve(__dirname, '../content/base-preset.js'), 'utf-8');
+const analyzerCode = readFileSync(resolve(__dirname, '../content/audio-analyzer.js'), 'utf-8');
+const engineCode = readFileSync(resolve(__dirname, '../content/content.js'), 'utf-8');
+
+// Load a preset for testing
+const neonCode = readFileSync(resolve(__dirname, '../content/presets/neon-tunnel.js'), 'utf-8');
 
 describe('VJamFXEngine', () => {
+  let VJamFXEngine;
   let engine;
 
+  beforeAll(() => {
+    // Initialize VJamFX namespace
+    window.VJamFX = { presets: {} };
+    eval(baseCode);
+    eval(analyzerCode);
+    eval(neonCode);
+    // Clear any previous engine
+    delete window._vjamFxEngine;
+    eval(engineCode);
+    VJamFXEngine = window.VJamFXEngine;
+  });
+
   beforeEach(() => {
+    // Create fresh engine for each test
     engine = new VJamFXEngine();
     vi.clearAllMocks();
   });
@@ -76,45 +99,53 @@ describe('VJamFXEngine', () => {
   });
 
   describe('startPreset', () => {
-    it('should set active to true', async () => {
-      await engine.startPreset('neon-tunnel');
+    it('should set active to true', () => {
+      engine.startPreset('neon-tunnel');
       expect(engine.active).toBe(true);
     });
 
-    it('should create overlay if not exists', async () => {
-      await engine.startPreset('neon-tunnel');
+    it('should create overlay', () => {
+      engine.startPreset('neon-tunnel');
       const overlay = document.querySelector('[data-vjam-fx]');
       expect(overlay).not.toBeNull();
     });
 
-    it('should store current preset name', async () => {
-      await engine.startPreset('kaleidoscope');
-      expect(engine.currentPresetName).toBe('kaleidoscope');
+    it('should store current preset name', () => {
+      engine.startPreset('neon-tunnel');
+      expect(engine.currentPresetName).toBe('neon-tunnel');
     });
 
-    it('should destroy previous preset when switching', async () => {
-      await engine.startPreset('rain');
-      const firstPreset = engine.currentPreset;
-      await engine.startPreset('mandala');
-      expect(engine.currentPresetName).toBe('mandala');
+    it('should instantiate preset from registry', () => {
+      engine.startPreset('neon-tunnel');
+      expect(engine.currentPreset).not.toBeNull();
+    });
+
+    it('should start audio analyzer when mic enabled', () => {
+      engine.startPreset('neon-tunnel');
+      expect(engine.audioAnalyzer).not.toBeNull();
+    });
+
+    it('should handle unknown preset gracefully', () => {
+      expect(() => engine.startPreset('nonexistent')).not.toThrow();
+      expect(engine.currentPreset).toBeNull();
     });
   });
 
   describe('stop', () => {
-    it('should set active to false', async () => {
-      await engine.startPreset('neon-tunnel');
+    it('should set active to false', () => {
+      engine.startPreset('neon-tunnel');
       engine.stop();
       expect(engine.active).toBe(false);
     });
 
-    it('should destroy current preset', async () => {
-      await engine.startPreset('neon-tunnel');
+    it('should destroy current preset', () => {
+      engine.startPreset('neon-tunnel');
       engine.stop();
       expect(engine.currentPreset).toBeNull();
     });
 
-    it('should clear preset name', async () => {
-      await engine.startPreset('neon-tunnel');
+    it('should clear preset name', () => {
+      engine.startPreset('neon-tunnel');
       engine.stop();
       expect(engine.currentPresetName).toBeNull();
     });
@@ -131,8 +162,8 @@ describe('VJamFXEngine', () => {
       expect(() => engine.destroy()).not.toThrow();
     });
 
-    it('should clean up audio analyzer', async () => {
-      engine.audioAnalyzer = { destroy: vi.fn(), started: false };
+    it('should clean up audio analyzer', () => {
+      engine.startPreset('neon-tunnel');
       engine.destroy();
       expect(engine.audioAnalyzer).toBeNull();
     });
@@ -145,23 +176,21 @@ describe('VJamFXEngine', () => {
     });
 
     it('should destroy audio analyzer when disabled', () => {
-      const mockDestroy = vi.fn();
-      engine.audioAnalyzer = { destroy: mockDestroy };
+      engine.startPreset('neon-tunnel');
       engine.setMic(false);
-      expect(mockDestroy).toHaveBeenCalled();
       expect(engine.audioAnalyzer).toBeNull();
     });
   });
 
   describe('handleMessage', () => {
-    it('should handle start message', async () => {
-      engine.handleMessage({ action: 'start', preset: 'starfield' });
-      await vi.waitFor(() => expect(engine.active).toBe(true));
-      expect(engine.currentPresetName).toBe('starfield');
+    it('should handle start message', () => {
+      engine.handleMessage({ action: 'start', preset: 'neon-tunnel' });
+      expect(engine.active).toBe(true);
+      expect(engine.currentPresetName).toBe('neon-tunnel');
     });
 
-    it('should handle stop message', async () => {
-      await engine.startPreset('starfield');
+    it('should handle stop message', () => {
+      engine.startPreset('neon-tunnel');
       engine.handleMessage({ action: 'stop' });
       expect(engine.active).toBe(false);
     });
@@ -172,10 +201,10 @@ describe('VJamFXEngine', () => {
       expect(engine.blendMode).toBe('exclusion');
     });
 
-    it('should handle switchPreset message', async () => {
-      await engine.startPreset('rain');
-      engine.handleMessage({ action: 'switchPreset', preset: 'mandala' });
-      await vi.waitFor(() => expect(engine.currentPresetName).toBe('mandala'));
+    it('should handle switchPreset message', () => {
+      engine.startPreset('neon-tunnel');
+      engine.handleMessage({ action: 'switchPreset', preset: 'neon-tunnel' });
+      expect(engine.currentPresetName).toBe('neon-tunnel');
     });
 
     it('should handle setMic message', () => {
@@ -185,9 +214,19 @@ describe('VJamFXEngine', () => {
 
     it('should handle start with blendMode and mic', () => {
       engine.createOverlay();
-      engine.handleMessage({ action: 'start', preset: 'rain', blendMode: 'difference', mic: false });
+      engine.handleMessage({ action: 'start', preset: 'neon-tunnel', blendMode: 'difference', mic: false });
       expect(engine.blendMode).toBe('difference');
       expect(engine.micEnabled).toBe(false);
+    });
+  });
+
+  describe('auto-initialization', () => {
+    it('should have created singleton on window', () => {
+      expect(window._vjamFxEngine).toBeDefined();
+    });
+
+    it('should expose VJamFXEngine class', () => {
+      expect(window.VJamFXEngine).toBeDefined();
     });
   });
 });

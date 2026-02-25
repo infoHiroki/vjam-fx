@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class StarfieldPreset extends BasePreset {
     constructor() {
@@ -127,8 +129,6 @@ class StarfieldPreset extends BasePreset {
     }
 }
 
-export { StarfieldPreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['starfield'] = StarfieldPreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['starfield'] = StarfieldPreset;
+})();

@@ -1,7 +1,14 @@
-class BasePreset {
+/**
+ * VJam FX — Base Preset
+ * Loaded as classic script via chrome.scripting.executeScript
+ */
+(function() {
+  'use strict';
+
+  class BasePreset {
     constructor() {
-        this.p5 = null;
-        this.params = {};
+      this.p5 = null;
+      this.params = {};
     }
 
     setup(container) {}
@@ -11,19 +18,17 @@ class BasePreset {
     onBeat(strength) {}
 
     setParam(key, value) {
-        this.params[key] = value;
+      this.params[key] = value;
     }
 
     destroy() {
-        if (this.p5) {
-            this.p5.remove();
-            this.p5 = null;
-        }
+      if (this.p5) {
+        this.p5.remove();
+        this.p5 = null;
+      }
     }
-}
+  }
 
-export { BasePreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.BasePreset = BasePreset;
-}
+  window.VJamFX = window.VJamFX || { presets: {} };
+  window.VJamFX.BasePreset = BasePreset;
+})();

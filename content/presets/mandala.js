@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class MandalaPreset extends BasePreset {
     constructor() {
@@ -126,8 +128,6 @@ class MandalaPreset extends BasePreset {
     }
 }
 
-export { MandalaPreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['mandala'] = MandalaPreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['mandala'] = MandalaPreset;
+})();

@@ -1,4 +1,6 @@
-import { BasePreset } from '../base-preset.js';
+(function() {
+'use strict';
+const BasePreset = window.VJamFX.BasePreset;
 
 class GradientSweepPreset extends BasePreset {
     constructor() {
@@ -83,8 +85,6 @@ class GradientSweepPreset extends BasePreset {
     }
 }
 
-export { GradientSweepPreset };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.presets['gradient-sweep'] = GradientSweepPreset;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.presets['gradient-sweep'] = GradientSweepPreset;
+})();

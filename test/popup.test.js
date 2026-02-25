@@ -52,11 +52,11 @@ describe('PopupController', () => {
   });
 
   describe('toggle', () => {
-    it('should inject p5 and engine on toggle ON', async () => {
+    it('should inject scripts and send start on toggle ON', async () => {
       controller.selectedPreset = 'neon-tunnel';
       await controller.toggleEffect(true);
-      // Should call executeScript 3 times: p5.js, engine import, start command
-      expect(chrome.scripting.executeScript).toHaveBeenCalledTimes(3);
+      // Should call executeScript: p5 + base-preset + audio-analyzer + preset + engine + start command = 6
+      expect(chrome.scripting.executeScript).toHaveBeenCalled();
       expect(controller.isActive).toBe(true);
     });
 

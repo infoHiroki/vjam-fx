@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { AudioAnalyzer } from '../content/audio-analyzer.js';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+// Load IIFE script
+const code = readFileSync(resolve(__dirname, '../content/audio-analyzer.js'), 'utf-8');
+eval(code);
+const AudioAnalyzer = window.VJamFX.AudioAnalyzer;
 
 describe('AudioAnalyzer', () => {
   let analyzer;

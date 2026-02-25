@@ -1,7 +1,9 @@
 /**
- * AudioAnalyzer -- Web Audio API audio analysis
- * Outputs { beat, bpm, strength, rms, bass, mid, treble }
+ * VJam FX — Audio Analyzer
+ * Loaded as classic script via chrome.scripting.executeScript
  */
+(function() {
+'use strict';
 
 class AudioAnalyzer {
   constructor() {
@@ -316,8 +318,7 @@ class AudioAnalyzer {
   }
 }
 
-export { AudioAnalyzer };
-if (typeof window !== 'undefined') {
-    window.VJamFX = window.VJamFX || { presets: {} };
-    window.VJamFX.AudioAnalyzer = AudioAnalyzer;
-}
+window.VJamFX = window.VJamFX || { presets: {} };
+window.VJamFX.AudioAnalyzer = AudioAnalyzer;
+
+})();
