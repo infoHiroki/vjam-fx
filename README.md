@@ -4,11 +4,12 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage.
 
 ## Features
 
-- **61 visual presets** in 8 categories (Immersive, Frames & Film, Patterns, Organic, Grid & Tech, Space & Nature, Audio Reactive, Weather)
+- **60 visual presets** in 8 categories (Immersive, Frames & Film, Patterns, Organic, Grid & Tech, Space & Nature, Audio Reactive, Weather)
 - **Multi-layer**: up to 3 presets running simultaneously with fade transitions
 - **CSS filters**: Invert, Hue Rotate, Grayscale, Saturate, Brightness, Contrast, Sepia, Blur
-- **4 blend modes**: Screen, Lighten, Difference, Exclusion (manual selection)
-- **Auto-cycle**: BPM-connected automatic preset rotation (filters randomized, blend mode preserved)
+- **4 blend modes**: Screen, Lighten, Difference, Exclusion (all manual selection)
+- **Light page detection**: auto-switches blend to Difference on light-themed pages
+- **Auto-cycle**: BPM-connected automatic preset rotation (presets only, FX unchanged)
 - **Beat detection**: real-time microphone analysis (Web Audio API)
 - **OSD feedback**: on-screen display for active presets and effects
 - **Navigation persistence**: effects survive page navigations via Service Worker
@@ -30,16 +31,16 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage.
 3. Toggle ON — effects appear on the current page
 4. Allow microphone access for beat-reactive visuals
 5. **Reset** — full reset (all layers, filters, auto-cycle OFF)
-6. **Next** — random 1-3 layers + random filters (one shot)
-7. **Auto** — Next on repeat (BPM-connected interval)
-8. Change blend mode manually via dropdown
-9. Toggle CSS filters for additional effects
+6. **Next** — random 1-3 presets (FX unchanged)
+7. **Auto** — preset rotation on repeat (BPM-connected interval, FX unchanged)
+8. Change blend mode and CSS filters manually
+9. Light pages auto-switch to Difference blend
 
 ## Development
 
 ```bash
 npm install
-npm test            # Run all 597 tests
+npm test            # Run all 589 tests
 npm run test:watch  # Watch mode
 ```
 
@@ -58,10 +59,10 @@ vjam-fx/
 │   ├── content.js         # VJamFXEngine — overlay, multi-layer, filters, OSD, auto-cycle
 │   ├── base-preset.js     # Base class for all presets
 │   ├── audio-analyzer.js  # Microphone FFT, beat detection, BPM estimation
-│   └── presets/           # 61 visual presets (IIFE pattern)
+│   └── presets/           # 60 visual presets (IIFE pattern)
 ├── lib/p5.min.js          # p5.js graphics engine
 ├── icons/                 # Extension icons (16/48/128px)
-└── test/                  # Vitest + jsdom tests (597 tests)
+└── test/                  # Vitest + jsdom tests (589 tests)
 ```
 
 ### Preset Categories
@@ -69,7 +70,7 @@ vjam-fx/
 | Category | Count | Examples |
 |----------|-------|---------|
 | Immersive | 19 | Wormhole, Warp Speed, Helix Tunnel, Portal Ring, Aurora |
-| Frames & Film | 8 | Neon Frame, Light Leak, Film Burn, VHS Noise, Scan Line |
+| Frames & Film | 7 | Neon Frame, Light Leak, Film Burn, VHS Noise, Scan Line |
 | Patterns | 6 | Kaleidoscope, Mandala, Sacred Geometry, Moire |
 | Organic | 8 | Cellular, Liquid, Voronoi, Coral Reef, Flow Field |
 | Grid & Tech | 6 | Glitch Grid, Hexgrid Pulse, Circuit Board, CRT Monitor |
@@ -82,8 +83,8 @@ vjam-fx/
 | Button | Behavior |
 |--------|----------|
 | **Reset** | Full reset: all layers removed, filters cleared, blend → screen, auto-cycle OFF, toggle OFF |
-| **Next** | Random 1-3 layers + random filters (one shot). Blend mode unchanged. |
-| **Auto** | Next on repeat. BPM-connected interval (16 beats, clamped 4-15s). Blend mode unchanged. |
+| **Next** | Random 1-3 presets (FX unchanged). User's filters/blend preserved. |
+| **Auto** | Preset rotation on repeat. BPM-connected interval (16 beats, clamped 4-15s). FX unchanged. |
 
 ## Permissions
 
