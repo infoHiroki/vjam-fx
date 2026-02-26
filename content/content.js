@@ -7,6 +7,7 @@
  * - Multi-layer: multiple presets can run simultaneously
  * - CSS filters: invert, hue-rotate, grayscale, saturate, brightness, contrast, sepia, blur
  * - Blend modes: screen, lighten, difference, exclusion
+ * - Tab audio capture for beat detection (via offscreen document)
  */
 (function() {
   'use strict';
@@ -43,9 +44,7 @@
       this.currentPreset = null;
       this.currentPresetName = null;
       this.overlay = null;
-      this.audioAnalyzer = null;
-      this.micEnabled = true;
-      this.audioSource = 'tab'; // 'mic' | 'tab'
+      this.audioEnabled = true;
       this._externalAudioData = null;
       this._rafId = null;
 
@@ -55,7 +54,7 @@
       this._osdEl = null;
       this._osdTimer = null;
 
-      // Listen for external audio data from bridge (tab capture)
+      // Listen for audio data from bridge (tab capture)
       this._onBridgeMessage = (event) => {
         if (event.data && event.data.source === 'vjam-fx-bridge' && event.data.type === 'audioData') {
           this._externalAudioData = event.data.data;
@@ -196,12 +195,6 @@
         this.currentPreset = layer.preset;
       }
 
-      // Start audio if mic enabled and analyzer available
-      if (this.micEnabled && !this.audioAnalyzer && window.VJamFX && window.VJamFX.AudioAnalyzer) {
-        this.audioAnalyzer = new window.VJamFX.AudioAnalyzer();
-        this.audioAnalyzer.start();
-      }
-
       this._startLoop();
     }
 
@@ -219,24 +212,14 @@
         }
 
         // Feed audio to ALL active layers (throttled to 15Hz)
-        if (timestamp - lastAudioTime >= AUDIO_INTERVAL) {
-          let audioData = null;
-
-          // Use external (tab capture) audio if available and in tab mode
-          if (self.audioSource === 'tab' && self._externalAudioData) {
-            audioData = self._externalAudioData;
-            self._externalAudioData = null; // consume once
-          } else if (self.audioAnalyzer && self.audioAnalyzer.started) {
-            audioData = self.audioAnalyzer.getAudioData();
-          }
-
-          if (audioData) {
-            lastAudioTime = timestamp;
-            for (const [, layer] of self.activeLayers) {
-              layer.preset.updateAudio(audioData);
-              if (audioData.beat) {
-                layer.preset.onBeat(audioData.strength);
-              }
+        if (self.audioEnabled && self._externalAudioData && timestamp - lastAudioTime >= AUDIO_INTERVAL) {
+          const audioData = self._externalAudioData;
+          self._externalAudioData = null; // consume once
+          lastAudioTime = timestamp;
+          for (const [, layer] of self.activeLayers) {
+            layer.preset.updateAudio(audioData);
+            if (audioData.beat) {
+              layer.preset.onBeat(audioData.strength);
             }
           }
         }
@@ -272,11 +255,6 @@
       this._stopAutoCycle();
       this.stop();
 
-      if (this.audioAnalyzer) {
-        this.audioAnalyzer.destroy();
-        this.audioAnalyzer = null;
-      }
-
       if (this.overlay) {
         this.overlay.remove();
         this.overlay = null;
@@ -289,17 +267,6 @@
 
       this._externalAudioData = null;
       this.activeFilters.clear();
-    }
-
-    setMic(enabled) {
-      this.micEnabled = enabled;
-      if (!enabled && this.audioAnalyzer) {
-        this.audioAnalyzer.destroy();
-        this.audioAnalyzer = null;
-      } else if (enabled && !this.audioAnalyzer && this.active && window.VJamFX && window.VJamFX.AudioAnalyzer) {
-        this.audioAnalyzer = new window.VJamFX.AudioAnalyzer();
-        this.audioAnalyzer.start();
-      }
     }
 
     // --- CSS Filters ---
@@ -391,14 +358,11 @@
 
       const self = this;
       const scheduleNext = () => {
-        // Use BPM to set interval: 16 beats at current BPM (or fallback to base interval)
+        // Use BPM from external audio to set interval (or fallback to base interval)
         let interval = self._autoCycleBaseInterval;
-        if (self.audioAnalyzer && self.audioAnalyzer.started) {
-          const data = self.audioAnalyzer.getAudioData();
-          if (data.bpm > 0) {
-            interval = (60 / data.bpm) * 16 * 1000; // 16 beats in ms
-            interval = Math.max(4000, Math.min(15000, interval)); // Clamp 4-15 seconds
-          }
+        if (self._externalAudioData && self._externalAudioData.bpm > 0) {
+          interval = (60 / self._externalAudioData.bpm) * 16 * 1000; // 16 beats in ms
+          interval = Math.max(4000, Math.min(15000, interval)); // Clamp 4-15 seconds
         }
         self._autoCycleTimer = setTimeout(() => {
           self._autoCycleTick();
@@ -476,9 +440,8 @@
     handleMessage(msg) {
       switch (msg.action) {
         case 'start':
-          if (msg.blendMode) this.setBlendMode(msg.blendMode);
-          if (msg.mic !== undefined) this.micEnabled = msg.mic;
           this.startPreset(msg.preset);
+          if (msg.blendMode) this.setBlendMode(msg.blendMode);
           break;
         case 'stop':
           this.destroy();
@@ -489,11 +452,12 @@
         case 'setBlendMode':
           this.setBlendMode(msg.blendMode);
           break;
-        case 'setMic':
-          this.setMic(msg.enabled);
-          break;
         case 'setOpacity':
           this.setOpacity(msg.opacity);
+          break;
+        case 'setAudioEnabled':
+          this.audioEnabled = !!msg.enabled;
+          if (!this.audioEnabled) this._externalAudioData = null;
           break;
         case 'addLayer':
           if (!this.activeLayers.has(msg.preset)) {
@@ -520,23 +484,6 @@
           break;
         case 'randomizeFX':
           this.randomizeFX({ skipBlend: !!msg.skipBlend });
-          break;
-        case 'setAudioSource':
-          this.audioSource = msg.source === 'tab' ? 'tab' : 'mic';
-          if (this.audioSource === 'tab') {
-            // Stop local mic when using tab audio
-            if (this.audioAnalyzer) {
-              this.audioAnalyzer.destroy();
-              this.audioAnalyzer = null;
-            }
-          } else {
-            // Restart mic if needed
-            this._externalAudioData = null;
-            if (this.micEnabled && this.active && !this.audioAnalyzer && window.VJamFX && window.VJamFX.AudioAnalyzer) {
-              this.audioAnalyzer = new window.VJamFX.AudioAnalyzer();
-              this.audioAnalyzer.start();
-            }
-          }
           break;
         case 'startAutoCycle':
           this.startAutoCycle(msg.presets, msg.interval);

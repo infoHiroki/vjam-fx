@@ -276,27 +276,21 @@ body {
   cursor: pointer;
 }
 
-.audio-source-toggle {
-  display: flex;
-  gap: 2px;
-}
-
-.audio-src-btn {
+.audio-btn {
   background: #333;
   color: #e0e0e0;
   border: 1px solid #555;
   border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 3px 12px;
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.audio-src-btn.active {
+.audio-btn.on {
   background: #00cc66;
   color: #000;
   border-color: #00cc66;
-  font-weight: 600;
 }
 
 /* Footer */

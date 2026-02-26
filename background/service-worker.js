@@ -4,7 +4,7 @@
  * Supports multi-layer presets and CSS filters.
  */
 
-// Per-tab state: { tabId: { active, layers[], blendMode, micEnabled, filters[] } }
+// Per-tab state: { tabId: { active, layers[], blendMode, audioEnabled, filters[] } }
 const tabState = new Map();
 
 function setState(tabId, state) {
@@ -41,7 +41,6 @@ async function injectAndStart(tabId, state) {
     const coreScripts = [
       'lib/p5.min.js',
       'content/base-preset.js',
-      'content/audio-analyzer.js',
     ];
 
     // Preset files for all layers + auto-cycle presets
@@ -66,7 +65,7 @@ async function injectAndStart(tabId, state) {
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      func: (layers, blendMode, micEnabled, filters, autoCyclePresets, opacity) => {
+      func: (layers, blendMode, filters, autoCyclePresets, opacity) => {
         if (!window._vjamFxEngine) return;
         const engine = window._vjamFxEngine;
 
@@ -75,7 +74,6 @@ async function injectAndStart(tabId, state) {
           action: 'start',
           preset: layers[0],
           blendMode: blendMode,
-          mic: micEnabled,
         });
 
         // Add remaining layers
@@ -100,7 +98,7 @@ async function injectAndStart(tabId, state) {
           engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: 8000 });
         }
       },
-      args: [layers, state.blendMode || 'screen', state.micEnabled !== false, state.filters || [], state.autoCyclePresets || null, state.opacity],
+      args: [layers, state.blendMode || 'screen', state.filters || [], state.autoCyclePresets || null, state.opacity],
     });
 
     return true;
@@ -141,24 +139,6 @@ async function startTabAudio(tabId) {
     await ensureOffscreen();
     await chrome.runtime.sendMessage({ type: 'startCapture', streamId });
     activeTabAudioTabId = tabId;
-
-    // Update tabState
-    const state = getState(tabId);
-    if (state) {
-      setState(tabId, { ...state, audioSource: 'tab' });
-    }
-
-    // Tell content script to switch to tab audio
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'MAIN',
-      func: () => {
-        if (window._vjamFxEngine) {
-          window._vjamFxEngine.handleMessage({ action: 'setAudioSource', source: 'tab' });
-        }
-      },
-    });
-
     return true;
   } catch (e) {
     console.warn('VJam FX: startTabAudio failed', e);
@@ -171,23 +151,6 @@ async function stopTabAudio(tabId) {
     await chrome.runtime.sendMessage({ type: 'stopCapture' });
     await removeOffscreen();
     activeTabAudioTabId = null;
-
-    const state = getState(tabId);
-    if (state) {
-      setState(tabId, { ...state, audioSource: 'mic' });
-    }
-
-    // Tell content script to switch back to mic
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'MAIN',
-      func: () => {
-        if (window._vjamFxEngine) {
-          window._vjamFxEngine.handleMessage({ action: 'setAudioSource', source: 'mic' });
-        }
-      },
-    });
-
     return true;
   } catch (e) {
     console.warn('VJam FX: stopTabAudio failed', e);
@@ -249,8 +212,8 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
 
   await injectAndStart(details.tabId, state);
 
-  // Restart tab audio capture if it was active
-  if (state.audioSource === 'tab') {
+  // Restart tab audio capture if it was enabled
+  if (state.audioEnabled !== false) {
     await startTabAudio(details.tabId);
   }
 });

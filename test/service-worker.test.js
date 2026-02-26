@@ -147,10 +147,10 @@ describe('Service Worker', () => {
       // Wait for setTimeout(300ms) in the handler
       await new Promise(r => setTimeout(r, 400));
 
-      // Should have injected 5 script files + 1 start command = 6 executeScript calls
+      // Should have injected 4 script files + 1 start command = 5 executeScript calls
       expect(chrome.scripting.executeScript).toHaveBeenCalled();
       const calls = chrome.scripting.executeScript.mock.calls;
-      expect(calls.length).toBeGreaterThanOrEqual(6);
+      expect(calls.length).toBeGreaterThanOrEqual(5);
 
       // First call should be p5.min.js
       expect(calls[0][0].files).toEqual(['lib/p5.min.js']);

@@ -98,8 +98,7 @@ class PopupController {
     this.selectedBlendMode = 'screen';
     this.opacity = 1.0;
     this.isActive = false;
-    this.micEnabled = false;
-    this.audioSource = 'tab'; // 'mic' | 'tab' | 'off'
+    this.audioEnabled = true;
     this.autoCycleActive = false;
     this._tabId = null;
     this._injectedPresets = new Set(); // track which preset files have been injected
@@ -136,9 +135,6 @@ class PopupController {
     }
   }
 
-  /**
-   * Build checkbox list of presets dynamically
-   */
   _buildPresetList() {
     const list = document.getElementById('preset-list');
     if (!list) return;
@@ -160,7 +156,6 @@ class PopupController {
   async _syncState() {
     if (!this._tabId) return;
 
-    // Always try to get live state from the page engine first (most accurate)
     let liveState = null;
     try {
       const [{ result }] = await chrome.scripting.executeScript({
@@ -180,9 +175,8 @@ class PopupController {
         },
       });
       liveState = result;
-    } catch (e) { /* scripting failed — page may not have engine yet */ }
+    } catch (e) { /* scripting failed */ }
 
-    // Use live state if available, otherwise fall back to Service Worker state
     let state = null;
     if (liveState && liveState.active) {
       state = liveState;
@@ -203,8 +197,7 @@ class PopupController {
     this.isActive = true;
     this.selectedBlendMode = state.blendMode || 'screen';
     if (state.opacity !== undefined) this.opacity = state.opacity;
-    if (state.micEnabled !== undefined) this.micEnabled = state.micEnabled !== false;
-    if (state.audioSource) this.audioSource = state.audioSource;
+    if (state.audioEnabled !== undefined) this.audioEnabled = state.audioEnabled;
     if (state.layers) {
       for (const id of state.layers) this.activeLayers.add(id);
     } else if (state.preset) {
@@ -223,7 +216,6 @@ class PopupController {
     const toggle = document.getElementById('toggle');
     if (toggle) toggle.checked = this.isActive;
 
-    // Sync active layers — clear all then check active ones
     document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
       cb.checked = this.activeLayers.has(cb.value);
     });
@@ -234,17 +226,16 @@ class PopupController {
     const opacitySlider = document.getElementById('opacity-slider');
     if (opacitySlider) opacitySlider.value = Math.round(this.opacity * 100);
 
-    // Audio source buttons
-    document.querySelectorAll('.audio-src-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.source === this.audioSource);
-    });
+    const audioBtn = document.getElementById('audio-toggle');
+    if (audioBtn) {
+      audioBtn.textContent = this.audioEnabled ? 'ON' : 'OFF';
+      audioBtn.classList.toggle('on', this.audioEnabled);
+    }
 
-    // Update filter buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
       btn.classList.toggle('active', this.activeFilters.has(btn.dataset.filter));
     });
 
-    // Update auto-cycle button
     const autoBtn = document.getElementById('btn-auto-cycle');
     if (autoBtn) autoBtn.classList.toggle('active', this.autoCycleActive);
 
@@ -269,8 +260,7 @@ class PopupController {
           layers: [...this.activeLayers],
           blendMode: this.selectedBlendMode,
           opacity: this.opacity,
-          micEnabled: this.micEnabled,
-          audioSource: this.audioSource,
+          audioEnabled: this.audioEnabled,
           filters: [...this.activeFilters],
           autoCyclePresets: this.autoCycleActive ? this.presets.map(p => p.id) : null,
         },
@@ -288,19 +278,16 @@ class PopupController {
         const headers = document.querySelectorAll('#preset-list .category-header');
 
         if (!query) {
-          // Show all
           items.forEach(el => { el.style.display = ''; });
           headers.forEach(el => { el.style.display = ''; });
           return;
         }
 
-        // Filter items
         items.forEach(el => {
           const name = el.textContent.toLowerCase();
           el.style.display = name.includes(query) ? '' : 'none';
         });
 
-        // Hide category headers with no visible items
         headers.forEach(header => {
           let next = header.nextElementSibling;
           let hasVisible = false;
@@ -325,7 +312,7 @@ class PopupController {
       });
     }
 
-    // Preset checkboxes — toggle layers
+    // Preset checkboxes
     const list = document.getElementById('preset-list');
     if (list) {
       list.addEventListener('change', (e) => {
@@ -333,16 +320,11 @@ class PopupController {
         const presetId = e.target.value;
         if (e.target.checked) {
           this.activeLayers.add(presetId);
-          if (this.isActive) {
-            this._addLayer(presetId);
-          }
+          if (this.isActive) this._addLayer(presetId);
         } else {
           this.activeLayers.delete(presetId);
-          if (this.isActive) {
-            this._removeLayer(presetId);
-          }
+          if (this.isActive) this._removeLayer(presetId);
         }
-        // Stop auto-cycle on manual preset change
         if (this.autoCycleActive) {
           this.autoCycleActive = false;
           const autoBtn = document.getElementById('btn-auto-cycle');
@@ -378,73 +360,41 @@ class PopupController {
       });
     }
 
-    // Audio source toggle (Mic / Tab / OFF)
-    const audioSrcBtns = document.querySelectorAll('.audio-src-btn');
-    for (const btn of audioSrcBtns) {
-      btn.addEventListener('click', async () => {
-        const newSource = btn.dataset.source;
-        if (newSource === this.audioSource) return;
+    // Audio toggle (tab audio capture ON/OFF)
+    const audioBtn = document.getElementById('audio-toggle');
+    if (audioBtn) {
+      audioBtn.addEventListener('click', async () => {
+        this.audioEnabled = !this.audioEnabled;
+        audioBtn.textContent = this.audioEnabled ? 'ON' : 'OFF';
+        audioBtn.classList.toggle('on', this.audioEnabled);
 
-        const oldSource = this.audioSource;
-        this.audioSource = newSource;
-
-        // Update button states
-        audioSrcBtns.forEach(b => b.classList.toggle('active', b.dataset.source === newSource));
-
-        // Stop old tab audio if switching away from tab
-        if (oldSource === 'tab') {
-          await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
-        }
-
-        if (newSource === 'tab') {
-          // Start tab audio capture
-          this.micEnabled = false;
-          const resp = await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
-          if (!resp || !resp.ok) {
-            // Fallback to mic on failure
-            this.audioSource = 'mic';
-            this.micEnabled = true;
-            audioSrcBtns.forEach(b => b.classList.toggle('active', b.dataset.source === 'mic'));
-            if (this.isActive) {
-              this._sendCommand({ action: 'setAudioSource', source: 'mic' });
-              this._sendCommand({ action: 'setMic', enabled: true });
-            }
-          }
-        } else if (newSource === 'mic') {
-          this.micEnabled = true;
+        if (this.audioEnabled) {
+          await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
           if (this.isActive) {
-            this._sendCommand({ action: 'setAudioSource', source: 'mic' });
-            this._sendCommand({ action: 'setMic', enabled: true });
+            this._sendCommand({ action: 'setAudioEnabled', enabled: true });
           }
         } else {
-          // OFF
-          this.micEnabled = false;
+          await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
           if (this.isActive) {
-            this._sendCommand({ action: 'setAudioSource', source: 'mic' });
-            this._sendCommand({ action: 'setMic', enabled: false });
+            this._sendCommand({ action: 'setAudioEnabled', enabled: false });
           }
         }
-
         this._saveState();
       });
     }
 
-    // Reset — full reset to initial state
+    // Reset
     const btnReset = document.getElementById('btn-reset');
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
-        // Stop tab audio if active
-        if (this.audioSource === 'tab') {
-          await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
-        }
+        await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
         await this._sendCommand({ action: 'kill' });
         this.activeLayers.clear();
         this.activeFilters.clear();
         this.autoCycleActive = false;
         this.selectedBlendMode = 'screen';
         this.opacity = 1.0;
-        this.audioSource = 'tab';
-        this.micEnabled = false;
+        this.audioEnabled = true;
         this.isActive = false;
         this._coreInjected = false;
         this._injectedPresets.clear();
@@ -455,9 +405,8 @@ class PopupController {
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         const opacitySlider = document.getElementById('opacity-slider');
         if (opacitySlider) opacitySlider.value = 100;
-        document.querySelectorAll('.audio-src-btn').forEach(btn => {
-          btn.classList.toggle('active', btn.dataset.source === 'tab');
-        });
+        const audioBtn = document.getElementById('audio-toggle');
+        if (audioBtn) { audioBtn.textContent = 'ON'; audioBtn.classList.add('on'); }
         const blendSelect = document.getElementById('blend-mode');
         if (blendSelect) blendSelect.value = 'screen';
         const autoBtn = document.getElementById('btn-auto-cycle');
@@ -467,52 +416,46 @@ class PopupController {
       });
     }
 
-    // Next — random 1-3 layers + random FX (one shot)
+    // Next
     const btnNext = document.getElementById('btn-next');
     if (btnNext) {
       btnNext.addEventListener('click', async () => {
-        // Auto-start if not active
         if (!this.isActive) {
           this.isActive = true;
           const toggle = document.getElementById('toggle');
           if (toggle) toggle.checked = true;
           await this._injectCore();
         }
-        // Inject all presets so we can pick randomly
         for (const p of this.presets) {
           await this._injectPreset(p.id);
         }
-        // Kill current layers
         await this._sendCommand({ action: 'kill' });
-        // Pick 1-3 random presets
         const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
         const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
         const chosen = shuffled.slice(0, count);
-        // Start first layer
         const first = chosen[0];
-        await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode, mic: this.micEnabled });
-        // Add remaining layers
+        await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode });
         for (let i = 1; i < chosen.length; i++) {
           await this._sendCommand({ action: 'addLayer', preset: chosen[i].id });
         }
-        // Restore user's filters
         for (const f of this.activeFilters) {
           await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
         }
-        // Update popup state
         this.activeLayers.clear();
         for (const p of chosen) this.activeLayers.add(p.id);
-        // Update checkboxes
         document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
           cb.checked = this.activeLayers.has(cb.value);
         });
         this._updateLayerCount();
-        // Stop auto-cycle on manual Next
         if (this.autoCycleActive) {
           this.autoCycleActive = false;
           const autoBtn = document.getElementById('btn-auto-cycle');
           if (autoBtn) autoBtn.classList.remove('active');
           await this._sendCommand({ action: 'stopAutoCycle' });
+        }
+        // Start tab audio if needed
+        if (this.audioEnabled) {
+          await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
         }
         this._saveState();
       });
@@ -526,12 +469,10 @@ class PopupController {
         btnAutoCycle.classList.toggle('active', this.autoCycleActive);
         if (this.autoCycleActive) {
           if (!this.isActive) {
-            // Auto-start with all presets available
             const toggle = document.getElementById('toggle');
             if (toggle) toggle.checked = true;
             await this._startAll();
           }
-          // Inject all presets for auto-cycle
           for (const p of this.presets) {
             await this._injectPreset(p.id);
           }
@@ -563,14 +504,13 @@ class PopupController {
   }
 
   /**
-   * Inject core scripts (p5, base-preset, audio-analyzer, engine)
+   * Inject core scripts (p5, base-preset, engine)
    */
   async _injectCore() {
     if (this._coreInjected) return;
     const coreScripts = [
       'lib/p5.min.js',
       'content/base-preset.js',
-      'content/audio-analyzer.js',
       'content/content.js',
     ];
     for (const file of coreScripts) {
@@ -583,9 +523,6 @@ class PopupController {
     this._coreInjected = true;
   }
 
-  /**
-   * Inject a preset file if not already injected
-   */
   async _injectPreset(presetId) {
     if (this._injectedPresets.has(presetId)) return;
     await chrome.scripting.executeScript({
@@ -596,15 +533,10 @@ class PopupController {
     this._injectedPresets.add(presetId);
   }
 
-  /**
-   * Start all selected layers
-   */
   async _startAll() {
     if (!this._tabId) return;
 
-    // Need at least one preset selected
     if (this.activeLayers.size === 0) {
-      // Default to first preset
       this.activeLayers.add('neon-tunnel');
       const cb = document.querySelector('input[value="neon-tunnel"]');
       if (cb) cb.checked = true;
@@ -615,34 +547,28 @@ class PopupController {
 
       await this._injectCore();
 
-      // Inject and start each layer
       const layers = [...this.activeLayers];
       for (const presetId of layers) {
         await this._injectPreset(presetId);
       }
 
-      // Start first layer with full config, add rest as layers
       const first = layers[0];
       await this._sendCommand({
         action: 'start',
         preset: first,
         blendMode: this.selectedBlendMode,
-        mic: this.micEnabled,
       });
 
-      // Add remaining layers
       for (let i = 1; i < layers.length; i++) {
         await this._sendCommand({ action: 'addLayer', preset: layers[i] });
       }
 
-      // Restore filters
       for (const f of this.activeFilters) {
         await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
       }
 
-      // Start tab audio capture if in tab mode
-      if (this.audioSource === 'tab') {
-        await this._sendCommand({ action: 'setAudioSource', source: 'tab' });
+      // Start tab audio capture
+      if (this.audioEnabled) {
         await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
       }
 
@@ -657,6 +583,7 @@ class PopupController {
   }
 
   async _stopAll() {
+    await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
     await this._sendCommand({ action: 'stop' });
     this.isActive = false;
     this._coreInjected = false;
@@ -680,9 +607,6 @@ class PopupController {
     this._saveState();
   }
 
-  /**
-   * Sync blend mode and filter state back from engine after randomize
-   */
   async _syncFXState() {
     try {
       const [{ result }] = await chrome.scripting.executeScript({
@@ -701,7 +625,6 @@ class PopupController {
         this.activeFilters.clear();
         for (const f of result.filters) this.activeFilters.add(f);
 
-        // Update UI
         const blendSelect = document.getElementById('blend-mode');
         if (blendSelect) blendSelect.value = result.blendMode;
         document.querySelectorAll('.filter-btn').forEach(btn => {

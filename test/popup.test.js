@@ -17,11 +17,7 @@ describe('PopupController', () => {
           <option value="difference">Difference</option>
           <option value="exclusion">Exclusion</option>
         </select>
-        <div class="audio-source-toggle">
-          <button class="audio-src-btn" data-source="mic">Mic</button>
-          <button class="audio-src-btn active" data-source="tab">Tab</button>
-          <button class="audio-src-btn" data-source="off">OFF</button>
-        </div>
+        <button id="audio-toggle" class="audio-btn on">ON</button>
         <button class="filter-btn" data-filter="invert">Invert</button>
         <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
         <button class="filter-btn" data-filter="blur">Blur</button>
@@ -39,7 +35,7 @@ describe('PopupController', () => {
   });
 
   describe('preset list', () => {
-    it('should have 38 presets available', () => {
+    it('should have 60 presets available', () => {
       expect(controller.presets.length).toBe(60);
     });
 
@@ -105,7 +101,6 @@ describe('PopupController', () => {
 
   describe('layer count display', () => {
     it('should update layer count text', () => {
-      // Add layer-count element to container
       const el = document.createElement('span');
       el.id = 'layer-count';
       container.querySelector('.popup').appendChild(el);
@@ -163,25 +158,25 @@ describe('PopupController', () => {
       expect(call[0].state.autoCyclePresets).toBeNull();
     });
 
-    it('should include audioSource in saved state', async () => {
+    it('should include audioEnabled in saved state', async () => {
       controller.isActive = true;
-      controller.audioSource = 'tab';
+      controller.audioEnabled = false;
       await controller._saveState();
       const call = chrome.runtime.sendMessage.mock.calls[0];
-      expect(call[0].state.audioSource).toBe('tab');
+      expect(call[0].state.audioEnabled).toBe(false);
     });
   });
 
-  describe('audio source', () => {
-    it('should default to tab audioSource', () => {
-      expect(controller.audioSource).toBe('tab');
+  describe('audio', () => {
+    it('should default to audioEnabled true', () => {
+      expect(controller.audioEnabled).toBe(true);
     });
 
-    it('should track audioSource state', () => {
-      controller.audioSource = 'tab';
-      expect(controller.audioSource).toBe('tab');
-      controller.audioSource = 'off';
-      expect(controller.audioSource).toBe('off');
+    it('should toggle audioEnabled', () => {
+      controller.audioEnabled = false;
+      expect(controller.audioEnabled).toBe(false);
+      controller.audioEnabled = true;
+      expect(controller.audioEnabled).toBe(true);
     });
   });
 });

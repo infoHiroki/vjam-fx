@@ -46,8 +46,8 @@ describe('VJamFXEngine', () => {
       expect(engine.blendMode).toBe('screen');
     });
 
-    it('should have micEnabled true by default', () => {
-      expect(engine.micEnabled).toBe(true);
+    it('should have audioEnabled true by default', () => {
+      expect(engine.audioEnabled).toBe(true);
     });
   });
 
@@ -120,11 +120,6 @@ describe('VJamFXEngine', () => {
       expect(engine.currentPreset).not.toBeNull();
     });
 
-    it('should start audio analyzer when mic enabled', () => {
-      engine.startPreset('neon-tunnel');
-      expect(engine.audioAnalyzer).not.toBeNull();
-    });
-
     it('should handle unknown preset gracefully', () => {
       expect(() => engine.startPreset('nonexistent')).not.toThrow();
       expect(engine.currentPreset).toBeNull();
@@ -162,23 +157,29 @@ describe('VJamFXEngine', () => {
       expect(() => engine.destroy()).not.toThrow();
     });
 
-    it('should clean up audio analyzer', () => {
-      engine.startPreset('neon-tunnel');
+    it('should clean up external audio data', () => {
+      engine._externalAudioData = { beat: true };
       engine.destroy();
-      expect(engine.audioAnalyzer).toBeNull();
+      expect(engine._externalAudioData).toBeNull();
     });
   });
 
-  describe('setMic', () => {
-    it('should update micEnabled flag', () => {
-      engine.setMic(false);
-      expect(engine.micEnabled).toBe(false);
+  describe('audioEnabled', () => {
+    it('should default to true', () => {
+      expect(engine.audioEnabled).toBe(true);
     });
 
-    it('should destroy audio analyzer when disabled', () => {
-      engine.startPreset('neon-tunnel');
-      engine.setMic(false);
-      expect(engine.audioAnalyzer).toBeNull();
+    it('should toggle via handleMessage', () => {
+      engine.handleMessage({ action: 'setAudioEnabled', enabled: false });
+      expect(engine.audioEnabled).toBe(false);
+      engine.handleMessage({ action: 'setAudioEnabled', enabled: true });
+      expect(engine.audioEnabled).toBe(true);
+    });
+
+    it('should clear external audio data when disabled', () => {
+      engine._externalAudioData = { beat: true };
+      engine.handleMessage({ action: 'setAudioEnabled', enabled: false });
+      expect(engine._externalAudioData).toBeNull();
     });
   });
 
@@ -207,16 +208,10 @@ describe('VJamFXEngine', () => {
       expect(engine.currentPresetName).toBe('neon-tunnel');
     });
 
-    it('should handle setMic message', () => {
-      engine.handleMessage({ action: 'setMic', enabled: false });
-      expect(engine.micEnabled).toBe(false);
-    });
-
-    it('should handle start with blendMode and mic', () => {
+    it('should handle start with blendMode', () => {
       engine.createOverlay();
-      engine.handleMessage({ action: 'start', preset: 'neon-tunnel', blendMode: 'difference', mic: false });
+      engine.handleMessage({ action: 'start', preset: 'neon-tunnel', blendMode: 'difference' });
       expect(engine.blendMode).toBe('difference');
-      expect(engine.micEnabled).toBe(false);
     });
   });
 
@@ -388,16 +383,12 @@ describe('VJamFXEngine', () => {
     });
   });
 
-  describe('external audio (tab capture)', () => {
-    it('should initialize with tab audioSource', () => {
-      expect(engine.audioSource).toBe('tab');
-    });
-
+  describe('tab audio capture', () => {
     it('should have null _externalAudioData initially', () => {
       expect(engine._externalAudioData).toBeNull();
     });
 
-    it('should receive external audio data via window message', () => {
+    it('should receive audio data via window message from bridge', () => {
       const audioData = { beat: true, bpm: 120, strength: 0.8, rms: 0.1, bass: 0.5, mid: 0.3, treble: 0.2 };
       window.dispatchEvent(new MessageEvent('message', {
         data: { source: 'vjam-fx-bridge', type: 'audioData', data: audioData },
@@ -412,23 +403,10 @@ describe('VJamFXEngine', () => {
       expect(engine._externalAudioData).toBeNull();
     });
 
-    it('should switch to tab audio source via handleMessage', () => {
-      engine.handleMessage({ action: 'setAudioSource', source: 'tab' });
-      expect(engine.audioSource).toBe('tab');
-    });
-
-    it('should destroy local audioAnalyzer when switching to tab', () => {
-      engine.startPreset('neon-tunnel');
-      expect(engine.audioAnalyzer).not.toBeNull();
-      engine.handleMessage({ action: 'setAudioSource', source: 'tab' });
-      expect(engine.audioAnalyzer).toBeNull();
-    });
-
-    it('should switch back to mic and clear external data', () => {
-      engine.handleMessage({ action: 'setAudioSource', source: 'tab' });
-      engine._externalAudioData = { beat: false };
-      engine.handleMessage({ action: 'setAudioSource', source: 'mic' });
-      expect(engine.audioSource).toBe('mic');
+    it('should disable audio via setAudioEnabled', () => {
+      engine._externalAudioData = { beat: true };
+      engine.handleMessage({ action: 'setAudioEnabled', enabled: false });
+      expect(engine.audioEnabled).toBe(false);
       expect(engine._externalAudioData).toBeNull();
     });
 

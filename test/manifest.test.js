@@ -54,7 +54,7 @@ describe('manifest.json', () => {
     expect(resources).toContain('lib/p5.min.js');
     expect(resources).toContain('content/content.js');
     expect(resources).toContain('content/base-preset.js');
-    expect(resources).toContain('content/audio-analyzer.js');
+    expect(resources).not.toContain('content/audio-analyzer.js');
   });
 
   it('should have audio-bridge content script', () => {
