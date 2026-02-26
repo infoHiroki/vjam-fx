@@ -41,7 +41,6 @@
       // Multi-layer support
       this.activeLayers = new Map(); // name → { preset, container }
       this.activeFilters = new Set();
-      this.dimEnabled = false; // dark backdrop for light pages
       this._osdEl = null;
       this._osdTimer = null;
     }
@@ -71,10 +70,7 @@
       if (!VALID_BLEND_MODES.includes(mode)) return;
       this.blendMode = mode;
       if (this.overlay) {
-        // When dim is active, overlay stays normal; blend applies to canvases only
-        if (!this.dimEnabled) {
-          this.overlay.style.mixBlendMode = mode;
-        }
+        this.overlay.style.mixBlendMode = mode;
         const canvases = this.overlay.querySelectorAll('canvas');
         for (let i = 0; i < canvases.length; i++) {
           canvases[i].style.mixBlendMode = mode;
@@ -256,20 +252,6 @@
       }
     }
 
-    // --- Dim Backdrop (for light pages) ---
-
-    setDim(enabled) {
-      this.dimEnabled = enabled;
-      if (!this.overlay) return;
-      if (enabled) {
-        this.overlay.style.backgroundColor = 'rgba(0,0,0,0.3)';
-        this.overlay.style.mixBlendMode = 'normal';
-      } else {
-        this.overlay.style.backgroundColor = 'transparent';
-        this.overlay.style.mixBlendMode = this.blendMode;
-      }
-    }
-
     // --- CSS Filters ---
 
     setFilter(name, enabled) {
@@ -317,7 +299,6 @@
       this.currentPresetName = null;
       this.clearFilters();
       this.setBlendMode('screen');
-      this.setDim(false);
       this._stopAutoCycle();
       this.showOSD('RESET');
     }
@@ -491,9 +472,6 @@
           break;
         case 'stopAutoCycle':
           this._stopAutoCycle();
-          break;
-        case 'setDim':
-          this.setDim(msg.enabled);
           break;
       }
     }
