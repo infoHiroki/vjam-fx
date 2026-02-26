@@ -100,6 +100,8 @@ class PopupController {
     this.isActive = false;
     this.audioEnabled = true;
     this.autoCycleActive = false;
+    this.autoBlend = false;
+    this.autoFilters = false;
     this._tabId = null;
     this._injectedPresets = new Set(); // track which preset files have been injected
     this._coreInjected = false;
@@ -209,6 +211,8 @@ class PopupController {
     if (state.autoCycle) {
       this.autoCycleActive = true;
     }
+    if (state.autoBlend) this.autoBlend = true;
+    if (state.autoFilters) this.autoFilters = true;
     this._updateUI();
   }
 
@@ -239,6 +243,17 @@ class PopupController {
     const autoBtn = document.getElementById('btn-auto-cycle');
     if (autoBtn) autoBtn.classList.toggle('active', this.autoCycleActive);
 
+    const autoBlendBtn = document.getElementById('auto-blend');
+    if (autoBlendBtn) {
+      autoBlendBtn.classList.toggle('active', this.autoBlend);
+      autoBlendBtn.classList.toggle('disabled', !this.autoCycleActive);
+    }
+    const autoFiltersBtn = document.getElementById('auto-filters');
+    if (autoFiltersBtn) {
+      autoFiltersBtn.classList.toggle('active', this.autoFilters);
+      autoFiltersBtn.classList.toggle('disabled', !this.autoCycleActive);
+    }
+
     this._updateLayerCount();
   }
 
@@ -263,6 +278,8 @@ class PopupController {
           audioEnabled: this.audioEnabled,
           filters: [...this.activeFilters],
           autoCyclePresets: this.autoCycleActive ? this.presets.map(p => p.id) : null,
+          autoBlend: this.autoBlend,
+          autoFilters: this.autoFilters,
         },
       });
     } catch (e) { /* SW not available */ }
@@ -392,6 +409,8 @@ class PopupController {
         this.activeLayers.clear();
         this.activeFilters.clear();
         this.autoCycleActive = false;
+        this.autoBlend = false;
+        this.autoFilters = false;
         this.selectedBlendMode = 'screen';
         this.opacity = 1.0;
         this.audioEnabled = true;
@@ -411,6 +430,10 @@ class PopupController {
         if (blendSelect) blendSelect.value = 'screen';
         const autoBtn = document.getElementById('btn-auto-cycle');
         if (autoBtn) autoBtn.classList.remove('active');
+        const autoBlendBtn = document.getElementById('auto-blend');
+        if (autoBlendBtn) { autoBlendBtn.classList.remove('active'); autoBlendBtn.classList.add('disabled'); }
+        const autoFiltersBtn = document.getElementById('auto-filters');
+        if (autoFiltersBtn) { autoFiltersBtn.classList.remove('active'); autoFiltersBtn.classList.add('disabled'); }
         this._updateLayerCount();
         this._saveState();
       });
@@ -477,7 +500,7 @@ class PopupController {
             await this._injectPreset(p.id);
           }
           const allIds = this.presets.map(p => p.id);
-          await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000 });
+          await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters });
         } else {
           await this._sendCommand({ action: 'stopAutoCycle' });
         }
@@ -498,6 +521,34 @@ class PopupController {
         if (this.isActive) {
           this._sendCommand({ action: 'toggleFilter', filter: filter });
         }
+        this._saveState();
+      });
+    }
+
+    // Auto-blend toggle
+    const autoBlendBtn = document.getElementById('auto-blend');
+    if (autoBlendBtn) {
+      autoBlendBtn.addEventListener('click', async () => {
+        if (!this.autoCycleActive) return;
+        this.autoBlend = !this.autoBlend;
+        autoBlendBtn.classList.toggle('active', this.autoBlend);
+        // Re-send startAutoCycle with updated flags
+        const allIds = this.presets.map(p => p.id);
+        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+        this._saveState();
+      });
+    }
+
+    // Auto-filters toggle
+    const autoFiltersBtn = document.getElementById('auto-filters');
+    if (autoFiltersBtn) {
+      autoFiltersBtn.addEventListener('click', async () => {
+        if (!this.autoCycleActive) return;
+        this.autoFilters = !this.autoFilters;
+        autoFiltersBtn.classList.toggle('active', this.autoFilters);
+        // Re-send startAutoCycle with updated flags
+        const allIds = this.presets.map(p => p.id);
+        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters });
         this._saveState();
       });
     }

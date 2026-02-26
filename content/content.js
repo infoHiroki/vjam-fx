@@ -54,25 +54,35 @@
       this._osdEl = null;
       this._osdTimer = null;
 
-      // Listen for audio data from bridge (tab capture)
-      this._onBridgeMessage = (event) => {
-        if (event.data && event.data.source === 'vjam-fx-bridge' && event.data.type === 'audioData') {
-          this._externalAudioData = event.data.data;
-        }
-      };
-      window.addEventListener('message', this._onBridgeMessage);
+      this._onBridgeMessage = null;
+      this._onFullscreenChange = null;
+      this._ensureListeners();
+    }
 
-      // Fullscreen support: move overlay into fullscreen element
-      this._onFullscreenChange = () => {
-        if (!this.overlay) return;
-        const fsEl = document.fullscreenElement;
-        if (fsEl) {
-          fsEl.appendChild(this.overlay);
-        } else {
-          document.body.appendChild(this.overlay);
-        }
-      };
-      document.addEventListener('fullscreenchange', this._onFullscreenChange);
+    /**
+     * Register bridge + fullscreen listeners if not already present.
+     * Called from constructor and before starting presets (safety net after stop).
+     */
+    _ensureListeners() {
+      if (!this._onBridgeMessage) {
+        this._onBridgeMessage = (event) => {
+          if (event.data && event.data.source === 'vjam-fx-bridge' && event.data.type === 'audioData') {
+            this._externalAudioData = event.data.data;
+          }
+        };
+        window.addEventListener('message', this._onBridgeMessage);
+      }
+
+      if (!this._onFullscreenChange) {
+        this._onFullscreenChange = () => {
+          if (!this.overlay) return;
+          const fsEl = document.fullscreenElement;
+          const targetParent = fsEl || document.body;
+          if (this.overlay.parentNode === targetParent) return;
+          targetParent.appendChild(this.overlay);
+        };
+        document.addEventListener('fullscreenchange', this._onFullscreenChange);
+      }
     }
 
     createOverlay() {
@@ -140,6 +150,7 @@
       }
       if (!window.VJamFX || !window.VJamFX.presets[presetName]) return;
 
+      this._ensureListeners();
       this.createOverlay();
 
       // Create a container div for this layer's canvas
@@ -193,6 +204,7 @@
      * Start a single preset (legacy single-layer mode, also adds as a layer)
      */
     startPreset(presetName) {
+      this._ensureListeners();
       this.createOverlay();
 
       // Stop current single preset if any
@@ -370,12 +382,14 @@
 
     // --- Auto-Cycle ---
 
-    startAutoCycle(presetNames, intervalMs) {
+    startAutoCycle(presetNames, intervalMs, options) {
       this._stopAutoCycle();
       if (!presetNames || presetNames.length === 0) return;
 
       this._autoCyclePresets = presetNames;
       this._autoCycleBaseInterval = intervalMs || 8000;
+      this._autoBlend = !!(options && options.autoBlend);
+      this._autoFilters = !!(options && options.autoFilters);
 
       const self = this;
       const scheduleNext = () => {
@@ -417,6 +431,24 @@
         if (!this.activeLayers.has(name)) {
           this._addLayer(name);
         }
+      }
+
+      // Auto-blend: randomize blend mode
+      if (this._autoBlend) {
+        const mode = VALID_BLEND_MODES[Math.floor(Math.random() * VALID_BLEND_MODES.length)];
+        this.setBlendMode(mode);
+      }
+
+      // Auto-filters: randomize filters (each 30% chance)
+      if (this._autoFilters) {
+        this.activeFilters.clear();
+        const filterNames = Object.keys(FILTER_VALUES);
+        for (let i = 0; i < filterNames.length; i++) {
+          if (Math.random() < 0.3) {
+            this.activeFilters.add(filterNames[i]);
+          }
+        }
+        this._applyFilters();
       }
 
       // OSD shows active layers
@@ -465,7 +497,12 @@
           if (msg.blendMode) this.setBlendMode(msg.blendMode);
           break;
         case 'stop':
-          this.destroy();
+          this.stop();
+          if (this.overlay) {
+            this.overlay.remove();
+            this.overlay = null;
+          }
+          this.activeFilters.clear();
           break;
         case 'switchPreset':
           this.startPreset(msg.preset);
@@ -507,7 +544,7 @@
           this.randomizeFX({ skipBlend: !!msg.skipBlend });
           break;
         case 'startAutoCycle':
-          this.startAutoCycle(msg.presets, msg.interval);
+          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters });
           break;
         case 'stopAutoCycle':
           this._stopAutoCycle();

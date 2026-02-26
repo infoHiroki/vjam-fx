@@ -30,7 +30,7 @@
       <!-- Presets injected by popup.js -->
     </div>
 
-    <div class="section-label">Filters</div>
+    <div class="section-label"><span>Filters</span><button id="auto-filters" class="auto-toggle" title="Auto-rotate filters">Auto</button></div>
     <div class="filter-grid" id="filter-grid">
       <button class="filter-btn" data-filter="invert">Invert</button>
       <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
@@ -51,6 +51,7 @@
           <option value="difference">Difference</option>
           <option value="exclusion">Exclusion</option>
         </select>
+        <button id="auto-blend" class="auto-toggle" title="Auto-rotate blend mode">Auto</button>
       </div>
       <div class="control-row">
         <label>Opacity</label>

@@ -188,6 +188,8 @@
   }
 
   async function startCapture(streamId) {
+    // Clean up any existing capture first (idempotent)
+    stopCapture();
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {

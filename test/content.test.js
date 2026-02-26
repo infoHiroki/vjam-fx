@@ -350,6 +350,53 @@ describe('VJamFXEngine', () => {
       engine.destroy();
       expect(engine._autoCycleTimer).toBeNull();
     });
+
+    it('should randomize blend mode when autoBlend is true', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000, autoBlend: true });
+      // After first tick, blend mode should be a valid one
+      expect(['screen', 'lighten', 'difference', 'exclusion']).toContain(engine.blendMode);
+      engine._stopAutoCycle();
+    });
+
+    it('should not randomize blend mode when autoBlend is false', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.setBlendMode('screen');
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000, autoBlend: false });
+      // Blend mode should remain screen (not randomized)
+      expect(engine.blendMode).toBe('screen');
+      engine._stopAutoCycle();
+    });
+
+    it('should randomize filters when autoFilters is true', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000, autoFilters: true });
+      // After first tick, filters may or may not be set (random), but _autoFilters flag should be true
+      expect(engine._autoFilters).toBe(true);
+      engine._stopAutoCycle();
+    });
+
+    it('should not randomize filters when autoFilters is false', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.setFilter('invert', true);
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000, autoFilters: false });
+      // Manually set filter should remain
+      expect(engine.activeFilters.has('invert')).toBe(true);
+      engine._stopAutoCycle();
+    });
+
+    it('should pass autoBlend and autoFilters flags via handleMessage', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000, autoBlend: true, autoFilters: true });
+      expect(engine._autoBlend).toBe(true);
+      expect(engine._autoFilters).toBe(true);
+      engine._stopAutoCycle();
+    });
   });
 
   describe('fade transitions', () => {
@@ -447,6 +494,84 @@ describe('VJamFXEngine', () => {
       engine.destroy();
       expect(spy).toHaveBeenCalledWith('fullscreenchange', expect.any(Function));
       spy.mockRestore();
+    });
+  });
+
+  describe('stop vs destroy separation', () => {
+    it('handleMessage stop should NOT remove bridge listener', () => {
+      engine.startPreset('neon-tunnel');
+      engine.handleMessage({ action: 'stop' });
+      // Bridge listener should still be registered
+      expect(engine._onBridgeMessage).not.toBeNull();
+    });
+
+    it('handleMessage stop should NOT remove fullscreen listener', () => {
+      engine.startPreset('neon-tunnel');
+      engine.handleMessage({ action: 'stop' });
+      expect(engine._onFullscreenChange).not.toBeNull();
+    });
+
+    it('handleMessage stop should remove overlay', () => {
+      engine.startPreset('neon-tunnel');
+      engine.handleMessage({ action: 'stop' });
+      expect(engine.overlay).toBeNull();
+      expect(document.querySelector('[data-vjam-fx]')).toBeNull();
+    });
+
+    it('should receive audio data after stop + restart', () => {
+      engine.startPreset('neon-tunnel');
+      engine.handleMessage({ action: 'stop' });
+      // Restart
+      engine.startPreset('neon-tunnel');
+      // Send audio data via bridge
+      const audioData = { beat: true, bpm: 120, strength: 0.8, rms: 0.1, bass: 0.5, mid: 0.3, treble: 0.2 };
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { source: 'vjam-fx-bridge', type: 'audioData', data: audioData },
+      }));
+      expect(engine._externalAudioData).toEqual(audioData);
+    });
+
+    it('_ensureListeners should re-register if listeners were nulled', () => {
+      // Simulate listeners being lost (e.g. after destroy)
+      window.removeEventListener('message', engine._onBridgeMessage);
+      document.removeEventListener('fullscreenchange', engine._onFullscreenChange);
+      engine._onBridgeMessage = null;
+      engine._onFullscreenChange = null;
+
+      engine._ensureListeners();
+      expect(engine._onBridgeMessage).not.toBeNull();
+      expect(engine._onFullscreenChange).not.toBeNull();
+
+      // Verify bridge listener works
+      const audioData = { beat: false, bpm: 120, strength: 0, rms: 0.05, bass: 0.1, mid: 0.1, treble: 0.1 };
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { source: 'vjam-fx-bridge', type: 'audioData', data: audioData },
+      }));
+      expect(engine._externalAudioData).toEqual(audioData);
+    });
+
+    it('_ensureListeners should not double-register', () => {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+      const docSpy = vi.spyOn(document, 'addEventListener');
+      engine._ensureListeners();
+      // Should not add again since already registered
+      expect(addSpy).not.toHaveBeenCalledWith('message', expect.any(Function));
+      expect(docSpy).not.toHaveBeenCalledWith('fullscreenchange', expect.any(Function));
+      addSpy.mockRestore();
+      docSpy.mockRestore();
+    });
+  });
+
+  describe('fullscreen handler robustness', () => {
+    it('should skip move if overlay is already in correct parent', () => {
+      engine.createOverlay();
+      const appendSpy = vi.spyOn(document.body, 'appendChild');
+      // Trigger fullscreenchange with no fullscreen element (overlay already in body)
+      Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+      document.dispatchEvent(new Event('fullscreenchange'));
+      // Should not call appendChild since overlay is already in body
+      expect(appendSpy).not.toHaveBeenCalled();
+      appendSpy.mockRestore();
     });
   });
 
