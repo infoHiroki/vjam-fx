@@ -36,6 +36,7 @@ globalThis.chrome = {
   action: {
     setIcon: vi.fn(),
     setBadgeText: vi.fn(),
+    setBadgeBackgroundColor: vi.fn(),
   },
   webNavigation: {
     onCompleted: { addListener: vi.fn() },

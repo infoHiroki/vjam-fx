@@ -106,15 +106,28 @@ async function injectAndStart(tabId, state) {
 
 // --- Event Listeners ---
 
+function updateBadge(tabId) {
+  const state = getState(tabId);
+  const isOn = state && state.active;
+  try {
+    chrome.action.setBadgeText({ text: isOn ? 'ON' : '', tabId });
+    if (isOn) {
+      chrome.action.setBadgeBackgroundColor({ color: '#00cc66', tabId });
+    }
+  } catch (e) { /* badge API may not be available in tests */ }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'setState') {
     setState(msg.tabId, msg.state);
+    updateBadge(msg.tabId);
     sendResponse({ ok: true });
   } else if (msg.type === 'getState') {
     const state = getState(msg.tabId);
     sendResponse({ state });
   } else if (msg.type === 'clearState') {
     clearState(msg.tabId);
+    updateBadge(msg.tabId);
     sendResponse({ ok: true });
   }
   return false;
