@@ -177,14 +177,18 @@
       if (this._rafId) return;
 
       const self = this;
-      const loop = () => {
+      let lastAudioTime = 0;
+      const AUDIO_INTERVAL = 66; // ~15Hz audio update (sufficient for smoothed data)
+
+      const loop = (timestamp) => {
         if (!self.active) {
           self._rafId = null;
           return;
         }
 
-        // Feed audio to ALL active layers
-        if (self.audioAnalyzer && self.audioAnalyzer.started) {
+        // Feed audio to ALL active layers (throttled to 15Hz)
+        if (self.audioAnalyzer && self.audioAnalyzer.started && timestamp - lastAudioTime >= AUDIO_INTERVAL) {
+          lastAudioTime = timestamp;
           const audioData = self.audioAnalyzer.getAudioData();
           for (const [, layer] of self.activeLayers) {
             layer.preset.updateAudio(audioData);
@@ -329,12 +333,28 @@
       if (!presetNames || presetNames.length === 0) return;
 
       this._autoCyclePresets = presetNames;
-      this._autoCycleInterval = intervalMs || 8000;
-      this._autoCycleTimer = setInterval(() => {
-        this._autoCycleTick();
-      }, this._autoCycleInterval);
+      this._autoCycleBaseInterval = intervalMs || 8000;
+
+      const self = this;
+      const scheduleNext = () => {
+        // Use BPM to set interval: 16 beats at current BPM (or fallback to base interval)
+        let interval = self._autoCycleBaseInterval;
+        if (self.audioAnalyzer && self.audioAnalyzer.started) {
+          const data = self.audioAnalyzer.getAudioData();
+          if (data.bpm > 0) {
+            interval = (60 / data.bpm) * 16 * 1000; // 16 beats in ms
+            interval = Math.max(4000, Math.min(15000, interval)); // Clamp 4-15 seconds
+          }
+        }
+        self._autoCycleTimer = setTimeout(() => {
+          self._autoCycleTick();
+          scheduleNext();
+        }, interval);
+      };
+
       // Immediate first tick
       this._autoCycleTick();
+      scheduleNext();
     }
 
     _autoCycleTick() {
@@ -370,7 +390,7 @@
 
     _stopAutoCycle() {
       if (this._autoCycleTimer) {
-        clearInterval(this._autoCycleTimer);
+        clearTimeout(this._autoCycleTimer);
         this._autoCycleTimer = null;
       }
     }
