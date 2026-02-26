@@ -225,7 +225,7 @@ class PopupController {
     });
 
     document.querySelectorAll('.blend-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.blend === this.selectedBlendMode);
+      btn.classList.toggle('active', this.selectedBlendMode !== 'screen' && btn.dataset.blend === this.selectedBlendMode);
     });
 
     const opacitySlider = document.getElementById('opacity-slider');
@@ -354,14 +354,22 @@ class PopupController {
       });
     }
 
-    // Blend mode buttons
+    // Blend mode buttons (toggle on/off, default is screen)
     const blendBtns = document.querySelectorAll('.blend-btn');
     for (const btn of blendBtns) {
       btn.addEventListener('click', () => {
-        this.selectedBlendMode = btn.dataset.blend;
-        blendBtns.forEach(b => b.classList.toggle('active', b === btn));
+        const mode = btn.dataset.blend;
+        if (this.selectedBlendMode === mode) {
+          // Toggle off → back to default
+          this.selectedBlendMode = 'screen';
+          btn.classList.remove('active');
+        } else {
+          this.selectedBlendMode = mode;
+          blendBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        }
         if (this.isActive) {
-          this._sendCommand({ action: 'setBlendMode', blendMode: btn.dataset.blend });
+          this._sendCommand({ action: 'setBlendMode', blendMode: this.selectedBlendMode });
         }
         this._saveState();
       });
@@ -428,9 +436,7 @@ class PopupController {
         if (opacitySlider) opacitySlider.value = 100;
         const audioBtn = document.getElementById('audio-toggle');
         if (audioBtn) { audioBtn.textContent = 'ON'; audioBtn.classList.add('on'); }
-        document.querySelectorAll('.blend-btn').forEach(btn => {
-          btn.classList.toggle('active', btn.dataset.blend === 'screen');
-        });
+        document.querySelectorAll('.blend-btn').forEach(btn => btn.classList.remove('active'));
         const autoBtn = document.getElementById('btn-auto-cycle');
         if (autoBtn) autoBtn.classList.remove('active');
         const autoBlendBtn = document.getElementById('auto-blend');
