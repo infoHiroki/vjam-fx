@@ -99,6 +99,7 @@ class PopupController {
     this.selectedBlendMode = 'screen';
     this.isActive = false;
     this.micEnabled = true;
+    this.dimEnabled = false;
     this.autoCycleActive = false;
     this._tabId = null;
     this._injectedPresets = new Set(); // track which preset files have been injected
@@ -174,6 +175,7 @@ class PopupController {
             blendMode: e.blendMode,
             filters: [...e.activeFilters],
             autoCycle: !!e._autoCycleTimer,
+            dim: e.dimEnabled,
           };
         },
       });
@@ -212,6 +214,9 @@ class PopupController {
     if (state.autoCycle) {
       this.autoCycleActive = true;
     }
+    if (state.dim) {
+      this.dimEnabled = true;
+    }
     this._updateUI();
   }
 
@@ -242,6 +247,13 @@ class PopupController {
     const autoBtn = document.getElementById('btn-auto-cycle');
     if (autoBtn) autoBtn.classList.toggle('active', this.autoCycleActive);
 
+    // Update dim button
+    const dimBtn = document.getElementById('dim-toggle');
+    if (dimBtn) {
+      dimBtn.textContent = this.dimEnabled ? 'ON' : 'OFF';
+      dimBtn.classList.toggle('on', this.dimEnabled);
+    }
+
     this._updateLayerCount();
   }
 
@@ -264,6 +276,7 @@ class PopupController {
           blendMode: this.selectedBlendMode,
           micEnabled: this.micEnabled,
           filters: [...this.activeFilters],
+          dim: this.dimEnabled,
           autoCyclePresets: this.autoCycleActive ? this.presets.map(p => p.id) : null,
         },
       });
@@ -358,6 +371,20 @@ class PopupController {
       });
     }
 
+    // Dim toggle
+    const dimBtn = document.getElementById('dim-toggle');
+    if (dimBtn) {
+      dimBtn.addEventListener('click', () => {
+        this.dimEnabled = !this.dimEnabled;
+        dimBtn.textContent = this.dimEnabled ? 'ON' : 'OFF';
+        dimBtn.classList.toggle('on', this.dimEnabled);
+        if (this.isActive) {
+          this._sendCommand({ action: 'setDim', enabled: this.dimEnabled });
+        }
+        this._saveState();
+      });
+    }
+
     // Mic toggle
     const micBtn = document.getElementById('mic-toggle');
     if (micBtn) {
@@ -380,6 +407,7 @@ class PopupController {
         this.activeLayers.clear();
         this.activeFilters.clear();
         this.autoCycleActive = false;
+        this.dimEnabled = false;
         this.selectedBlendMode = 'screen';
         this.isActive = false;
         this._coreInjected = false;
@@ -393,6 +421,8 @@ class PopupController {
         if (blendSelect) blendSelect.value = 'screen';
         const autoBtn = document.getElementById('btn-auto-cycle');
         if (autoBtn) autoBtn.classList.remove('active');
+        const dimBtn = document.getElementById('dim-toggle');
+        if (dimBtn) { dimBtn.textContent = 'OFF'; dimBtn.classList.remove('on'); }
         this._updateLayerCount();
         this._saveState();
       });
