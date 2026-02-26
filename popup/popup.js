@@ -96,6 +96,7 @@ class PopupController {
     this.activeLayers = new Set();  // preset IDs currently active
     this.activeFilters = new Set();
     this.selectedBlendMode = 'screen';
+    this.opacity = 1.0;
     this.isActive = false;
     this.micEnabled = false;
     this.audioSource = 'tab'; // 'mic' | 'tab' | 'off'
@@ -201,6 +202,7 @@ class PopupController {
 
     this.isActive = true;
     this.selectedBlendMode = state.blendMode || 'screen';
+    if (state.opacity !== undefined) this.opacity = state.opacity;
     if (state.micEnabled !== undefined) this.micEnabled = state.micEnabled !== false;
     if (state.audioSource) this.audioSource = state.audioSource;
     if (state.layers) {
@@ -228,6 +230,9 @@ class PopupController {
 
     const blendSelect = document.getElementById('blend-mode');
     if (blendSelect) blendSelect.value = this.selectedBlendMode;
+
+    const opacitySlider = document.getElementById('opacity-slider');
+    if (opacitySlider) opacitySlider.value = Math.round(this.opacity * 100);
 
     // Audio source buttons
     document.querySelectorAll('.audio-src-btn').forEach(btn => {
@@ -263,6 +268,7 @@ class PopupController {
           active: this.isActive,
           layers: [...this.activeLayers],
           blendMode: this.selectedBlendMode,
+          opacity: this.opacity,
           micEnabled: this.micEnabled,
           audioSource: this.audioSource,
           filters: [...this.activeFilters],
@@ -360,6 +366,18 @@ class PopupController {
       });
     }
 
+    // Opacity slider
+    const opacitySlider = document.getElementById('opacity-slider');
+    if (opacitySlider) {
+      opacitySlider.addEventListener('input', (e) => {
+        this.opacity = parseInt(e.target.value, 10) / 100;
+        if (this.isActive) {
+          this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
+        }
+        this._saveState();
+      });
+    }
+
     // Audio source toggle (Mic / Tab / OFF)
     const audioSrcBtns = document.querySelectorAll('.audio-src-btn');
     for (const btn of audioSrcBtns) {
@@ -424,6 +442,7 @@ class PopupController {
         this.activeFilters.clear();
         this.autoCycleActive = false;
         this.selectedBlendMode = 'screen';
+        this.opacity = 1.0;
         this.audioSource = 'tab';
         this.micEnabled = false;
         this.isActive = false;
@@ -434,6 +453,8 @@ class PopupController {
         if (toggle) toggle.checked = false;
         document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        const opacitySlider = document.getElementById('opacity-slider');
+        if (opacitySlider) opacitySlider.value = 100;
         document.querySelectorAll('.audio-src-btn').forEach(btn => {
           btn.classList.toggle('active', btn.dataset.source === 'tab');
         });

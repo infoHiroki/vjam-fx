@@ -270,6 +270,12 @@ body {
   font-size: 12px;
 }
 
+.opacity-slider {
+  width: 120px;
+  accent-color: #00cc66;
+  cursor: pointer;
+}
+
 .audio-source-toggle {
   display: flex;
   gap: 2px;

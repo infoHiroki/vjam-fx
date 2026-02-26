@@ -38,6 +38,7 @@
     constructor() {
       this.active = false;
       this.blendMode = 'screen';
+      this.opacity = 1.0;
       this.isLightPage = false;
       this.currentPreset = null;
       this.currentPresetName = null;
@@ -100,6 +101,13 @@
         for (let i = 0; i < canvases.length; i++) {
           canvases[i].style.mixBlendMode = mode;
         }
+      }
+    }
+
+    setOpacity(value) {
+      this.opacity = Math.max(0, Math.min(1, value));
+      if (this.overlay) {
+        this.overlay.style.opacity = this.opacity;
       }
     }
 
@@ -341,6 +349,7 @@
       this.currentPresetName = null;
       this.clearFilters();
       this.setBlendMode('screen');
+      this.setOpacity(1.0);
       this._stopAutoCycle();
       this.showOSD('RESET');
     }
@@ -482,6 +491,9 @@
           break;
         case 'setMic':
           this.setMic(msg.enabled);
+          break;
+        case 'setOpacity':
+          this.setOpacity(msg.opacity);
           break;
         case 'addLayer':
           if (!this.activeLayers.has(msg.preset)) {

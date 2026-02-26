@@ -66,7 +66,7 @@ async function injectAndStart(tabId, state) {
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      func: (layers, blendMode, micEnabled, filters, autoCyclePresets) => {
+      func: (layers, blendMode, micEnabled, filters, autoCyclePresets, opacity) => {
         if (!window._vjamFxEngine) return;
         const engine = window._vjamFxEngine;
 
@@ -90,12 +90,17 @@ async function injectAndStart(tabId, state) {
           }
         }
 
+        // Restore opacity
+        if (opacity !== undefined && opacity !== 1) {
+          engine.handleMessage({ action: 'setOpacity', opacity: opacity });
+        }
+
         // Restart auto-cycle if it was active
         if (autoCyclePresets && autoCyclePresets.length > 0) {
           engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: 8000 });
         }
       },
-      args: [layers, state.blendMode || 'screen', state.micEnabled !== false, state.filters || [], state.autoCyclePresets || null],
+      args: [layers, state.blendMode || 'screen', state.micEnabled !== false, state.filters || [], state.autoCyclePresets || null, state.opacity],
     });
 
     return true;
