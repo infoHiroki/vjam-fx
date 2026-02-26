@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  width: 1280px;
+  height: 800px;
+  background: #0a0a0a;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #fff;
+  overflow: hidden;
+}
+
+.slide { width: 1280px; height: 800px; position: relative; display: none; }
+.slide.active { display: flex; }
+
+/* Slide 1: Hero */
+.slide-hero {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #1a0a2e 0%, #0a0a0a 70%);
+}
+
+.slide-hero .logo-ring {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  border: 12px solid;
+  border-image: conic-gradient(#FF1493, #8B5CF6, #FF1493) 1;
+  border-radius: 50%;
+  margin-bottom: 30px;
+  background: transparent;
+  position: relative;
+}
+.slide-hero .logo-ring::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 12px solid transparent;
+  background: conic-gradient(#FF1493, #8B5CF6, #FF1493) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.slide-hero h1 {
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  background: linear-gradient(135deg, #FF1493, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 16px;
+}
+
+.slide-hero .tagline {
+  font-size: 24px;
+  color: #aaa;
+  font-weight: 400;
+}
+
+.slide-hero .stats {
+  margin-top: 40px;
+  display: flex;
+  gap: 60px;
+}
+
+.slide-hero .stat {
+  text-align: center;
+}
+
+.slide-hero .stat .num {
+  font-size: 48px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #FF1493, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.slide-hero .stat .label {
+  font-size: 14px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+/* Slide 2: Popup mockup */
+.slide-popup {
+  align-items: center;
+  justify-content: center;
+  gap: 60px;
+  background: radial-gradient(ellipse at 30% 50%, #1a0a2e 0%, #0a0a0a 70%);
+}
+
+.popup-mock {
+  width: 280px;
+  background: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(139, 92, 246, 0.3);
+  border: 1px solid #333;
+}
+
+.popup-mock .pm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #333;
+}
+
+.popup-mock .pm-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #FF1493, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.popup-mock .pm-toggle {
+  width: 44px; height: 24px;
+  background: #00cc66;
+  border-radius: 12px;
+  position: relative;
+}
+.popup-mock .pm-toggle::after {
+  content: '';
+  width: 18px; height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  right: 3px; top: 3px;
+}
+
+.popup-mock .pm-actions {
+  display: flex;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.popup-mock .pm-btn {
+  flex: 1;
+  padding: 6px 4px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 11px;
+  text-align: center;
+}
+.popup-mock .pm-btn.active {
+  background: #00cc66;
+  color: #000;
+  border-color: #00cc66;
+  font-weight: 600;
+}
+.popup-mock .pm-btn.reset {
+  background: #441111;
+  border-color: #663333;
+  color: #ff6666;
+}
+
+.popup-mock .pm-presets {
+  padding: 0 12px 12px;
+}
+.popup-mock .pm-cat {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #666;
+  padding: 8px 0 4px;
+  letter-spacing: 0.5px;
+}
+.popup-mock .pm-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 12px;
+  color: #aaa;
+}
+.popup-mock .pm-item.checked {
+  color: #00cc66;
+  font-weight: 600;
+}
+.popup-mock .pm-check {
+  width: 14px; height: 14px;
+  border: 2px solid #555;
+  border-radius: 3px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.popup-mock .pm-item.checked .pm-check {
+  background: #00cc66;
+  border-color: #00cc66;
+}
+
+.feature-list {
+  max-width: 500px;
+}
+.feature-list h2 {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+.feature-list .feat {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.feature-list .feat-icon {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, #FF1493, #8B5CF6);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.feature-list .feat-text h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.feature-list .feat-text p {
+  font-size: 13px;
+  color: #888;
+}
+
+/* Slide 3: Categories */
+.slide-categories {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 70% 30%, #1a0a2e 0%, #0a0a0a 70%);
+}
+
+.slide-categories h2 {
+  font-size: 40px;
+  font-weight: 700;
+  margin-bottom: 40px;
+}
+
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  max-width: 900px;
+}
+
+.cat-card {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+}
+
+.cat-card .cat-emoji {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.cat-card .cat-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cat-card .cat-count {
+  font-size: 24px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #FF1493, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.cat-card .cat-examples {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* Slide 4: Privacy */
+.slide-privacy {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 50%, #0a1a0e 0%, #0a0a0a 70%);
+}
+
+.slide-privacy h2 {
+  font-size: 40px;
+  font-weight: 700;
+  margin-bottom: 40px;
+}
+
+.privacy-cards {
+  display: flex;
+  gap: 24px;
+}
+
+.priv-card {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 30px;
+  text-align: center;
+  width: 240px;
+}
+
+.priv-card .priv-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.priv-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.priv-card p {
+  font-size: 13px;
+  color: #888;
+  line-height: 1.4;
+}
+</style>
+</head>
+<body>
+
+<!-- Slide 1: Hero -->
+<div class="slide slide-hero active" id="slide1">
+  <h1>VJam FX</h1>
+  <div class="tagline">VJ Effects for Any Website</div>
+  <div class="stats">
+    <div class="stat">
+      <div class="num">61</div>
+      <div class="label">Presets</div>
+    </div>
+    <div class="stat">
+      <div class="num">8</div>
+      <div class="label">Categories</div>
+    </div>
+    <div class="stat">
+      <div class="num">3</div>
+      <div class="label">Layers</div>
+    </div>
+  </div>
+</div>
+
+<!-- Slide 2: Features + Popup -->
+<div class="slide slide-popup" id="slide2">
+  <div class="popup-mock">
+    <div class="pm-header">
+      <h2>VJam FX</h2>
+      <div class="pm-toggle"></div>
+    </div>
+    <div class="pm-actions">
+      <div class="pm-btn reset">Reset</div>
+      <div class="pm-btn">Next</div>
+      <div class="pm-btn active">Auto</div>
+    </div>
+    <div class="pm-presets">
+      <div class="pm-cat">Immersive</div>
+      <div class="pm-item checked"><div class="pm-check"></div>Wormhole</div>
+      <div class="pm-item"><div class="pm-check"></div>Warp Speed</div>
+      <div class="pm-item checked"><div class="pm-check"></div>Portal Ring</div>
+      <div class="pm-item"><div class="pm-check"></div>Aurora</div>
+      <div class="pm-cat">Frames & Film</div>
+      <div class="pm-item checked"><div class="pm-check"></div>Neon Frame</div>
+      <div class="pm-item"><div class="pm-check"></div>Film Burn</div>
+      <div class="pm-item"><div class="pm-check"></div>VHS Noise</div>
+    </div>
+  </div>
+  <div class="feature-list">
+    <h2>Simple & Powerful</h2>
+    <div class="feat">
+      <div class="feat-icon">🎛</div>
+      <div class="feat-text">
+        <h3>Multi-Layer</h3>
+        <p>Stack up to 3 presets simultaneously with smooth fade transitions</p>
+      </div>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🎵</div>
+      <div class="feat-text">
+        <h3>Beat Detection</h3>
+        <p>Real-time microphone analysis syncs visuals to your music</p>
+      </div>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🔄</div>
+      <div class="feat-text">
+        <h3>Auto-Cycle</h3>
+        <p>BPM-connected automatic preset rotation — sit back and enjoy</p>
+      </div>
+    </div>
+    <div class="feat">
+      <div class="feat-icon">🎨</div>
+      <div class="feat-text">
+        <h3>CSS Filters</h3>
+        <p>8 real-time filters: Invert, Hue Rotate, Blur, Sepia, and more</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Slide 3: Categories -->
+<div class="slide slide-categories" id="slide3">
+  <h2>61 Presets, 8 Categories</h2>
+  <div class="cat-grid">
+    <div class="cat-card">
+      <div class="cat-emoji">🌀</div>
+      <div class="cat-count">19</div>
+      <div class="cat-name">Immersive</div>
+      <div class="cat-examples">Wormhole, Aurora, Portal</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-emoji">🎞</div>
+      <div class="cat-count">8</div>
+      <div class="cat-name">Frames & Film</div>
+      <div class="cat-examples">Neon Frame, VHS, Film Burn</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-emoji">✳️</div>
+      <div class="cat-count">6</div>
+      <div class="cat-name">Patterns</div>
+      <div class="cat-examples">Kaleidoscope, Mandala</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-emoji">🧬</div>
+      <div class="cat-count">8</div>
+      <div class="cat-name">Organic</div>
+      <div class="cat-examples">Cellular, Voronoi, Liquid</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-emoji">💻</div>
+      <div class="cat-count">6</div>
+      <div class="cat-name">Grid & Tech</div>
+      <div class="cat-examples">Glitch Grid, CRT Monitor</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-emoji">🌌</div>
+      <div class="cat-count">6</div>
+      <div class="cat-name">Space & Nature</div>
+      <div class="cat-examples">Starfield, Bokeh, Terrain</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-emoji">🎶</div>
+      <div class="cat-count">5</div>
+      <div class="cat-name">Audio Reactive</div>
+      <div class="cat-examples">Equalizer, Sine Waves</div>
+    </div>
+    <div class="cat-card">
+      <div class="cat-emoji">🌧</div>
+      <div class="cat-count">3</div>
+      <div class="cat-name">Weather</div>
+      <div class="cat-examples">Rain, Neon Rain, Cyber Rain</div>
+    </div>
+  </div>
+</div>
+
+<!-- Slide 4: Privacy -->
+<div class="slide slide-privacy" id="slide4">
+  <h2>Your Privacy, Protected</h2>
+  <div class="privacy-cards">
+    <div class="priv-card">
+      <div class="priv-icon">🔒</div>
+      <h3>Local Only</h3>
+      <p>All audio analysis happens in your browser. Nothing leaves your device.</p>
+    </div>
+    <div class="priv-card">
+      <div class="priv-icon">📊</div>
+      <h3>No Tracking</h3>
+      <p>Zero analytics, zero data collection, zero third-party services.</p>
+    </div>
+    <div class="priv-card">
+      <div class="priv-icon">👆</div>
+      <h3>On-Demand Only</h3>
+      <p>Activates only when you click. No background processes when OFF.</p>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
