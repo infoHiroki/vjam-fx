@@ -55,7 +55,7 @@
                             const elevatedY = screenY - elevation * perspective;
 
                             const hue = (hueBase + elevation * 0.8 + preset.audio.treble * 60) % 360;
-                            const bri = 20 + (elevation / heightScale) * 50 + preset.audio.rms * 15;
+                            const bri = 45 + (elevation / heightScale) * 40 + preset.audio.rms * 15;
                             const alpha = 30 + depthRatio * 40;
 
                             // Draw wireframe dots and connecting lines

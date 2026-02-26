@@ -261,6 +261,13 @@ class PopupController {
             this._removeLayer(presetId);
           }
         }
+        // Stop auto-cycle on manual preset change
+        if (this.autoCycleActive) {
+          this.autoCycleActive = false;
+          const autoBtn = document.getElementById('btn-auto-cycle');
+          if (autoBtn) autoBtn.classList.remove('active');
+          this._sendCommand({ action: 'stopAutoCycle' });
+        }
         this._saveState();
       });
     }

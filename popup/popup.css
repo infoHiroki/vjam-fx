@@ -120,7 +120,7 @@ body {
 
 /* Preset List — multi-select checkboxes */
 .preset-list {
-  max-height: 240px;
+  max-height: 280px;
   overflow-y: auto;
   margin-bottom: 8px;
   border: 1px solid #333;

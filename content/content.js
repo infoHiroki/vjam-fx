@@ -130,7 +130,10 @@
       const container = layer.container;
       container.style.transition = 'opacity 0.6s ease-out';
       container.style.opacity = '0';
+      let cleaned = false;
       const onEnd = () => {
+        if (cleaned) return;
+        cleaned = true;
         layer.preset.destroy();
         container.remove();
       };
@@ -199,6 +202,7 @@
 
     stop() {
       this.active = false;
+      this._stopAutoCycle();
 
       if (this._rafId) {
         cancelAnimationFrame(this._rafId);
