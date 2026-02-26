@@ -99,6 +99,29 @@ describe('PopupController', () => {
     });
   });
 
+  describe('layer count display', () => {
+    it('should update layer count text', () => {
+      // Add layer-count element to container
+      const el = document.createElement('span');
+      el.id = 'layer-count';
+      container.querySelector('.popup').appendChild(el);
+
+      controller.activeLayers.add('neon-tunnel');
+      controller.activeLayers.add('rain');
+      controller._updateLayerCount();
+      expect(el.textContent).toBe('2 layers');
+    });
+
+    it('should show empty text for 0 layers', () => {
+      const el = document.createElement('span');
+      el.id = 'layer-count';
+      container.querySelector('.popup').appendChild(el);
+
+      controller._updateLayerCount();
+      expect(el.textContent).toBe('');
+    });
+  });
+
   describe('_sendCommand', () => {
     it('should not send if no tabId', async () => {
       controller._tabId = null;

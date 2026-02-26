@@ -211,6 +211,15 @@ class PopupController {
       const btn = document.querySelector(`.filter-btn[data-filter="${f}"]`);
       if (btn) btn.classList.add('active');
     }
+
+    this._updateLayerCount();
+  }
+
+  _updateLayerCount() {
+    const el = document.getElementById('layer-count');
+    if (!el) return;
+    const count = this.activeLayers.size;
+    el.textContent = count > 0 ? `${count} layer${count > 1 ? 's' : ''}` : '';
   }
 
   async _saveState() {
@@ -268,6 +277,7 @@ class PopupController {
           if (autoBtn) autoBtn.classList.remove('active');
           this._sendCommand({ action: 'stopAutoCycle' });
         }
+        this._updateLayerCount();
         this._saveState();
       });
     }

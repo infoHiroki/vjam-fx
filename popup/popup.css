@@ -32,6 +32,18 @@ body {
   letter-spacing: 1px;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.layer-count {
+  font-size: 11px;
+  color: #00cc66;
+  font-weight: 600;
+}
+
 /* Toggle Switch */
 .toggle-switch {
   position: relative;
