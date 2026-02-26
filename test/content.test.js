@@ -388,6 +388,58 @@ describe('VJamFXEngine', () => {
     });
   });
 
+  describe('external audio (tab capture)', () => {
+    it('should initialize with tab audioSource', () => {
+      expect(engine.audioSource).toBe('tab');
+    });
+
+    it('should have null _externalAudioData initially', () => {
+      expect(engine._externalAudioData).toBeNull();
+    });
+
+    it('should receive external audio data via window message', () => {
+      const audioData = { beat: true, bpm: 120, strength: 0.8, rms: 0.1, bass: 0.5, mid: 0.3, treble: 0.2 };
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { source: 'vjam-fx-bridge', type: 'audioData', data: audioData },
+      }));
+      expect(engine._externalAudioData).toEqual(audioData);
+    });
+
+    it('should ignore messages from other sources', () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { source: 'other', type: 'audioData', data: { beat: true } },
+      }));
+      expect(engine._externalAudioData).toBeNull();
+    });
+
+    it('should switch to tab audio source via handleMessage', () => {
+      engine.handleMessage({ action: 'setAudioSource', source: 'tab' });
+      expect(engine.audioSource).toBe('tab');
+    });
+
+    it('should destroy local audioAnalyzer when switching to tab', () => {
+      engine.startPreset('neon-tunnel');
+      expect(engine.audioAnalyzer).not.toBeNull();
+      engine.handleMessage({ action: 'setAudioSource', source: 'tab' });
+      expect(engine.audioAnalyzer).toBeNull();
+    });
+
+    it('should switch back to mic and clear external data', () => {
+      engine.handleMessage({ action: 'setAudioSource', source: 'tab' });
+      engine._externalAudioData = { beat: false };
+      engine.handleMessage({ action: 'setAudioSource', source: 'mic' });
+      expect(engine.audioSource).toBe('mic');
+      expect(engine._externalAudioData).toBeNull();
+    });
+
+    it('should clean up message listener on destroy', () => {
+      const spy = vi.spyOn(window, 'removeEventListener');
+      engine.destroy();
+      expect(spy).toHaveBeenCalledWith('message', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
   describe('auto-initialization', () => {
     it('should have created singleton on window', () => {
       expect(window._vjamFxEngine).toBeDefined();

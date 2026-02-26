@@ -97,7 +97,8 @@ class PopupController {
     this.activeFilters = new Set();
     this.selectedBlendMode = 'screen';
     this.isActive = false;
-    this.micEnabled = true;
+    this.micEnabled = false;
+    this.audioSource = 'tab'; // 'mic' | 'tab' | 'off'
     this.autoCycleActive = false;
     this._tabId = null;
     this._injectedPresets = new Set(); // track which preset files have been injected
@@ -201,6 +202,7 @@ class PopupController {
     this.isActive = true;
     this.selectedBlendMode = state.blendMode || 'screen';
     if (state.micEnabled !== undefined) this.micEnabled = state.micEnabled !== false;
+    if (state.audioSource) this.audioSource = state.audioSource;
     if (state.layers) {
       for (const id of state.layers) this.activeLayers.add(id);
     } else if (state.preset) {
@@ -227,11 +229,10 @@ class PopupController {
     const blendSelect = document.getElementById('blend-mode');
     if (blendSelect) blendSelect.value = this.selectedBlendMode;
 
-    const micBtn = document.getElementById('mic-toggle');
-    if (micBtn) {
-      micBtn.textContent = this.micEnabled ? 'ON' : 'OFF';
-      micBtn.classList.toggle('on', this.micEnabled);
-    }
+    // Audio source buttons
+    document.querySelectorAll('.audio-src-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.source === this.audioSource);
+    });
 
     // Update filter buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -263,6 +264,7 @@ class PopupController {
           layers: [...this.activeLayers],
           blendMode: this.selectedBlendMode,
           micEnabled: this.micEnabled,
+          audioSource: this.audioSource,
           filters: [...this.activeFilters],
           autoCyclePresets: this.autoCycleActive ? this.presets.map(p => p.id) : null,
         },
@@ -358,16 +360,53 @@ class PopupController {
       });
     }
 
-    // Mic toggle
-    const micBtn = document.getElementById('mic-toggle');
-    if (micBtn) {
-      micBtn.addEventListener('click', () => {
-        this.micEnabled = !this.micEnabled;
-        micBtn.textContent = this.micEnabled ? 'ON' : 'OFF';
-        micBtn.classList.toggle('on', this.micEnabled);
-        if (this.isActive) {
-          this._sendCommand({ action: 'setMic', enabled: this.micEnabled });
+    // Audio source toggle (Mic / Tab / OFF)
+    const audioSrcBtns = document.querySelectorAll('.audio-src-btn');
+    for (const btn of audioSrcBtns) {
+      btn.addEventListener('click', async () => {
+        const newSource = btn.dataset.source;
+        if (newSource === this.audioSource) return;
+
+        const oldSource = this.audioSource;
+        this.audioSource = newSource;
+
+        // Update button states
+        audioSrcBtns.forEach(b => b.classList.toggle('active', b.dataset.source === newSource));
+
+        // Stop old tab audio if switching away from tab
+        if (oldSource === 'tab') {
+          await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
         }
+
+        if (newSource === 'tab') {
+          // Start tab audio capture
+          this.micEnabled = false;
+          const resp = await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
+          if (!resp || !resp.ok) {
+            // Fallback to mic on failure
+            this.audioSource = 'mic';
+            this.micEnabled = true;
+            audioSrcBtns.forEach(b => b.classList.toggle('active', b.dataset.source === 'mic'));
+            if (this.isActive) {
+              this._sendCommand({ action: 'setAudioSource', source: 'mic' });
+              this._sendCommand({ action: 'setMic', enabled: true });
+            }
+          }
+        } else if (newSource === 'mic') {
+          this.micEnabled = true;
+          if (this.isActive) {
+            this._sendCommand({ action: 'setAudioSource', source: 'mic' });
+            this._sendCommand({ action: 'setMic', enabled: true });
+          }
+        } else {
+          // OFF
+          this.micEnabled = false;
+          if (this.isActive) {
+            this._sendCommand({ action: 'setAudioSource', source: 'mic' });
+            this._sendCommand({ action: 'setMic', enabled: false });
+          }
+        }
+
         this._saveState();
       });
     }
@@ -376,11 +415,17 @@ class PopupController {
     const btnReset = document.getElementById('btn-reset');
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
+        // Stop tab audio if active
+        if (this.audioSource === 'tab') {
+          await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
+        }
         await this._sendCommand({ action: 'kill' });
         this.activeLayers.clear();
         this.activeFilters.clear();
         this.autoCycleActive = false;
         this.selectedBlendMode = 'screen';
+        this.audioSource = 'tab';
+        this.micEnabled = false;
         this.isActive = false;
         this._coreInjected = false;
         this._injectedPresets.clear();
@@ -389,6 +434,9 @@ class PopupController {
         if (toggle) toggle.checked = false;
         document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.audio-src-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.source === 'tab');
+        });
         const blendSelect = document.getElementById('blend-mode');
         if (blendSelect) blendSelect.value = 'screen';
         const autoBtn = document.getElementById('btn-auto-cycle');
@@ -569,6 +617,12 @@ class PopupController {
       // Restore filters
       for (const f of this.activeFilters) {
         await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+      }
+
+      // Start tab audio capture if in tab mode
+      if (this.audioSource === 'tab') {
+        await this._sendCommand({ action: 'setAudioSource', source: 'tab' });
+        await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
       }
 
       await this._saveState();

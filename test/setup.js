@@ -41,6 +41,13 @@ globalThis.chrome = {
   webNavigation: {
     onCompleted: { addListener: vi.fn() },
   },
+  tabCapture: {
+    getMediaStreamId: vi.fn().mockResolvedValue('fake-stream-id'),
+  },
+  offscreen: {
+    createDocument: vi.fn().mockResolvedValue(undefined),
+    closeDocument: vi.fn().mockResolvedValue(undefined),
+  },
 };
 
 // Minimal p5 mock for unit tests (presets create their own p5 instance)

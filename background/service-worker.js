@@ -104,6 +104,92 @@ async function injectAndStart(tabId, state) {
   }
 }
 
+// --- Tab Audio Capture ---
+
+// Track which tab is using tab audio capture
+let activeTabAudioTabId = null;
+
+async function ensureOffscreen() {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+  });
+  if (contexts.length > 0) return;
+  await chrome.offscreen.createDocument({
+    url: 'offscreen/offscreen.html',
+    reasons: ['USER_MEDIA'],
+    justification: 'Tab audio capture for beat detection',
+  });
+}
+
+async function removeOffscreen() {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+  });
+  if (contexts.length > 0) {
+    await chrome.offscreen.closeDocument();
+  }
+}
+
+async function startTabAudio(tabId) {
+  try {
+    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+    await ensureOffscreen();
+    await chrome.runtime.sendMessage({ type: 'startCapture', streamId });
+    activeTabAudioTabId = tabId;
+
+    // Update tabState
+    const state = getState(tabId);
+    if (state) {
+      setState(tabId, { ...state, audioSource: 'tab' });
+    }
+
+    // Tell content script to switch to tab audio
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        if (window._vjamFxEngine) {
+          window._vjamFxEngine.handleMessage({ action: 'setAudioSource', source: 'tab' });
+        }
+      },
+    });
+
+    return true;
+  } catch (e) {
+    console.warn('VJam FX: startTabAudio failed', e);
+    return false;
+  }
+}
+
+async function stopTabAudio(tabId) {
+  try {
+    await chrome.runtime.sendMessage({ type: 'stopCapture' });
+    await removeOffscreen();
+    activeTabAudioTabId = null;
+
+    const state = getState(tabId);
+    if (state) {
+      setState(tabId, { ...state, audioSource: 'mic' });
+    }
+
+    // Tell content script to switch back to mic
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        if (window._vjamFxEngine) {
+          window._vjamFxEngine.handleMessage({ action: 'setAudioSource', source: 'mic' });
+        }
+      },
+    });
+
+    return true;
+  } catch (e) {
+    console.warn('VJam FX: stopTabAudio failed', e);
+    return false;
+  }
+}
+
 // --- Event Listeners ---
 
 function updateBadge(tabId) {
@@ -129,6 +215,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     clearState(msg.tabId);
     updateBadge(msg.tabId);
     sendResponse({ ok: true });
+  } else if (msg.type === 'startTabAudio') {
+    startTabAudio(msg.tabId).then(ok => sendResponse({ ok }));
+    return true; // async response
+  } else if (msg.type === 'stopTabAudio') {
+    stopTabAudio(msg.tabId).then(ok => sendResponse({ ok }));
+    return true; // async response
+  } else if (msg.type === 'audioData' && activeTabAudioTabId) {
+    // Relay audio data from offscreen to the target tab's bridge
+    chrome.tabs.sendMessage(activeTabAudioTabId, {
+      type: 'audioData',
+      data: msg.data,
+    }).catch(() => {}); // ignore if tab is gone
+    sendResponse({ ok: true });
   }
   return false;
 });
@@ -144,9 +243,17 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
   await new Promise(r => setTimeout(r, 300));
 
   await injectAndStart(details.tabId, state);
+
+  // Restart tab audio capture if it was active
+  if (state.audioSource === 'tab') {
+    await startTabAudio(details.tabId);
+  }
 });
 
 // Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   clearState(tabId);
+  if (activeTabAudioTabId === tabId) {
+    stopTabAudio(tabId).catch(() => {});
+  }
 });

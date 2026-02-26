@@ -20,6 +20,8 @@ describe('Service Worker', () => {
       addListener: vi.fn((cb) => messageListeners.push(cb)),
       removeListener: vi.fn(),
     };
+    chrome.runtime.getContexts = vi.fn().mockResolvedValue([]);
+    chrome.runtime.sendMessage = vi.fn().mockResolvedValue({ ok: true });
     chrome.webNavigation = {
       onCompleted: {
         addListener: vi.fn((cb) => navigationListeners.push(cb)),
@@ -29,8 +31,16 @@ describe('Service Worker', () => {
       addListener: vi.fn((cb) => tabRemoveListeners.push(cb)),
     };
     chrome.tabs.get = vi.fn().mockResolvedValue({ id: 1, url: 'https://example.com' });
+    chrome.tabs.sendMessage = vi.fn().mockResolvedValue(undefined);
     chrome.scripting.executeScript.mockClear();
     chrome.scripting.executeScript.mockResolvedValue([]);
+    chrome.tabCapture = {
+      getMediaStreamId: vi.fn().mockResolvedValue('fake-stream-id'),
+    };
+    chrome.offscreen = {
+      createDocument: vi.fn().mockResolvedValue(undefined),
+      closeDocument: vi.fn().mockResolvedValue(undefined),
+    };
 
     // Load service worker (evaluates and registers listeners)
     const code = readFileSync(resolve(__dirname, '../background/service-worker.js'), 'utf-8');
@@ -215,6 +225,71 @@ describe('Service Worker', () => {
         sendResponse2,
       );
       expect(sendResponse2).toHaveBeenCalledWith({ state: null });
+    });
+  });
+
+  describe('tab audio capture', () => {
+    it('should handle startTabAudio message', async () => {
+      const sendResponse = vi.fn();
+      const result = messageListeners[0](
+        { type: 'startTabAudio', tabId: 1 },
+        {},
+        sendResponse,
+      );
+      expect(result).toBe(true); // async response
+
+      // Wait for async processing
+      await new Promise(r => setTimeout(r, 100));
+      expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+      expect(chrome.tabCapture.getMediaStreamId).toHaveBeenCalledWith({ targetTabId: 1 });
+      expect(chrome.offscreen.createDocument).toHaveBeenCalled();
+    });
+
+    it('should handle stopTabAudio message', async () => {
+      // First start tab audio
+      const sendResponse1 = vi.fn();
+      messageListeners[0](
+        { type: 'startTabAudio', tabId: 1 },
+        {},
+        sendResponse1,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Then stop
+      const sendResponse2 = vi.fn();
+      chrome.runtime.getContexts = vi.fn().mockResolvedValue([{ contextType: 'OFFSCREEN_DOCUMENT' }]);
+      messageListeners[0](
+        { type: 'stopTabAudio', tabId: 1 },
+        {},
+        sendResponse2,
+      );
+      await new Promise(r => setTimeout(r, 100));
+      expect(sendResponse2).toHaveBeenCalledWith({ ok: true });
+      expect(chrome.offscreen.closeDocument).toHaveBeenCalled();
+    });
+
+    it('should relay audioData to target tab', () => {
+      // First start tab audio to set activeTabAudioTabId
+      const sendResponse1 = vi.fn();
+      messageListeners[0](
+        { type: 'startTabAudio', tabId: 42 },
+        {},
+        sendResponse1,
+      );
+
+      // Wait for async, then send audioData
+      return new Promise(r => setTimeout(r, 100)).then(() => {
+        const sendResponse2 = vi.fn();
+        messageListeners[0](
+          { type: 'audioData', data: { beat: true, bpm: 120 } },
+          {},
+          sendResponse2,
+        );
+        expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(42, {
+          type: 'audioData',
+          data: { beat: true, bpm: 120 },
+        });
+      });
     });
   });
 });

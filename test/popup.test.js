@@ -17,7 +17,11 @@ describe('PopupController', () => {
           <option value="difference">Difference</option>
           <option value="exclusion">Exclusion</option>
         </select>
-        <button id="mic-toggle" class="mic-btn on">ON</button>
+        <div class="audio-source-toggle">
+          <button class="audio-src-btn" data-source="mic">Mic</button>
+          <button class="audio-src-btn active" data-source="tab">Tab</button>
+          <button class="audio-src-btn" data-source="off">OFF</button>
+        </div>
         <button class="filter-btn" data-filter="invert">Invert</button>
         <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
         <button class="filter-btn" data-filter="blur">Blur</button>
@@ -157,6 +161,27 @@ describe('PopupController', () => {
       await controller._saveState();
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.autoCyclePresets).toBeNull();
+    });
+
+    it('should include audioSource in saved state', async () => {
+      controller.isActive = true;
+      controller.audioSource = 'tab';
+      await controller._saveState();
+      const call = chrome.runtime.sendMessage.mock.calls[0];
+      expect(call[0].state.audioSource).toBe('tab');
+    });
+  });
+
+  describe('audio source', () => {
+    it('should default to tab audioSource', () => {
+      expect(controller.audioSource).toBe('tab');
+    });
+
+    it('should track audioSource state', () => {
+      controller.audioSource = 'tab';
+      expect(controller.audioSource).toBe('tab');
+      controller.audioSource = 'off';
+      expect(controller.audioSource).toBe('off');
     });
   });
 });

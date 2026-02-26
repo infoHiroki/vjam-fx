@@ -53,8 +53,12 @@
         </select>
       </div>
       <div class="control-row">
-        <label>Mic</label>
-        <button id="mic-toggle" class="mic-btn on">ON</button>
+        <label>Audio</label>
+        <div class="audio-source-toggle">
+          <button id="audio-mic" class="audio-src-btn" data-source="mic">Mic</button>
+          <button id="audio-tab" class="audio-src-btn active" data-source="tab">Tab</button>
+          <button id="audio-off" class="audio-src-btn" data-source="off">OFF</button>
+        </div>
       </div>
     </div>
 

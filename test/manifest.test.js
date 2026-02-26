@@ -39,6 +39,11 @@ describe('manifest.json', () => {
     expect(manifest.permissions).toContain('webNavigation');
   });
 
+  it('should have tabCapture and offscreen permissions', () => {
+    expect(manifest.permissions).toContain('tabCapture');
+    expect(manifest.permissions).toContain('offscreen');
+  });
+
   it('should NOT have host_permissions (uses activeTab instead)', () => {
     expect(manifest.host_permissions).toBeUndefined();
   });
@@ -52,12 +57,14 @@ describe('manifest.json', () => {
     expect(resources).toContain('content/audio-analyzer.js');
   });
 
-  it('should have empty content_scripts (on-demand injection)', () => {
-    expect(manifest.content_scripts).toEqual([]);
+  it('should have audio-bridge content script', () => {
+    expect(manifest.content_scripts.length).toBe(1);
+    expect(manifest.content_scripts[0].js).toContain('content/audio-bridge.js');
+    expect(manifest.content_scripts[0].matches).toContain('<all_urls>');
   });
 
-  it('should only request minimal permissions', () => {
-    expect(manifest.permissions.length).toBe(3);
+  it('should only request required permissions', () => {
+    expect(manifest.permissions.length).toBe(5);
   });
 
   it('should have service worker background script', () => {

@@ -44,6 +44,8 @@
       this.overlay = null;
       this.audioAnalyzer = null;
       this.micEnabled = true;
+      this.audioSource = 'tab'; // 'mic' | 'tab'
+      this._externalAudioData = null;
       this._rafId = null;
 
       // Multi-layer support
@@ -51,6 +53,14 @@
       this.activeFilters = new Set();
       this._osdEl = null;
       this._osdTimer = null;
+
+      // Listen for external audio data from bridge (tab capture)
+      this._onBridgeMessage = (event) => {
+        if (event.data && event.data.source === 'vjam-fx-bridge' && event.data.type === 'audioData') {
+          this._externalAudioData = event.data.data;
+        }
+      };
+      window.addEventListener('message', this._onBridgeMessage);
     }
 
     createOverlay() {
@@ -201,13 +211,24 @@
         }
 
         // Feed audio to ALL active layers (throttled to 15Hz)
-        if (self.audioAnalyzer && self.audioAnalyzer.started && timestamp - lastAudioTime >= AUDIO_INTERVAL) {
-          lastAudioTime = timestamp;
-          const audioData = self.audioAnalyzer.getAudioData();
-          for (const [, layer] of self.activeLayers) {
-            layer.preset.updateAudio(audioData);
-            if (audioData.beat) {
-              layer.preset.onBeat(audioData.strength);
+        if (timestamp - lastAudioTime >= AUDIO_INTERVAL) {
+          let audioData = null;
+
+          // Use external (tab capture) audio if available and in tab mode
+          if (self.audioSource === 'tab' && self._externalAudioData) {
+            audioData = self._externalAudioData;
+            self._externalAudioData = null; // consume once
+          } else if (self.audioAnalyzer && self.audioAnalyzer.started) {
+            audioData = self.audioAnalyzer.getAudioData();
+          }
+
+          if (audioData) {
+            lastAudioTime = timestamp;
+            for (const [, layer] of self.activeLayers) {
+              layer.preset.updateAudio(audioData);
+              if (audioData.beat) {
+                layer.preset.onBeat(audioData.strength);
+              }
             }
           }
         }
@@ -253,6 +274,12 @@
         this.overlay = null;
       }
 
+      if (this._onBridgeMessage) {
+        window.removeEventListener('message', this._onBridgeMessage);
+        this._onBridgeMessage = null;
+      }
+
+      this._externalAudioData = null;
       this.activeFilters.clear();
     }
 
@@ -481,6 +508,23 @@
           break;
         case 'randomizeFX':
           this.randomizeFX({ skipBlend: !!msg.skipBlend });
+          break;
+        case 'setAudioSource':
+          this.audioSource = msg.source === 'tab' ? 'tab' : 'mic';
+          if (this.audioSource === 'tab') {
+            // Stop local mic when using tab audio
+            if (this.audioAnalyzer) {
+              this.audioAnalyzer.destroy();
+              this.audioAnalyzer = null;
+            }
+          } else {
+            // Restart mic if needed
+            this._externalAudioData = null;
+            if (this.micEnabled && this.active && !this.audioAnalyzer && window.VJamFX && window.VJamFX.AudioAnalyzer) {
+              this.audioAnalyzer = new window.VJamFX.AudioAnalyzer();
+              this.audioAnalyzer.start();
+            }
+          }
           break;
         case 'startAutoCycle':
           this.startAutoCycle(msg.presets, msg.interval);

@@ -3,7 +3,7 @@
   "name": "VJam FX — VJ Effects for Any Website",
   "version": "1.0.0",
   "description": "Overlay 61 music-reactive VJ visuals on any webpage. Multi-layer, beat detection, CSS filters, auto-cycle, blend modes.",
-  "permissions": ["activeTab", "scripting", "webNavigation"],
+  "permissions": ["activeTab", "scripting", "webNavigation", "tabCapture", "offscreen"],
   "background": {
     "service_worker": "background/service-worker.js"
   },
@@ -15,7 +15,11 @@
       "128": "icons/icon-128.png"
     }
   },
-  "content_scripts": [],
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content/audio-bridge.js"],
+    "run_at": "document_start"
+  }],
   "web_accessible_resources": [{
     "resources": [
       "lib/p5.min.js",
