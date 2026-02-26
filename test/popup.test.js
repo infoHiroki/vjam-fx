@@ -36,7 +36,7 @@ describe('PopupController', () => {
 
   describe('preset list', () => {
     it('should have 38 presets available', () => {
-      expect(controller.presets.length).toBe(61);
+      expect(controller.presets.length).toBe(60);
     });
 
     it('should have all expected preset names', () => {
@@ -148,7 +148,7 @@ describe('PopupController', () => {
       await controller._saveState();
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.autoCyclePresets).not.toBeNull();
-      expect(call[0].state.autoCyclePresets.length).toBe(61);
+      expect(call[0].state.autoCyclePresets.length).toBe(60);
     });
 
     it('should have null autoCyclePresets when not cycling', async () => {

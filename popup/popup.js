@@ -32,7 +32,6 @@ const PRESET_CATEGORIES = [
     { id: 'film-burn', name: 'Film Burn' },
     { id: 'film-scratch', name: 'Film Scratch' },
     { id: 'scan-line', name: 'Scan Line' },
-    { id: 'polaroid-flash', name: 'Polaroid Flash' },
     { id: 'vhs-noise', name: 'VHS Noise' },
     { id: 'vhs-tracking', name: 'VHS Tracking' },
   ]},
