@@ -477,6 +477,25 @@
     }
   }
 
+  // Keyboard shortcuts (only when engine is active)
+  document.addEventListener('keydown', (e) => {
+    const engine = window._vjamFxEngine;
+    if (!engine || !engine.active) return;
+    // Ignore if typing in input/textarea
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+
+    switch (e.key) {
+      case 'Escape':
+        engine.kill();
+        break;
+      case 'r':
+        if (!e.ctrlKey && !e.metaKey) {
+          engine.randomizeFX();
+        }
+        break;
+    }
+  });
+
   window._vjamFxEngine = new VJamFXEngine();
   window.VJamFXEngine = VJamFXEngine;
 })();

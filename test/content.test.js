@@ -388,6 +388,26 @@ describe('VJamFXEngine', () => {
     });
   });
 
+  describe('keyboard shortcuts', () => {
+    it('should kill on Escape when active', () => {
+      engine.startPreset('neon-tunnel');
+      expect(engine.activeLayers.size).toBeGreaterThan(0);
+      // Simulate setting as global engine
+      window._vjamFxEngine = engine;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(engine.activeLayers.size).toBe(0);
+    });
+
+    it('should not respond when engine is inactive', () => {
+      engine.createOverlay();
+      engine.setBlendMode('difference');
+      window._vjamFxEngine = engine;
+      // engine.active is false, so 'r' should not change blend
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
+      expect(engine.blendMode).toBe('difference');
+    });
+  });
+
   describe('auto-initialization', () => {
     it('should have created singleton on window', () => {
       expect(window._vjamFxEngine).toBeDefined();
