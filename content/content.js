@@ -262,7 +262,7 @@
       this.dimEnabled = enabled;
       if (!this.overlay) return;
       if (enabled) {
-        this.overlay.style.backgroundColor = 'rgba(0,0,0,0.6)';
+        this.overlay.style.backgroundColor = 'rgba(0,0,0,0.3)';
         this.overlay.style.mixBlendMode = 'normal';
       } else {
         this.overlay.style.backgroundColor = 'transparent';

@@ -456,13 +456,17 @@ class PopupController {
         for (let i = 1; i < chosen.length; i++) {
           await this._sendCommand({ action: 'addLayer', preset: chosen[i].id });
         }
-        // Randomize FX
-        await this._sendCommand({ action: 'randomizeFX', skipBlend: true });
+        // Restore user's filters
+        for (const f of this.activeFilters) {
+          await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+        }
+        // Restore dim
+        if (this.dimEnabled) {
+          await this._sendCommand({ action: 'setDim', enabled: true });
+        }
         // Update popup state
         this.activeLayers.clear();
         for (const p of chosen) this.activeLayers.add(p.id);
-        // Sync FX state from engine
-        await this._syncFXState();
         // Update checkboxes
         document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
           cb.checked = this.activeLayers.has(cb.value);
