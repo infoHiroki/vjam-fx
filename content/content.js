@@ -61,6 +61,18 @@
         }
       };
       window.addEventListener('message', this._onBridgeMessage);
+
+      // Fullscreen support: move overlay into fullscreen element
+      this._onFullscreenChange = () => {
+        if (!this.overlay) return;
+        const fsEl = document.fullscreenElement;
+        if (fsEl) {
+          fsEl.appendChild(this.overlay);
+        } else {
+          document.body.appendChild(this.overlay);
+        }
+      };
+      document.addEventListener('fullscreenchange', this._onFullscreenChange);
     }
 
     createOverlay() {
@@ -263,6 +275,11 @@
       if (this._onBridgeMessage) {
         window.removeEventListener('message', this._onBridgeMessage);
         this._onBridgeMessage = null;
+      }
+
+      if (this._onFullscreenChange) {
+        document.removeEventListener('fullscreenchange', this._onFullscreenChange);
+        this._onFullscreenChange = null;
       }
 
       this._externalAudioData = null;

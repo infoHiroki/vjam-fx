@@ -418,6 +418,38 @@ describe('VJamFXEngine', () => {
     });
   });
 
+  describe('fullscreen support', () => {
+    it('should register fullscreenchange listener', () => {
+      const spy = vi.spyOn(document, 'addEventListener');
+      const e = new VJamFXEngine();
+      expect(spy).toHaveBeenCalledWith('fullscreenchange', expect.any(Function));
+      e.destroy();
+      spy.mockRestore();
+    });
+
+    it('should move overlay into fullscreen element', () => {
+      engine.createOverlay();
+      const fsEl = document.createElement('div');
+      document.body.appendChild(fsEl);
+      // Simulate fullscreen
+      Object.defineProperty(document, 'fullscreenElement', { value: fsEl, configurable: true });
+      document.dispatchEvent(new Event('fullscreenchange'));
+      expect(fsEl.contains(engine.overlay)).toBe(true);
+      // Simulate exit fullscreen
+      Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+      document.dispatchEvent(new Event('fullscreenchange'));
+      expect(document.body.contains(engine.overlay)).toBe(true);
+      fsEl.remove();
+    });
+
+    it('should clean up fullscreenchange listener on destroy', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+      engine.destroy();
+      expect(spy).toHaveBeenCalledWith('fullscreenchange', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
   describe('auto-initialization', () => {
     it('should have created singleton on window', () => {
       expect(window._vjamFxEngine).toBeDefined();
