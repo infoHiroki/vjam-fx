@@ -135,67 +135,70 @@ class PopupController {
   async _syncState() {
     if (!this._tabId) return;
 
-    // Check Service Worker state first
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'getState',
-        tabId: this._tabId,
-      });
-      if (response && response.state && response.state.active) {
-        this.isActive = true;
-        this.selectedBlendMode = response.state.blendMode || 'screen';
-        this.micEnabled = response.state.micEnabled !== false;
-        if (response.state.layers) {
-          for (const id of response.state.layers) this.activeLayers.add(id);
-        } else if (response.state.preset) {
-          this.activeLayers.add(response.state.preset);
-        }
-        if (response.state.filters) {
-          for (const f of response.state.filters) this.activeFilters.add(f);
-        }
-        this._updateUI();
-        return;
-      }
-    } catch (e) { /* SW not available */ }
-
-    // Fallback: check page engine
+    // Always try to get live state from the page engine first (most accurate)
+    let liveState = null;
     try {
       const [{ result }] = await chrome.scripting.executeScript({
         target: { tabId: this._tabId },
         world: 'MAIN',
         func: () => {
           if (!window._vjamFxEngine) return null;
+          const e = window._vjamFxEngine;
           return {
-            active: window._vjamFxEngine.active,
-            layers: window._vjamFxEngine.getActiveLayerNames(),
-            blendMode: window._vjamFxEngine.blendMode,
-            filters: [...window._vjamFxEngine.activeFilters],
+            active: e.active,
+            layers: e.getActiveLayerNames(),
+            blendMode: e.blendMode,
+            filters: [...e.activeFilters],
+            autoCycle: !!e._autoCycleTimer,
           };
         },
       });
-      if (result && result.active) {
-        this.isActive = true;
-        this.selectedBlendMode = result.blendMode || 'screen';
-        if (result.layers) {
-          for (const id of result.layers) this.activeLayers.add(id);
+      liveState = result;
+    } catch (e) { /* scripting failed — page may not have engine yet */ }
+
+    // Use live state if available, otherwise fall back to Service Worker state
+    let state = null;
+    if (liveState && liveState.active) {
+      state = liveState;
+    } else {
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'getState',
+          tabId: this._tabId,
+        });
+        if (response && response.state && response.state.active) {
+          state = response.state;
         }
-        if (result.filters) {
-          for (const f of result.filters) this.activeFilters.add(f);
-        }
-        this._updateUI();
-      }
-    } catch (e) { /* scripting failed */ }
+      } catch (e) { /* SW not available */ }
+    }
+
+    if (!state) return;
+
+    this.isActive = true;
+    this.selectedBlendMode = state.blendMode || 'screen';
+    if (state.micEnabled !== undefined) this.micEnabled = state.micEnabled !== false;
+    if (state.layers) {
+      for (const id of state.layers) this.activeLayers.add(id);
+    } else if (state.preset) {
+      this.activeLayers.add(state.preset);
+    }
+    if (state.filters) {
+      for (const f of state.filters) this.activeFilters.add(f);
+    }
+    if (state.autoCycle) {
+      this.autoCycleActive = true;
+    }
+    this._updateUI();
   }
 
   _updateUI() {
     const toggle = document.getElementById('toggle');
     if (toggle) toggle.checked = this.isActive;
 
-    // Check active layers
-    for (const id of this.activeLayers) {
-      const cb = document.querySelector(`input[value="${id}"]`);
-      if (cb) cb.checked = true;
-    }
+    // Sync active layers — clear all then check active ones
+    document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
+      cb.checked = this.activeLayers.has(cb.value);
+    });
 
     const blendSelect = document.getElementById('blend-mode');
     if (blendSelect) blendSelect.value = this.selectedBlendMode;
@@ -207,10 +210,13 @@ class PopupController {
     }
 
     // Update filter buttons
-    for (const f of this.activeFilters) {
-      const btn = document.querySelector(`.filter-btn[data-filter="${f}"]`);
-      if (btn) btn.classList.add('active');
-    }
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.classList.toggle('active', this.activeFilters.has(btn.dataset.filter));
+    });
+
+    // Update auto-cycle button
+    const autoBtn = document.getElementById('btn-auto-cycle');
+    if (autoBtn) autoBtn.classList.toggle('active', this.autoCycleActive);
 
     this._updateLayerCount();
   }
