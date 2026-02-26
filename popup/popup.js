@@ -241,6 +241,40 @@ class PopupController {
   }
 
   _bindEvents() {
+    // Preset search
+    const searchInput = document.getElementById('preset-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const items = document.querySelectorAll('#preset-list .preset-item');
+        const headers = document.querySelectorAll('#preset-list .category-header');
+
+        if (!query) {
+          // Show all
+          items.forEach(el => { el.style.display = ''; });
+          headers.forEach(el => { el.style.display = ''; });
+          return;
+        }
+
+        // Filter items
+        items.forEach(el => {
+          const name = el.textContent.toLowerCase();
+          el.style.display = name.includes(query) ? '' : 'none';
+        });
+
+        // Hide category headers with no visible items
+        headers.forEach(header => {
+          let next = header.nextElementSibling;
+          let hasVisible = false;
+          while (next && !next.classList.contains('category-header')) {
+            if (next.style.display !== 'none') hasVisible = true;
+            next = next.nextElementSibling;
+          }
+          header.style.display = hasVisible ? '' : 'none';
+        });
+      });
+    }
+
     // Master toggle
     const toggle = document.getElementById('toggle');
     if (toggle) {

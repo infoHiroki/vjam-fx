@@ -130,6 +130,27 @@ body {
   font-weight: 600;
 }
 
+/* Preset Search */
+.preset-search {
+  width: 100%;
+  background: #2a2a2a;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  margin-bottom: 6px;
+  outline: none;
+}
+
+.preset-search:focus {
+  border-color: #00cc66;
+}
+
+.preset-search::placeholder {
+  color: #666;
+}
+
 /* Preset List — multi-select checkboxes */
 .preset-list {
   max-height: 280px;
