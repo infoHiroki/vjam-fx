@@ -4,7 +4,7 @@
 VJam FX — VJ Effects for Any Website
 
 ## Short Description (132 chars max)
-Overlay music-reactive VJ visuals on any webpage. 10 presets, beat detection, 4 blend modes. Free.
+Overlay 61 music-reactive VJ visuals on any webpage. Multi-layer, beat detection, auto-cycle, CSS filters. Free.
 
 ## Detailed Description
 
@@ -12,21 +12,33 @@ Turn any webpage into a VJ performance!
 
 VJam FX overlays real-time music-reactive visual effects on top of any website. Use your microphone to detect beats and sync effects to your music.
 
+**61 Presets in 8 Categories:**
+- Immersive (19): Wormhole, Warp Speed, Portal Ring, Aurora, Crystal Cave, and more
+- Frames & Film (8): Neon Frame, Light Leak, Film Burn, VHS Noise, Scan Line
+- Patterns (6): Kaleidoscope, Mandala, Sacred Geometry, Moire
+- Organic (8): Cellular, Liquid, Voronoi, Coral Reef, Flow Field
+- Grid & Tech (6): Glitch Grid, Circuit Board, CRT Monitor
+- Space & Nature (6): Starfield, Constellation, Bokeh, Terrain
+- Audio Reactive (5): Frequency Rings, Equalizer, Sine Waves
+- Weather (3): Rain, Neon Rain, Cyber Rain
+
 **Features:**
-- 10 hand-crafted visual presets: Neon Tunnel, Kaleidoscope, Mandala, Sine Waves, Gradient Sweep, Moire, Hypnotic, Starfield, Rain, Barcode
-- Real-time beat detection via microphone
-- Frequency analysis: bass, mid, treble — each drives different visual elements
+- Multi-layer: up to 3 presets running simultaneously with smooth fade transitions
+- Real-time beat detection and BPM estimation via microphone
+- 8 CSS filters: Invert, Hue Rotate, Grayscale, Saturate, Brightness, Contrast, Sepia, Blur
 - 4 blend modes: Screen, Lighten, Difference, Exclusion
-- One-click ON/OFF
+- Auto-cycle: BPM-connected automatic preset rotation
+- On-screen display feedback
+- Effects persist across page navigations
 - Zero impact when OFF — no background processes
-- Works on any website
 
 **How to use:**
 1. Click the VJam FX icon in your toolbar
-2. Choose a preset
-3. Toggle ON
-4. Allow microphone access
-5. Play some music and enjoy!
+2. Toggle ON
+3. Press "Next" for random presets + filters, or select manually
+4. Press "Auto" for continuous BPM-synced cycling
+5. Allow microphone access for beat-reactive visuals
+6. Play some music and enjoy!
 
 **Privacy:**
 - Microphone audio is analyzed locally in your browser — no data is sent anywhere
@@ -40,10 +52,3 @@ Fun
 
 ## Language
 English
-
-## Screenshots needed
-1. Extension popup with preset list visible
-2. Wikipedia page with Neon Tunnel effect overlaid
-3. Google homepage with Kaleidoscope effect
-4. Dark website with Starfield effect
-5. Extension popup showing blend mode options
