@@ -36,7 +36,7 @@ describe('PopupController', () => {
 
   describe('preset list', () => {
     it('should have 38 presets available', () => {
-      expect(controller.presets.length).toBe(38);
+      expect(controller.presets.length).toBe(61);
     });
 
     it('should have all expected preset names', () => {
@@ -130,13 +130,13 @@ describe('PopupController', () => {
     });
   });
 
-  describe('navigation', () => {
-    it('should have _currentIndex starting at 0', () => {
-      expect(controller._currentIndex).toBe(0);
-    });
-
+  describe('action buttons', () => {
     it('should track autoCycleActive state', () => {
       expect(controller.autoCycleActive).toBe(false);
+    });
+
+    it('should not have _currentIndex (removed sequential nav)', () => {
+      expect(controller._currentIndex).toBeUndefined();
     });
   });
 
@@ -148,7 +148,7 @@ describe('PopupController', () => {
       await controller._saveState();
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.autoCyclePresets).not.toBeNull();
-      expect(call[0].state.autoCyclePresets.length).toBe(38);
+      expect(call[0].state.autoCyclePresets.length).toBe(61);
     });
 
     it('should have null autoCyclePresets when not cycling', async () => {

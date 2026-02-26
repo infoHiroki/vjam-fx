@@ -113,13 +113,13 @@ body {
   color: #fff;
 }
 
-.action-btn.kill {
+.action-btn.reset {
   background: #441111;
   border-color: #663333;
   color: #ff6666;
 }
 
-.action-btn.kill:hover {
+.action-btn.reset:hover {
   background: #662222;
 }
 

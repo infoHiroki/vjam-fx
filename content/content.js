@@ -301,16 +301,20 @@
       this.clearFilters();
       this.setBlendMode('screen');
       this._stopAutoCycle();
-      this.showOSD('KILL');
+      this.showOSD('RESET');
     }
 
     /**
      * Randomize blend mode + filters
      */
-    randomizeFX() {
-      // Random blend mode
-      const mode = VALID_BLEND_MODES[Math.floor(Math.random() * VALID_BLEND_MODES.length)];
-      this.setBlendMode(mode);
+    randomizeFX(options) {
+      const skipBlend = options && options.skipBlend;
+
+      // Random blend mode (unless skipped)
+      if (!skipBlend) {
+        const mode = VALID_BLEND_MODES[Math.floor(Math.random() * VALID_BLEND_MODES.length)];
+        this.setBlendMode(mode);
+      }
 
       // Random filters (each 30% chance)
       this.activeFilters.clear();
@@ -323,7 +327,7 @@
       this._applyFilters();
 
       const filterList = [...this.activeFilters].join(', ') || 'none';
-      this.showOSD(mode + ' | ' + filterList);
+      this.showOSD(this.blendMode + ' | ' + filterList);
     }
 
     // --- Auto-Cycle ---
@@ -380,8 +384,8 @@
         }
       }
 
-      // Randomly change blend + filters
-      this.randomizeFX();
+      // Randomly change filters only (blend mode is user-controlled)
+      this.randomizeFX({ skipBlend: true });
 
       // OSD shows active layers
       const names = chosen.join(' + ');
@@ -465,7 +469,7 @@
           this.kill();
           break;
         case 'randomizeFX':
-          this.randomizeFX();
+          this.randomizeFX({ skipBlend: !!msg.skipBlend });
           break;
         case 'startAutoCycle':
           this.startAutoCycle(msg.presets, msg.interval);

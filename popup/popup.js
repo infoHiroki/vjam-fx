@@ -5,11 +5,36 @@
  */
 
 const PRESET_CATEGORIES = [
-  { label: 'Tunnels & Zoom', presets: [
+  { label: 'Immersive', presets: [
     { id: 'neon-tunnel', name: 'Neon Tunnel' },
     { id: 'laser-tunnel', name: 'Laser Tunnel' },
     { id: 'infinite-zoom', name: 'Infinite Zoom' },
     { id: 'hypnotic', name: 'Hypnotic' },
+    { id: 'wormhole', name: 'Wormhole' },
+    { id: 'warp-speed', name: 'Warp Speed' },
+    { id: 'tunnel-zoom', name: 'Tunnel Zoom' },
+    { id: 'root-tunnel', name: 'Root Tunnel' },
+    { id: 'helix-tunnel', name: 'Helix Tunnel' },
+    { id: 'deep-dive', name: 'Deep Dive' },
+    { id: 'deep-ocean', name: 'Deep Ocean' },
+    { id: 'portal-ring', name: 'Portal Ring' },
+    { id: 'cyber-corridor', name: 'Cyber Corridor' },
+    { id: 'time-warp', name: 'Time Warp' },
+    { id: 'gravity-well', name: 'Gravity Well' },
+    { id: 'plasma-wave', name: 'Plasma Wave' },
+    { id: 'aurora', name: 'Aurora' },
+    { id: 'northern-lights', name: 'Northern Lights' },
+    { id: 'crystal-cave', name: 'Crystal Cave' },
+  ]},
+  { label: 'Frames & Film', presets: [
+    { id: 'neon-frame', name: 'Neon Frame' },
+    { id: 'light-leak', name: 'Light Leak' },
+    { id: 'film-burn', name: 'Film Burn' },
+    { id: 'film-scratch', name: 'Film Scratch' },
+    { id: 'scan-line', name: 'Scan Line' },
+    { id: 'polaroid-flash', name: 'Polaroid Flash' },
+    { id: 'vhs-noise', name: 'VHS Noise' },
+    { id: 'vhs-tracking', name: 'VHS Tracking' },
   ]},
   { label: 'Patterns', presets: [
     { id: 'kaleidoscope', name: 'Kaleidoscope' },
@@ -78,7 +103,6 @@ class PopupController {
     this._tabId = null;
     this._injectedPresets = new Set(); // track which preset files have been injected
     this._coreInjected = false;
-    this._currentIndex = 0; // for prev/next navigation
   }
 
   async init() {
@@ -348,40 +372,80 @@ class PopupController {
       });
     }
 
-    // Prev/Next
-    const btnPrev = document.getElementById('btn-prev');
-    if (btnPrev) btnPrev.addEventListener('click', () => this._navigate(-1));
-    const btnNext = document.getElementById('btn-next');
-    if (btnNext) btnNext.addEventListener('click', () => this._navigate(1));
-
-    // Kill
-    const btnKill = document.getElementById('btn-kill');
-    if (btnKill) {
-      btnKill.addEventListener('click', async () => {
+    // Reset — full reset to initial state
+    const btnReset = document.getElementById('btn-reset');
+    if (btnReset) {
+      btnReset.addEventListener('click', async () => {
         await this._sendCommand({ action: 'kill' });
         this.activeLayers.clear();
         this.activeFilters.clear();
         this.autoCycleActive = false;
         this.selectedBlendMode = 'screen';
-        // Uncheck all
+        this.isActive = false;
+        this._coreInjected = false;
+        this._injectedPresets.clear();
+        // Reset all UI
+        const toggle = document.getElementById('toggle');
+        if (toggle) toggle.checked = false;
         document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         const blendSelect = document.getElementById('blend-mode');
         if (blendSelect) blendSelect.value = 'screen';
         const autoBtn = document.getElementById('btn-auto-cycle');
         if (autoBtn) autoBtn.classList.remove('active');
+        this._updateLayerCount();
         this._saveState();
       });
     }
 
-    // Randomize FX
-    const btnRandomFX = document.getElementById('btn-random-fx');
-    if (btnRandomFX) {
-      btnRandomFX.addEventListener('click', async () => {
-        if (!this.isActive) return;
-        await this._sendCommand({ action: 'randomizeFX' });
-        // Sync back state from engine
-        this._syncFXState();
+    // Next — random 1-3 layers + random FX (one shot)
+    const btnNext = document.getElementById('btn-next');
+    if (btnNext) {
+      btnNext.addEventListener('click', async () => {
+        // Auto-start if not active
+        if (!this.isActive) {
+          this.isActive = true;
+          const toggle = document.getElementById('toggle');
+          if (toggle) toggle.checked = true;
+          await this._injectCore();
+        }
+        // Inject all presets so we can pick randomly
+        for (const p of this.presets) {
+          await this._injectPreset(p.id);
+        }
+        // Kill current layers
+        await this._sendCommand({ action: 'kill' });
+        // Pick 1-3 random presets
+        const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
+        const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
+        const chosen = shuffled.slice(0, count);
+        // Start first layer
+        const first = chosen[0];
+        await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode, mic: this.micEnabled });
+        // Add remaining layers
+        for (let i = 1; i < chosen.length; i++) {
+          await this._sendCommand({ action: 'addLayer', preset: chosen[i].id });
+        }
+        // Randomize FX
+        await this._sendCommand({ action: 'randomizeFX', skipBlend: true });
+        // Update popup state
+        this.activeLayers.clear();
+        for (const p of chosen) this.activeLayers.add(p.id);
+        // Sync FX state from engine
+        await this._syncFXState();
+        // Update checkboxes
+        document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
+          cb.checked = this.activeLayers.has(cb.value);
+        });
+        this._updateLayerCount();
+        // Stop auto-cycle on manual Next
+        if (this.autoCycleActive) {
+          this.autoCycleActive = false;
+          const autoBtn = document.getElementById('btn-auto-cycle');
+          if (autoBtn) autoBtn.classList.remove('active');
+          await this._sendCommand({ action: 'stopAutoCycle' });
+        }
+        this._saveState();
       });
     }
 
@@ -538,46 +602,6 @@ class PopupController {
 
   async _removeLayer(presetId) {
     await this._sendCommand({ action: 'removeLayer', preset: presetId });
-    this._saveState();
-  }
-
-  /**
-   * Navigate prev/next through preset list (single-layer mode)
-   */
-  async _navigate(direction) {
-    this._currentIndex = (this._currentIndex + direction + this.presets.length) % this.presets.length;
-    const preset = this.presets[this._currentIndex];
-
-    // Clear all checkboxes, check only the navigated one
-    document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-    const cb = document.querySelector(`input[value="${preset.id}"]`);
-    if (cb) cb.checked = true;
-
-    // Kill current layers, start this one
-    this.activeLayers.clear();
-    this.activeLayers.add(preset.id);
-
-    if (this.isActive) {
-      await this._sendCommand({ action: 'kill' });
-      await this._injectPreset(preset.id);
-      await this._sendCommand({ action: 'start', preset: preset.id, blendMode: this.selectedBlendMode, mic: this.micEnabled });
-      // Restore filters
-      for (const f of this.activeFilters) {
-        await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
-      }
-    } else {
-      // Auto-start
-      const toggle = document.getElementById('toggle');
-      if (toggle) toggle.checked = true;
-      await this._startAll();
-    }
-
-    // Stop auto-cycle when manually navigating
-    this.autoCycleActive = false;
-    const autoBtn = document.getElementById('btn-auto-cycle');
-    if (autoBtn) autoBtn.classList.remove('active');
-    await this._sendCommand({ action: 'stopAutoCycle' });
-
     this._saveState();
   }
 
