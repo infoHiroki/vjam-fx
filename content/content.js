@@ -134,6 +134,10 @@
     }
 
     _addLayer(presetName) {
+      if (typeof p5 !== 'function') {
+        console.warn('VJam FX: p5 not loaded, cannot add layer', presetName);
+        return;
+      }
       if (!window.VJamFX || !window.VJamFX.presets[presetName]) return;
 
       this.createOverlay();

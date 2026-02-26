@@ -53,7 +53,38 @@ async function injectAndStart(tabId, state) {
     // Engine last
     const allScripts = [...coreScripts, ...presetFiles, 'content/content.js'];
 
-    for (const file of allScripts) {
+    // Inject p5.js first and verify it loaded
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      files: ['lib/p5.min.js'],
+    });
+
+    // Verify p5 is available (retry once if not)
+    let [{ result: p5Ready }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => typeof window.p5 === 'function',
+    });
+
+    if (!p5Ready) {
+      await new Promise(r => setTimeout(r, 200));
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        files: ['lib/p5.min.js'],
+      });
+      [{ result: p5Ready }] = await chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: () => typeof window.p5 === 'function',
+      });
+      if (!p5Ready) return false;
+    }
+
+    // Inject remaining scripts (base-preset, presets, engine)
+    const remainingScripts = [...coreScripts.slice(1), ...presetFiles, 'content/content.js'];
+    for (const file of remainingScripts) {
       await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',

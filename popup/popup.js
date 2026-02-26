@@ -508,12 +508,32 @@ class PopupController {
    */
   async _injectCore() {
     if (this._coreInjected) return;
-    const coreScripts = [
-      'lib/p5.min.js',
-      'content/base-preset.js',
-      'content/content.js',
-    ];
-    for (const file of coreScripts) {
+
+    // Inject p5.js first
+    await chrome.scripting.executeScript({
+      target: { tabId: this._tabId },
+      world: 'MAIN',
+      files: ['lib/p5.min.js'],
+    });
+
+    // Verify p5 loaded (retry once if not)
+    let [{ result: p5Ready }] = await chrome.scripting.executeScript({
+      target: { tabId: this._tabId },
+      world: 'MAIN',
+      func: () => typeof window.p5 === 'function',
+    });
+
+    if (!p5Ready) {
+      await new Promise(r => setTimeout(r, 200));
+      await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        files: ['lib/p5.min.js'],
+      });
+    }
+
+    // Inject base-preset and engine
+    for (const file of ['content/base-preset.js', 'content/content.js']) {
       await chrome.scripting.executeScript({
         target: { tabId: this._tabId },
         world: 'MAIN',

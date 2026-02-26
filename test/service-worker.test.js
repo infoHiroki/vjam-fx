@@ -33,7 +33,7 @@ describe('Service Worker', () => {
     chrome.tabs.get = vi.fn().mockResolvedValue({ id: 1, url: 'https://example.com' });
     chrome.tabs.sendMessage = vi.fn().mockResolvedValue(undefined);
     chrome.scripting.executeScript.mockClear();
-    chrome.scripting.executeScript.mockResolvedValue([]);
+    chrome.scripting.executeScript.mockResolvedValue([{ result: true }]);
     chrome.tabCapture = {
       getMediaStreamId: vi.fn().mockResolvedValue('fake-stream-id'),
     };
@@ -147,14 +147,17 @@ describe('Service Worker', () => {
       // Wait for setTimeout(300ms) in the handler
       await new Promise(r => setTimeout(r, 400));
 
-      // Should have injected 4 script files + 1 start command = 5 executeScript calls
+      // Should have injected: p5 + verify + base-preset + preset + engine + start command = 6+ calls
       expect(chrome.scripting.executeScript).toHaveBeenCalled();
       const calls = chrome.scripting.executeScript.mock.calls;
-      expect(calls.length).toBeGreaterThanOrEqual(5);
+      expect(calls.length).toBeGreaterThanOrEqual(6);
 
       // First call should be p5.min.js
       expect(calls[0][0].files).toEqual(['lib/p5.min.js']);
       expect(calls[0][0].world).toBe('MAIN');
+
+      // Second call should be p5 verify (func, not files)
+      expect(calls[1][0].func).toBeDefined();
     });
 
     it('should not re-inject for iframe navigations (frameId !== 0)', async () => {

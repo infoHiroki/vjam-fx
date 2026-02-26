@@ -5,7 +5,7 @@
 // Chrome Extension API mock
 globalThis.chrome = {
   scripting: {
-    executeScript: vi.fn().mockResolvedValue([]),
+    executeScript: vi.fn().mockResolvedValue([{ result: true }]),
     insertCSS: vi.fn().mockResolvedValue([]),
   },
   tabs: {
