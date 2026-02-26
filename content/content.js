@@ -27,10 +27,18 @@
     'blur':       'blur(3px)',
   };
 
+  function isLightPage() {
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const m = bg.match(/\d+/g);
+    if (!m) return true; // no bg = likely white
+    return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 > 0.5;
+  }
+
   class VJamFXEngine {
     constructor() {
       this.active = false;
       this.blendMode = 'screen';
+      this.isLightPage = false;
       this.currentPreset = null;
       this.currentPresetName = null;
       this.overlay = null;
@@ -63,6 +71,13 @@
 
       document.body.appendChild(overlay);
       this.overlay = overlay;
+
+      // Auto-detect page brightness and switch blend mode
+      this.isLightPage = isLightPage();
+      if (this.isLightPage && this.blendMode === 'screen') {
+        this.setBlendMode('difference');
+      }
+
       return overlay;
     }
 

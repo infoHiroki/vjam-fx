@@ -173,6 +173,7 @@ class PopupController {
             blendMode: e.blendMode,
             filters: [...e.activeFilters],
             autoCycle: !!e._autoCycleTimer,
+            isLightPage: e.isLightPage,
           };
         },
       });
