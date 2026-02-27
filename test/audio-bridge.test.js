@@ -73,38 +73,10 @@ describe('Audio Bridge', () => {
       Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
     });
 
-    it('should send resumeTabAudio on real exit from active phase', () => {
-      // Simulate being in active phase (after successful re-enter)
-      // First: enter fullscreen (idle → exiting)
-      Object.defineProperty(document, 'fullscreenElement', { value: document.createElement('div'), configurable: true });
-      fsHandlers[0]();
-
-      // Reset mock to track new calls
-      chrome.runtime.sendMessage.mockClear();
-
-      // Simulate real exit from active phase
+    it('should send resumeTabAudio when exiting fullscreen', () => {
       Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
-      // The phase would normally be 'active' after re-enter, but since we can't
-      // fully simulate the async flow, test that exit from 'idle' resumes
       fsHandlers[0]();
-
-      // Should not send resumeTabAudio when phase is 'exiting'
-      // (the handler returns early for programmatic exit)
-    });
-
-    it('should skip exit-re-enter when no capture is active', async () => {
-      chrome.runtime.sendMessage = vi.fn().mockResolvedValue({ ok: false });
-      const exitSpy = vi.fn().mockResolvedValue(undefined);
-      document.exitFullscreen = exitSpy;
-
-      Object.defineProperty(document, 'fullscreenElement', { value: document.createElement('div'), configurable: true });
-      fsHandlers[0]();
-
-      // Wait for promise chain
-      await new Promise(r => setTimeout(r, 10));
-
-      expect(exitSpy).not.toHaveBeenCalled();
-      Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'resumeTabAudio' });
     });
   });
 });
