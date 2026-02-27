@@ -586,29 +586,6 @@ body {
   text-decoration: underline;
 }
 
-/* Toast */
-.popup-toast {
-  position: fixed;
-  bottom: 40px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.85);
-  color: #fff;
-  padding: 6px 16px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s;
-  z-index: 100;
-  white-space: nowrap;
-}
-
-.popup-toast.show {
-  opacity: 1;
-}
-
 /* Scrollbar */
 .preset-list::-webkit-scrollbar {
   width: 4px;

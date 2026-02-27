@@ -787,7 +787,7 @@ class PopupController {
         const slot = parseInt(btn.dataset.slot, 10);
         if (this.scenes[slot] != null) {
           this._clearScene(slot);
-          this._showToast(`Scene ${slot + 1} cleared`);
+  
         }
       });
       btn.addEventListener('click', () => {
@@ -798,11 +798,11 @@ class PopupController {
           this.sceneSaveMode = false;
           if (sceneSaveBtn) sceneSaveBtn.classList.remove('active');
           if (sceneGrid) sceneGrid.classList.remove('save-mode');
-          this._showToast(`Scene ${slot + 1} saved`);
+
         } else if (this.scenes[slot] != null) {
           // Normal mode: load saved scene
           this._loadScene(slot);
-          this._showToast(`Scene ${slot + 1} loaded`);
+
         }
       });
     }
@@ -834,7 +834,7 @@ class PopupController {
         await this._sendCommand({ action: 'textAutoStart', text: text });
         btnTextOn.classList.add('active');
         this.textState = { text, autoText: true };
-        this._showToast('Text ON');
+
         this._saveState();
       });
     }
@@ -848,7 +848,7 @@ class PopupController {
         const btnOn = document.getElementById('btn-text-on');
         if (btnOn) btnOn.classList.remove('active');
         this.textState = null;
-        this._showToast('Text OFF');
+
         this._saveState();
       });
     }
@@ -1075,7 +1075,7 @@ class PopupController {
         if (autoFiltersBtn) { autoFiltersBtn.classList.remove('active'); autoFiltersBtn.classList.add('disabled'); }
         this._updateLayerCount();
         this._saveState();
-        this._showToast('Reset');
+
       });
     }
 
@@ -1128,7 +1128,7 @@ class PopupController {
           chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
         }
         this._saveState();
-        this._showToast('Next');
+
       });
     }
 
@@ -1155,6 +1155,7 @@ class PopupController {
         } else {
           await this._sendCommand({ action: 'stopAutoCycle' });
         }
+        this._saveState();
       });
     }
 
@@ -1203,17 +1204,6 @@ class PopupController {
         this._saveState();
       });
     }
-  }
-
-  _showToast(message) {
-    const toast = document.getElementById('popup-toast');
-    if (!toast) return;
-    toast.textContent = message;
-    toast.classList.add('show');
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => {
-      toast.classList.remove('show');
-    }, 1500);
   }
 
   /**
@@ -1267,19 +1257,14 @@ class PopupController {
   }
 
   async _injectAllPresets() {
-    const toInject = this.presets
-      .filter(p => !this._injectedPresets.has(p.id))
-      .map(p => `content/presets/${p.id}.js`);
+    const toInject = this.presets.filter(p => !this._injectedPresets.has(p.id));
     if (toInject.length === 0) return;
-    const BATCH = 50;
+    const BATCH = 20;
     for (let i = 0; i < toInject.length; i += BATCH) {
-      await chrome.scripting.executeScript({
-        target: { tabId: this._tabId },
-        world: 'MAIN',
-        files: toInject.slice(i, i + BATCH),
-      });
+      await Promise.all(toInject.slice(i, i + BATCH).map(p =>
+        this._injectPreset(p.id).catch(() => {})
+      ));
     }
-    for (const p of this.presets) this._injectedPresets.add(p.id);
   }
 
   async _startAll() {

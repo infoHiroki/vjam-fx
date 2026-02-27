@@ -115,14 +115,16 @@ async function injectAndStart(tabId, state) {
       files: ['content/base-preset.js'],
     });
 
-    // Inject presets in batches of 50
-    const BATCH = 50;
+    // Inject presets in parallel batches of 20
+    const BATCH = 20;
     for (let i = 0; i < presetFiles.length; i += BATCH) {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        world: 'MAIN',
-        files: presetFiles.slice(i, i + BATCH),
-      });
+      await Promise.all(presetFiles.slice(i, i + BATCH).map(file =>
+        chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          files: [file],
+        }).catch(() => {})
+      ));
     }
 
     // Inject text-overlay, image-effects, engine
