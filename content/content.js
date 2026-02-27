@@ -80,17 +80,6 @@
           const targetParent = fsEl || document.body;
           if (this.overlay.parentNode === targetParent) return;
           targetParent.appendChild(this.overlay);
-          if (fsEl) {
-            // Inside fullscreen element: position:fixed behaves differently, use absolute + 100%
-            this.overlay.style.position = 'absolute';
-            this.overlay.style.width = '100%';
-            this.overlay.style.height = '100%';
-          } else {
-            // Back to normal: restore fixed positioning with viewport units
-            this.overlay.style.position = 'fixed';
-            this.overlay.style.width = '100vw';
-            this.overlay.style.height = '100vh';
-          }
         };
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
       }

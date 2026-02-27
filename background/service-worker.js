@@ -171,6 +171,7 @@ async function injectAndStart(tabId, state) {
 
 // Track which tab is using tab audio capture
 let activeTabAudioTabId = null;
+let pausedTabAudioTabId = null; // Saved during fullscreen pause
 
 async function ensureOffscreen() {
   const contexts = await chrome.runtime.getContexts({
@@ -253,6 +254,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === 'stopTabAudio') {
     stopTabAudio(msg.tabId).then(ok => sendResponse({ ok }));
     return true; // async response
+  } else if (msg.type === 'pauseTabAudio') {
+    // Pause capture during fullscreen (Chrome keeps browser chrome visible while capturing)
+    if (activeTabAudioTabId !== null) {
+      pausedTabAudioTabId = activeTabAudioTabId;
+      stopTabAudio(activeTabAudioTabId).then(ok => sendResponse({ ok }));
+      return true;
+    }
+    sendResponse({ ok: false });
+  } else if (msg.type === 'resumeTabAudio') {
+    // Resume capture after fullscreen exit
+    if (pausedTabAudioTabId !== null) {
+      const tabId = pausedTabAudioTabId;
+      pausedTabAudioTabId = null;
+      startTabAudio(tabId).then(ok => sendResponse({ ok }));
+      return true;
+    }
+    sendResponse({ ok: false });
   } else if (msg.type === 'audioData' && activeTabAudioTabId) {
     // Relay audio data from offscreen to the target tab's bridge
     chrome.tabs.sendMessage(activeTabAudioTabId, {

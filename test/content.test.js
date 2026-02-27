@@ -474,7 +474,7 @@ describe('VJamFXEngine', () => {
       spy.mockRestore();
     });
 
-    it('should move overlay into fullscreen element with absolute positioning', () => {
+    it('should move overlay into fullscreen element', () => {
       engine.createOverlay();
       const fsEl = document.createElement('div');
       document.body.appendChild(fsEl);
@@ -482,16 +482,10 @@ describe('VJamFXEngine', () => {
       Object.defineProperty(document, 'fullscreenElement', { value: fsEl, configurable: true });
       document.dispatchEvent(new Event('fullscreenchange'));
       expect(fsEl.contains(engine.overlay)).toBe(true);
-      expect(engine.overlay.style.position).toBe('absolute');
-      expect(engine.overlay.style.width).toBe('100%');
-      expect(engine.overlay.style.height).toBe('100%');
       // Simulate exit fullscreen
       Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
       document.dispatchEvent(new Event('fullscreenchange'));
       expect(document.body.contains(engine.overlay)).toBe(true);
-      expect(engine.overlay.style.position).toBe('fixed');
-      expect(engine.overlay.style.width).toBe('100vw');
-      expect(engine.overlay.style.height).toBe('100vh');
       fsEl.remove();
     });
 
