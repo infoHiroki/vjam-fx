@@ -172,8 +172,32 @@
         this._videoAudioLastBeatTime = -1;
         this._videoAudioOnsetTimes = [];
         this._videoAudioTempo = 120;
-        // Success — stop tabCapture fallback (no longer needed)
-        window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
+        // Delay stopTabCapture — verify analyser produces non-silent data first
+        // (createMediaElementSource can "succeed" but return silence due to CORS/MSE)
+        var self = this;
+        var checkCount = 0;
+        var checkTimer = setInterval(function() {
+          checkCount++;
+          if (!self._videoAudioAnalyser) { clearInterval(checkTimer); return; }
+          var testData = new Float32Array(self._videoAudioAnalyser.fftSize);
+          self._videoAudioAnalyser.getFloatTimeDomainData(testData);
+          var hasSignal = false;
+          for (var i = 0; i < testData.length; i++) {
+            if (testData[i] !== 0) { hasSignal = true; break; }
+          }
+          if (hasSignal) {
+            // Real audio confirmed — stop tabCapture fallback
+            window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
+            clearInterval(checkTimer);
+          } else if (checkCount >= 10) {
+            // 2 seconds of silence — CORS/MSE restriction likely, keep tabCapture
+            // Disconnect our silent analyser so engine falls through to _externalAudioData
+            if (self._videoAudioAnalyser) { self._videoAudioAnalyser.disconnect(); self._videoAudioAnalyser = null; }
+            self._videoAudioFreqData = null;
+            self._videoAudioTimeData = null;
+            clearInterval(checkTimer);
+          }
+        }, 200);
       } catch (e) {
         // createMediaElementSource failed (e.g. already called on this element)
         // Do NOT stop tabCapture — let it continue as fallback audio source
