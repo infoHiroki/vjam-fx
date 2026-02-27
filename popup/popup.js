@@ -1101,15 +1101,16 @@ class PopupController {
           if (toggle) toggle.checked = true;
           await this._injectCore();
         }
-        for (const p of this.presets) {
-          await this._injectPreset(p.id);
-        }
         // Kill with locks so engine preserves locked state
         await this._sendCommand({ action: 'kill', locks: this.locks });
         if (!this.locks.effect) {
           const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
           const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
           const chosen = shuffled.slice(0, count);
+          // Only inject chosen presets (not all 204)
+          for (const p of chosen) {
+            await this._injectPreset(p.id);
+          }
           const first = chosen[0];
           await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode });
           for (let i = 1; i < chosen.length; i++) {
@@ -1160,9 +1161,7 @@ class PopupController {
             if (toggle) toggle.checked = true;
             await this._startAll();
           }
-          for (const p of this.presets) {
-            await this._injectPreset(p.id);
-          }
+          await this._injectAllPresets();
           const allIds = this.presets.map(p => p.id);
           await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
         } else {
@@ -1277,6 +1276,22 @@ class PopupController {
       files: [`content/presets/${presetId}.js`],
     });
     this._injectedPresets.add(presetId);
+  }
+
+  async _injectAllPresets() {
+    const toInject = this.presets
+      .filter(p => !this._injectedPresets.has(p.id))
+      .map(p => `content/presets/${p.id}.js`);
+    if (toInject.length === 0) return;
+    const BATCH = 50;
+    for (let i = 0; i < toInject.length; i += BATCH) {
+      await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        files: toInject.slice(i, i + BATCH),
+      });
+    }
+    for (const p of this.presets) this._injectedPresets.add(p.id);
   }
 
   async _startAll() {
