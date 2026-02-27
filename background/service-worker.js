@@ -108,9 +108,25 @@ async function injectAndStart(tabId, state) {
       if (!p5Ready) return false;
     }
 
-    // Inject remaining scripts (base-preset, presets, text-overlay, engine)
-    const remainingScripts = [...coreScripts.slice(1), ...presetFiles, 'content/text-overlay.js', 'content/image-effects.js', 'content/3d-presets.js', 'content/content.js'];
-    for (const file of remainingScripts) {
+    // Inject base-preset
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      files: ['content/base-preset.js'],
+    });
+
+    // Inject presets in batches of 50
+    const BATCH = 50;
+    for (let i = 0; i < presetFiles.length; i += BATCH) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        files: presetFiles.slice(i, i + BATCH),
+      });
+    }
+
+    // Inject text-overlay, image-effects, 3d-presets, engine
+    for (const file of ['content/text-overlay.js', 'content/image-effects.js', 'content/3d-presets.js', 'content/content.js']) {
       await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
