@@ -227,18 +227,6 @@ const PRESET_CATEGORIES = [
     { id: 'image-glitch', name: 'Image Glitch' },
     { id: 'image-cyber', name: 'Image Cyber' },
   ]},
-  { label: '3D', presets: [
-    { id: '3d-sphere', name: '3D Sphere' },
-    { id: '3d-wave', name: '3D Wave' },
-    { id: '3d-bubble', name: '3D Bubble' },
-    { id: '3d-tunnel', name: '3D Tunnel' },
-    { id: '3d-worm', name: '3D Worm' },
-    { id: '3d-terrain', name: '3D Terrain' },
-    { id: '3d-mirrorball', name: '3D Mirrorball' },
-    { id: '3d-particles', name: '3D Particles' },
-    { id: '3d-solar', name: '3D Solar' },
-    { id: '3d-flatearth', name: '3D Flat Earth' },
-  ]},
 ];
 
 // Flat list for compatibility
@@ -1258,7 +1246,7 @@ class PopupController {
     }
 
     // Inject base-preset and engine
-    for (const file of ['content/base-preset.js', 'content/text-overlay.js', 'content/image-effects.js', 'content/3d-presets.js', 'content/content.js']) {
+    for (const file of ['content/base-preset.js', 'content/text-overlay.js', 'content/image-effects.js', 'content/content.js']) {
       await chrome.scripting.executeScript({
         target: { tabId: this._tabId },
         world: 'MAIN',
