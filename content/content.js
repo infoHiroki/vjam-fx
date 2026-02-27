@@ -108,7 +108,27 @@
     // --- Video Audio Capture (createMediaElementSource) ---
 
     _startVideoAudio() {
-      this._stopVideoAudio();
+      // Already connected — just reconnect analyser
+      if (this._videoAudioCtx && this._videoAudioSource) {
+        if (this._videoAudioCtx.state === 'suspended') {
+          this._videoAudioCtx.resume().catch(function() {});
+        }
+        if (this._videoAudioAnalyser) {
+          // Already fully connected
+          return;
+        }
+        // Recreate analyser and reconnect
+        var analyserNode = this._videoAudioCtx.createAnalyser();
+        analyserNode.fftSize = 2048;
+        analyserNode.smoothingTimeConstant = 0;
+        this._videoAudioSource.connect(analyserNode);
+        this._videoAudioAnalyser = analyserNode;
+        var binCount = analyserNode.frequencyBinCount;
+        this._videoAudioFreqData = new Float32Array(binCount);
+        this._videoAudioTimeData = new Float32Array(analyserNode.fftSize);
+        return;
+      }
+
       var video = document.querySelector('video');
       if (!video) return;
       try {
@@ -118,19 +138,19 @@
           ctx.resume().catch(function() {});
         }
         var src = ctx.createMediaElementSource(video);
-        var analyserNode = ctx.createAnalyser();
-        analyserNode.fftSize = 2048;
-        analyserNode.smoothingTimeConstant = 0;
-        src.connect(analyserNode);
+        var newAnalyser = ctx.createAnalyser();
+        newAnalyser.fftSize = 2048;
+        newAnalyser.smoothingTimeConstant = 0;
+        src.connect(newAnalyser);
         src.connect(ctx.destination); // keep audio playing
 
-        var binCount = analyserNode.frequencyBinCount;
-        var freqPerBin = ctx.sampleRate / analyserNode.fftSize;
+        var binCount = newAnalyser.frequencyBinCount;
+        var freqPerBin = ctx.sampleRate / newAnalyser.fftSize;
         this._videoAudioCtx = ctx;
         this._videoAudioSource = src;
-        this._videoAudioAnalyser = analyserNode;
+        this._videoAudioAnalyser = newAnalyser;
         this._videoAudioFreqData = new Float32Array(binCount);
-        this._videoAudioTimeData = new Float32Array(analyserNode.fftSize);
+        this._videoAudioTimeData = new Float32Array(newAnalyser.fftSize);
         this._videoAudioBassLow = Math.min(Math.floor(20 / freqPerBin), binCount);
         this._videoAudioBassHigh = Math.min(Math.floor(250 / freqPerBin), binCount);
         this._videoAudioMidHigh = Math.min(Math.floor(4000 / freqPerBin), binCount);
@@ -144,11 +164,21 @@
         this._videoAudioTempo = 120;
       } catch (e) {
         // createMediaElementSource can only be called once per element
-        this._stopVideoAudio();
+        this._destroyVideoAudio();
       }
     }
 
     _stopVideoAudio() {
+      // Disconnect analyser only — keep source→destination so audio keeps playing
+      if (this._videoAudioAnalyser) {
+        this._videoAudioAnalyser.disconnect();
+        this._videoAudioAnalyser = null;
+      }
+      this._videoAudioFreqData = null;
+      this._videoAudioTimeData = null;
+    }
+
+    _destroyVideoAudio() {
       if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
       if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
       if (this._videoAudioCtx && this._videoAudioCtx.state !== 'closed') {
@@ -453,7 +483,7 @@
 
     destroy() {
       this._stopAutoCycle();
-      this._stopVideoAudio();
+      this._destroyVideoAudio();
       this.stop();
 
       if (this.overlay) {
