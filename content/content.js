@@ -564,39 +564,6 @@
     }
   }
 
-  // Intercept requestFullscreen to detach overlay before fullscreen transition.
-  // Chrome won't enter true fullscreen (hide browser chrome) if a z-index:MAX
-  // fixed element covers the viewport during the transition.
-  // The overlay must be fully detached + reflow forced so Chrome sees it gone.
-  function patchFullscreen(methodName) {
-    var orig = Element.prototype[methodName];
-    Element.prototype[methodName] = function() {
-      var engine = window._vjamFxEngine;
-      var detached = false;
-      if (engine && engine.overlay && engine.overlay.parentNode) {
-        engine.overlay.remove();
-        detached = true;
-        // Force synchronous reflow so Chrome registers the removal
-        void document.body.offsetHeight;
-      }
-      var self = this;
-      var args = arguments;
-      var promise = typeof orig === 'function'
-        ? orig.apply(self, args)
-        : Promise.resolve();
-      if (promise && typeof promise.catch === 'function') {
-        promise.catch(function() {
-          if (detached && engine && engine.overlay && !engine.overlay.parentNode) {
-            document.body.appendChild(engine.overlay);
-          }
-        });
-      }
-      return promise;
-    };
-  }
-  patchFullscreen('requestFullscreen');
-  patchFullscreen('webkitRequestFullscreen');
-
   window._vjamFxEngine = new VJamFXEngine();
   window.VJamFXEngine = VJamFXEngine;
 })();
