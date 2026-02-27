@@ -105,7 +105,7 @@
       }
     }
 
-    // --- Video Audio Capture (createMediaElementSource) ---
+    // --- Media Audio Capture (createMediaElementSource) ---
 
     _startVideoAudio() {
       // Already connected — just reconnect analyser
@@ -129,15 +129,25 @@
         return;
       }
 
-      var video = document.querySelector('video');
-      if (!video) return;
+      var media = document.querySelector('video, audio');
+      if (media) {
+        this._connectMediaElement(media);
+      } else {
+        // No media element yet — watch for one to appear, and request tabCapture fallback
+        this._startMediaObserver();
+        this._requestTabCaptureFallback();
+      }
+    }
+
+    _connectMediaElement(media) {
+      this._stopMediaObserver();
       try {
         var ctx = new AudioContext();
         // AudioContext may be suspended due to autoplay policy
         if (ctx.state === 'suspended') {
           ctx.resume().catch(function() {});
         }
-        var src = ctx.createMediaElementSource(video);
+        var src = ctx.createMediaElementSource(media);
         var newAnalyser = ctx.createAnalyser();
         newAnalyser.fftSize = 2048;
         newAnalyser.smoothingTimeConstant = 0;
@@ -168,8 +178,48 @@
       }
     }
 
+    _startMediaObserver() {
+      if (this._mediaObserver) return;
+      var self = this;
+      this._mediaObserver = new MutationObserver(function(mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+            var node = mutations[i].addedNodes[j];
+            if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
+              self._connectMediaElement(node);
+              return;
+            }
+            // Check children of added subtree
+            if (node.querySelector) {
+              var media = node.querySelector('video, audio');
+              if (media) {
+                self._connectMediaElement(media);
+                return;
+              }
+            }
+          }
+        }
+      });
+      this._mediaObserver.observe(document.documentElement, { childList: true, subtree: true });
+    }
+
+    _stopMediaObserver() {
+      if (this._mediaObserver) {
+        this._mediaObserver.disconnect();
+        this._mediaObserver = null;
+      }
+    }
+
+    _requestTabCaptureFallback() {
+      // Signal to bridge (ISOLATED world) → SW to start tabCapture
+      window.postMessage({ source: 'vjam-fx-engine', type: 'requestTabCapture' }, '*');
+    }
+
     _stopVideoAudio() {
       // Disconnect analyser only — keep source→destination so audio keeps playing
+      this._stopMediaObserver();
+      // Stop tabCapture fallback if active
+      window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
       if (this._videoAudioAnalyser) {
         this._videoAudioAnalyser.disconnect();
         this._videoAudioAnalyser = null;
@@ -179,6 +229,7 @@
     }
 
     _destroyVideoAudio() {
+      this._stopMediaObserver();
       if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
       if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
       if (this._videoAudioCtx && this._videoAudioCtx.state !== 'closed') {

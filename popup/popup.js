@@ -499,6 +499,11 @@ class PopupController {
       btnAutoCycle.addEventListener('click', async () => {
         this.autoCycleActive = !this.autoCycleActive;
         btnAutoCycle.classList.toggle('active', this.autoCycleActive);
+        // Update auto-blend/filter button disabled state
+        const autoBlendBtn = document.getElementById('auto-blend');
+        if (autoBlendBtn) autoBlendBtn.classList.toggle('disabled', !this.autoCycleActive);
+        const autoFiltersBtn = document.getElementById('auto-filters');
+        if (autoFiltersBtn) autoFiltersBtn.classList.toggle('disabled', !this.autoCycleActive);
         if (this.autoCycleActive) {
           if (!this.isActive) {
             const toggle = document.getElementById('toggle');

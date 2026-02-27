@@ -249,11 +249,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     updateBadge(msg.tabId);
     sendResponse({ ok: true });
   } else if (msg.type === 'startTabAudio') {
-    startTabAudio(msg.tabId).then(ok => sendResponse({ ok }));
-    return true; // async response
+    // tabId from popup (explicit) or from content script bridge (sender.tab)
+    var tabId = msg.tabId || (sender && sender.tab && sender.tab.id);
+    if (tabId) {
+      startTabAudio(tabId).then(ok => sendResponse({ ok }));
+      return true;
+    }
+    sendResponse({ ok: false });
   } else if (msg.type === 'stopTabAudio') {
-    stopTabAudio(msg.tabId).then(ok => sendResponse({ ok }));
-    return true; // async response
+    var stopTabId = msg.tabId || (sender && sender.tab && sender.tab.id);
+    if (stopTabId) {
+      stopTabAudio(stopTabId).then(ok => sendResponse({ ok }));
+      return true;
+    }
+    sendResponse({ ok: false });
   } else if (msg.type === 'pauseTabAudio') {
     // Pause capture during fullscreen (Chrome keeps browser chrome visible while capturing)
     if (activeTabAudioTabId !== null) {
