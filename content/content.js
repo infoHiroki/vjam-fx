@@ -35,6 +35,19 @@
     return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 > 0.5;
   }
 
+  // Monkey-patch requestFullscreen: hide VJam overlay BEFORE Chrome evaluates
+  // fullscreen transition. Chrome keeps browser chrome visible if a high-z-index
+  // fixed element exists outside the fullscreen subtree at transition time.
+  // This patch is synchronous — user gesture is preserved.
+  var _origFS = Element.prototype.requestFullscreen;
+  if (typeof _origFS === 'function') {
+    Element.prototype.requestFullscreen = function() {
+      var overlay = document.querySelector('[data-vjam-fx="overlay"]');
+      if (overlay) overlay.style.display = 'none';
+      return _origFS.apply(this, arguments);
+    };
+  }
+
   class VJamFXEngine {
     constructor() {
       this.active = false;
@@ -78,8 +91,11 @@
           if (!this.overlay) return;
           const fsEl = document.fullscreenElement;
           const targetParent = fsEl || document.body;
-          if (this.overlay.parentNode === targetParent) return;
-          targetParent.appendChild(this.overlay);
+          if (this.overlay.parentNode !== targetParent) {
+            targetParent.appendChild(this.overlay);
+          }
+          // Restore visibility (hidden by requestFullscreen intercept)
+          this.overlay.style.display = '';
         };
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
       }
