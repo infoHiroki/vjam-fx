@@ -35,18 +35,23 @@
     return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 > 0.5;
   }
 
-  // Monkey-patch requestFullscreen: hide VJam overlay BEFORE Chrome evaluates
-  // fullscreen transition. Chrome keeps browser chrome visible if a high-z-index
-  // fixed element exists outside the fullscreen subtree at transition time.
-  // This patch is synchronous — user gesture is preserved.
-  var _origFS = Element.prototype.requestFullscreen;
-  if (typeof _origFS === 'function') {
-    Element.prototype.requestFullscreen = function() {
+  // Monkey-patch requestFullscreen: detach VJam overlay from DOM BEFORE Chrome
+  // evaluates fullscreen transition. Chrome enters "non-immersive" fullscreen
+  // (browser chrome visible) if a high-z-index fixed element exists outside the
+  // fullscreen subtree. Detaching is more robust than display:none — ensures
+  // Chrome's obscuring-content check finds nothing.
+  // Synchronous — user gesture is preserved. fullscreenchange re-attaches.
+  function _patchFullscreen(methodName) {
+    var orig = Element.prototype[methodName];
+    if (typeof orig !== 'function') return;
+    Element.prototype[methodName] = function() {
       var overlay = document.querySelector('[data-vjam-fx="overlay"]');
-      if (overlay) overlay.style.display = 'none';
-      return _origFS.apply(this, arguments);
+      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      return orig.apply(this, arguments);
     };
   }
+  _patchFullscreen('requestFullscreen');
+  _patchFullscreen('webkitRequestFullscreen');
 
   class VJamFXEngine {
     constructor() {
@@ -91,11 +96,10 @@
           if (!this.overlay) return;
           const fsEl = document.fullscreenElement;
           const targetParent = fsEl || document.body;
-          if (this.overlay.parentNode !== targetParent) {
+          // Re-attach overlay (may have been detached by requestFullscreen patch)
+          if (!this.overlay.parentNode || this.overlay.parentNode !== targetParent) {
             targetParent.appendChild(this.overlay);
           }
-          // Restore visibility (hidden by requestFullscreen intercept)
-          this.overlay.style.display = '';
         };
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
       }
