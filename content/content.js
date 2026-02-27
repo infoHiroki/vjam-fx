@@ -7,7 +7,7 @@
  * - Multi-layer: multiple presets can run simultaneously
  * - CSS filters: invert, hue-rotate, grayscale, saturate, brightness, contrast, sepia, blur
  * - Blend modes: screen, lighten, difference, exclusion
- * - Tab audio capture for beat detection (via offscreen document)
+ * - Audio: createMediaElementSource (video/audio要素) → tabCapture fallback
  */
 (function() {
   'use strict';
@@ -141,6 +141,8 @@
 
     _connectMediaElement(media) {
       this._stopMediaObserver();
+      // Stop tabCapture fallback — we have a direct media element now
+      window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
       try {
         var ctx = new AudioContext();
         // AudioContext may be suspended due to autoplay policy
@@ -230,6 +232,8 @@
 
     _destroyVideoAudio() {
       this._stopMediaObserver();
+      // Stop tabCapture fallback if active
+      window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
       if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
       if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
       if (this._videoAudioCtx && this._videoAudioCtx.state !== 'closed') {
@@ -647,10 +651,17 @@
 
       const self = this;
       const scheduleNext = () => {
-        // Use BPM from external audio to set interval (or fallback to base interval)
+        // Use BPM from audio to set interval (or fallback to base interval)
+        // Priority: video audio tempo → external bridge data
         let interval = self._autoCycleBaseInterval;
-        if (self._externalAudioData && self._externalAudioData.bpm > 0) {
-          interval = (60 / self._externalAudioData.bpm) * 16 * 1000; // 16 beats in ms
+        let bpm = 0;
+        if (self._videoAudioAnalyser && self._videoAudioTempo > 0) {
+          bpm = self._videoAudioTempo;
+        } else if (self._externalAudioData && self._externalAudioData.bpm > 0) {
+          bpm = self._externalAudioData.bpm;
+        }
+        if (bpm > 0) {
+          interval = (60 / bpm) * 16 * 1000; // 16 beats in ms
           interval = Math.max(4000, Math.min(15000, interval)); // Clamp 4-15 seconds
         }
         self._autoCycleTimer = setTimeout(() => {
