@@ -118,6 +118,7 @@ class VhsTrackingPreset extends BasePreset {
 
             p.windowResized = () => {
                 p.resizeCanvas(container.clientWidth, container.clientHeight);
+                if (pg) pg.remove();
                 pg = p.createGraphics(
                     Math.ceil(p.width / RES),
                     Math.ceil(p.height / RES)

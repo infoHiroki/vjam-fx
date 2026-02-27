@@ -92,7 +92,6 @@ const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion'];
 class PopupController {
   constructor() {
     this.presets = ALL_PRESETS;
-    this.validBlendModes = VALID_BLEND_MODES;
     this.activeLayers = new Set();  // preset IDs currently active
     this.activeFilters = new Set();
     this.selectedBlendMode = 'screen';
@@ -105,6 +104,7 @@ class PopupController {
     this._tabId = null;
     this._injectedPresets = new Set(); // track which preset files have been injected
     this._coreInjected = false;
+    this._busy = false; // concurrency guard for async operations
   }
 
   async init() {
@@ -133,7 +133,11 @@ class PopupController {
   _showError(msg) {
     const popup = document.querySelector('.popup');
     if (popup) {
-      popup.innerHTML = `<div style="padding:20px;text-align:center;color:#888">${msg}</div>`;
+      popup.textContent = '';
+      const div = document.createElement('div');
+      div.style.cssText = 'padding:20px;text-align:center;color:#888';
+      div.textContent = msg;
+      popup.appendChild(div);
     }
   }
 
@@ -208,7 +212,7 @@ class PopupController {
     if (state.filters) {
       for (const f of state.filters) this.activeFilters.add(f);
     }
-    if (state.autoCycle) {
+    if (state.autoCycle || (state.autoCyclePresets && state.autoCyclePresets.length > 0)) {
       this.autoCycleActive = true;
     }
     if (state.autoBlend) this.autoBlend = true;
@@ -623,7 +627,8 @@ class PopupController {
   }
 
   async _startAll() {
-    if (!this._tabId) return;
+    if (!this._tabId || this._busy) return;
+    this._busy = true;
 
     if (this.activeLayers.size === 0) {
       this.activeLayers.add('neon-tunnel');
@@ -669,10 +674,15 @@ class PopupController {
       const toggle = document.getElementById('toggle');
       if (toggle) toggle.checked = false;
       console.warn('VJam FX: Failed to inject', e);
+    } finally {
+      this._busy = false;
     }
   }
 
   async _stopAll() {
+    if (this._busy) return;
+    this._busy = true;
+    try {
     await this._sendCommand({ action: 'stopVideoAudio' });
     chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
     await this._sendCommand({ action: 'stop' });
@@ -680,6 +690,9 @@ class PopupController {
     this._coreInjected = false;
     this._injectedPresets.clear();
     await this._saveState();
+    } finally {
+      this._busy = false;
+    }
   }
 
   async _addLayer(presetId) {
@@ -696,34 +709,6 @@ class PopupController {
   async _removeLayer(presetId) {
     await this._sendCommand({ action: 'removeLayer', preset: presetId });
     this._saveState();
-  }
-
-  async _syncFXState() {
-    try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId: this._tabId },
-        world: 'MAIN',
-        func: () => {
-          if (!window._vjamFxEngine) return null;
-          return {
-            blendMode: window._vjamFxEngine.blendMode,
-            filters: [...window._vjamFxEngine.activeFilters],
-          };
-        },
-      });
-      if (result) {
-        this.selectedBlendMode = result.blendMode;
-        this.activeFilters.clear();
-        for (const f of result.filters) this.activeFilters.add(f);
-
-        const blendSelect = document.getElementById('blend-mode');
-        if (blendSelect) blendSelect.value = result.blendMode;
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-          btn.classList.toggle('active', this.activeFilters.has(btn.dataset.filter));
-        });
-        this._saveState();
-      }
-    } catch (e) { /* ignore */ }
   }
 
   async _sendCommand(msg) {

@@ -120,6 +120,7 @@
 
                 p.windowResized = () => {
                     p.resizeCanvas(container.clientWidth, container.clientHeight);
+                    if (pg) pg.remove();
                     const oldBlobs = preset.blobs;
                     pg = p.createGraphics(
                         Math.ceil(p.width / RES),

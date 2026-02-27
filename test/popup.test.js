@@ -93,9 +93,8 @@ describe('PopupController', () => {
   });
 
   describe('blend mode', () => {
-    it('should only allow valid blend modes', () => {
-      const valid = ['screen', 'lighten', 'difference', 'exclusion'];
-      expect(controller.validBlendModes).toEqual(valid);
+    it('should default to screen blend mode', () => {
+      expect(controller.selectedBlendMode).toBe('screen');
     });
   });
 

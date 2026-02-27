@@ -21,6 +21,7 @@
   // Listen for tabCapture fallback requests from MAIN world engine
   // (when no <video>/<audio> element is found on the page)
   window.addEventListener('message', function(event) {
+    if (event.source !== window) return;
     if (event.data && event.data.source === 'vjam-fx-engine' && event.data.type === 'requestTabCapture') {
       chrome.runtime.sendMessage({ type: 'startTabAudio' }).catch(function() {});
     }

@@ -160,6 +160,7 @@ class VhsNoisePreset extends BasePreset {
 
             p.windowResized = () => {
                 p.resizeCanvas(container.clientWidth, container.clientHeight);
+                if (preset.chromaGfx) preset.chromaGfx.remove();
                 preset.chromaGfx = p.createGraphics(p.width, p.height);
                 preset.chromaGfx.colorMode(preset.chromaGfx.HSB, 360, 100, 100, 100);
             };

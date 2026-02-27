@@ -79,9 +79,6 @@ async function injectAndStart(tabId, state) {
     }
     const presetFiles = [...presetSet].map(id => `content/presets/${id}.js`);
 
-    // Engine last
-    const allScripts = [...coreScripts, ...presetFiles, 'content/content.js'];
-
     // Inject p5.js first and verify it loaded
     await chrome.scripting.executeScript({
       target: { tabId },
@@ -250,14 +247,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
   } else if (msg.type === 'startTabAudio') {
     // tabId from popup (explicit) or from content script bridge (sender.tab)
-    var tabId = msg.tabId || (sender && sender.tab && sender.tab.id);
+    const tabId = msg.tabId || (sender && sender.tab && sender.tab.id);
     if (tabId) {
       startTabAudio(tabId).then(ok => sendResponse({ ok }));
       return true;
     }
     sendResponse({ ok: false });
   } else if (msg.type === 'stopTabAudio') {
-    var stopTabId = msg.tabId || (sender && sender.tab && sender.tab.id);
+    const stopTabId = msg.tabId || (sender && sender.tab && sender.tab.id);
     if (stopTabId) {
       stopTabAudio(stopTabId).then(ok => sendResponse({ ok }));
       return true;

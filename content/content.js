@@ -176,7 +176,8 @@
         // (createMediaElementSource can "succeed" but return silence due to CORS/MSE)
         var self = this;
         var checkCount = 0;
-        var checkTimer = setInterval(function() {
+        if (self._silenceCheckTimer) clearInterval(self._silenceCheckTimer);
+        var checkTimer = self._silenceCheckTimer = setInterval(function() {
           checkCount++;
           if (!self._videoAudioAnalyser) { clearInterval(checkTimer); return; }
           var testData = new Float32Array(self._videoAudioAnalyser.fftSize);
@@ -235,11 +236,6 @@
         this._mediaObserver.disconnect();
         this._mediaObserver = null;
       }
-    }
-
-    _requestTabCaptureFallback() {
-      // Signal to bridge (ISOLATED world) → SW to start tabCapture
-      window.postMessage({ source: 'vjam-fx-engine', type: 'requestTabCapture' }, '*');
     }
 
     _stopVideoAudio() {

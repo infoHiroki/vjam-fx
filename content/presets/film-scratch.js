@@ -175,6 +175,8 @@ class FilmScratchPreset extends BasePreset {
 
             p.windowResized = () => {
                 p.resizeCanvas(container.clientWidth, container.clientHeight);
+                if (pg) pg.remove();
+                if (pgAccum) pgAccum.remove();
                 pg = p.createGraphics(Math.ceil(p.width / RES), Math.ceil(p.height / RES));
                 pgAccum = p.createGraphics(Math.ceil(p.width / RES), Math.ceil(p.height / RES));
                 pg.colorMode(p.HSB, 360, 100, 100, 100);
