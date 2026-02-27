@@ -78,14 +78,8 @@
           if (!this.overlay) return;
           const fsEl = document.fullscreenElement;
           const targetParent = fsEl || document.body;
-          if (this.overlay.parentNode === targetParent) {
-            // Already in correct parent — just ensure visible
-            this.overlay.style.display = '';
-            return;
-          }
+          if (this.overlay.parentNode === targetParent) return;
           targetParent.appendChild(this.overlay);
-          // Restore visibility (hidden by requestFullscreen intercept)
-          this.overlay.style.display = '';
           if (fsEl) {
             // Inside fullscreen element: position:fixed behaves differently, use absolute + 100%
             this.overlay.style.position = 'absolute';
@@ -570,29 +564,35 @@
     }
   }
 
-  // Intercept requestFullscreen to hide overlay before fullscreen transition.
+  // Intercept requestFullscreen to detach overlay before fullscreen transition.
   // Chrome won't enter true fullscreen (hide browser chrome) if a z-index:MAX
   // fixed element covers the viewport during the transition.
-  const _origRequestFullscreen = Element.prototype.requestFullscreen;
-  Element.prototype.requestFullscreen = function() {
-    const engine = window._vjamFxEngine;
-    if (engine && engine.overlay && engine.overlay.parentNode === document.body) {
-      engine.overlay.style.display = 'none';
-    }
-    var promise;
-    if (typeof _origRequestFullscreen === 'function') {
-      promise = _origRequestFullscreen.apply(this, arguments);
-    } else {
-      promise = Promise.resolve();
-    }
-    if (promise && typeof promise.catch === 'function') {
-      promise.catch(function() {
-        // Restore overlay if fullscreen request was rejected
-        if (engine && engine.overlay) engine.overlay.style.display = '';
-      });
-    }
-    return promise;
-  };
+  // display:none is insufficient — the element must be fully detached from DOM.
+  function patchFullscreen(methodName) {
+    var orig = Element.prototype[methodName];
+    Element.prototype[methodName] = function() {
+      var engine = window._vjamFxEngine;
+      var detached = false;
+      if (engine && engine.overlay && engine.overlay.parentNode) {
+        engine.overlay.remove();
+        detached = true;
+      }
+      var promise = typeof orig === 'function'
+        ? orig.apply(this, arguments)
+        : Promise.resolve();
+      if (promise && typeof promise.catch === 'function') {
+        promise.catch(function() {
+          // Restore overlay if fullscreen request was rejected
+          if (detached && engine && engine.overlay && !engine.overlay.parentNode) {
+            document.body.appendChild(engine.overlay);
+          }
+        });
+      }
+      return promise;
+    };
+  }
+  patchFullscreen('requestFullscreen');
+  patchFullscreen('webkitRequestFullscreen');
 
   window._vjamFxEngine = new VJamFXEngine();
   window.VJamFXEngine = VJamFXEngine;

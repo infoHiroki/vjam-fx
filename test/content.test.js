@@ -594,30 +594,32 @@ describe('VJamFXEngine', () => {
       Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
     });
 
-    it('should hide overlay before fullscreen request', () => {
+    it('should detach overlay from DOM before fullscreen request', () => {
       engine.createOverlay();
+      expect(document.body.contains(engine.overlay)).toBe(true);
       const el = document.createElement('div');
       document.body.appendChild(el);
       el.requestFullscreen();
-      expect(engine.overlay.style.display).toBe('none');
+      // Overlay should be detached (no parent)
+      expect(engine.overlay.parentNode).toBeNull();
       el.remove();
     });
 
-    it('should restore overlay on fullscreenchange after request', () => {
+    it('should re-attach overlay on fullscreenchange after request', () => {
       engine.createOverlay();
       const el = document.createElement('div');
       document.body.appendChild(el);
       el.requestFullscreen();
-      expect(engine.overlay.style.display).toBe('none');
+      expect(engine.overlay.parentNode).toBeNull();
       // Simulate fullscreen entered
       Object.defineProperty(document, 'fullscreenElement', { value: el, configurable: true });
       document.dispatchEvent(new Event('fullscreenchange'));
-      expect(engine.overlay.style.display).toBe('');
       expect(el.contains(engine.overlay)).toBe(true);
+      expect(engine.overlay.style.position).toBe('absolute');
       el.remove();
     });
 
-    it('should restore overlay on fullscreen exit', () => {
+    it('should restore overlay to body on fullscreen exit', () => {
       engine.createOverlay();
       const el = document.createElement('div');
       document.body.appendChild(el);
@@ -627,39 +629,38 @@ describe('VJamFXEngine', () => {
       // Exit fullscreen
       Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
       document.dispatchEvent(new Event('fullscreenchange'));
-      expect(engine.overlay.style.display).toBe('');
       expect(document.body.contains(engine.overlay)).toBe(true);
       expect(engine.overlay.style.position).toBe('fixed');
       el.remove();
     });
 
-    it('should restore overlay if fullscreen request is rejected', async () => {
+    it('should restore overlay to body if fullscreen request is rejected', async () => {
       engine.createOverlay();
       const el = document.createElement('div');
       document.body.appendChild(el);
-      // Temporarily make the intercept's inner call reject
+      // Temporarily patch to reject
       const currentRFS = Element.prototype.requestFullscreen;
       Element.prototype.requestFullscreen = function() {
-        const eng = window._vjamFxEngine;
-        if (eng && eng.overlay && eng.overlay.parentNode === document.body) {
-          eng.overlay.style.display = 'none';
+        var eng = window._vjamFxEngine;
+        if (eng && eng.overlay && eng.overlay.parentNode) {
+          eng.overlay.remove();
         }
-        const p = Promise.reject(new Error('denied'));
+        var p = Promise.reject(new Error('denied'));
         p.catch(function() {
-          if (eng && eng.overlay) eng.overlay.style.display = '';
+          if (eng && eng.overlay && !eng.overlay.parentNode) {
+            document.body.appendChild(eng.overlay);
+          }
         });
         return p;
       };
       const p = el.requestFullscreen();
       await p.catch(() => {});
-      expect(engine.overlay.style.display).toBe('');
-      // Restore
+      expect(document.body.contains(engine.overlay)).toBe(true);
       Element.prototype.requestFullscreen = currentRFS;
       el.remove();
     });
 
     it('should not throw if engine has no overlay', () => {
-      // No overlay created
       const el = document.createElement('div');
       document.body.appendChild(el);
       expect(() => el.requestFullscreen()).not.toThrow();
