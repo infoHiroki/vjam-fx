@@ -397,11 +397,13 @@ class PopupController {
 
         if (this.audioEnabled) {
           await this._sendCommand({ action: 'startVideoAudio' });
+          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
           if (this.isActive) {
             this._sendCommand({ action: 'setAudioEnabled', enabled: true });
           }
         } else {
           await this._sendCommand({ action: 'stopVideoAudio' });
+          chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
           if (this.isActive) {
             this._sendCommand({ action: 'setAudioEnabled', enabled: false });
           }
@@ -415,6 +417,7 @@ class PopupController {
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
         await this._sendCommand({ action: 'stopVideoAudio' });
+        chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
         await this._sendCommand({ action: 'kill' });
         this.activeLayers.clear();
         this.activeFilters.clear();
@@ -488,6 +491,7 @@ class PopupController {
         // Start video audio if needed
         if (this.audioEnabled) {
           await this._sendCommand({ action: 'startVideoAudio' });
+          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
         }
         this._saveState();
       });
@@ -652,9 +656,10 @@ class PopupController {
         await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
       }
 
-      // Start video audio capture
+      // Start video audio capture + tabCapture fallback
       if (this.audioEnabled) {
         await this._sendCommand({ action: 'startVideoAudio' });
+        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
       }
 
       await this._saveState();
@@ -669,6 +674,7 @@ class PopupController {
 
   async _stopAll() {
     await this._sendCommand({ action: 'stopVideoAudio' });
+    chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
     await this._sendCommand({ action: 'stop' });
     this.isActive = false;
     this._coreInjected = false;

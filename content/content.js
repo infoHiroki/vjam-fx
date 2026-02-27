@@ -133,16 +133,14 @@
       if (media) {
         this._connectMediaElement(media);
       } else {
-        // No media element yet — watch for one to appear, and request tabCapture fallback
+        // No media element yet — watch for one to appear
+        // tabCapture fallback is started by popup directly (sendMessage to SW)
         this._startMediaObserver();
-        this._requestTabCaptureFallback();
       }
     }
 
     _connectMediaElement(media) {
       this._stopMediaObserver();
-      // Stop tabCapture fallback — we have a direct media element now
-      window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
       try {
         var ctx = new AudioContext();
         // AudioContext may be suspended due to autoplay policy
@@ -174,9 +172,12 @@
         this._videoAudioLastBeatTime = -1;
         this._videoAudioOnsetTimes = [];
         this._videoAudioTempo = 120;
+        // Success — stop tabCapture fallback (no longer needed)
+        window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
       } catch (e) {
-        // createMediaElementSource can only be called once per element
-        this._destroyVideoAudio();
+        // createMediaElementSource failed (e.g. already called on this element)
+        // Do NOT stop tabCapture — let it continue as fallback audio source
+        if (ctx && ctx.state !== 'closed') ctx.close().catch(function() {});
       }
     }
 
@@ -220,8 +221,7 @@
     _stopVideoAudio() {
       // Disconnect analyser only — keep source→destination so audio keeps playing
       this._stopMediaObserver();
-      // Stop tabCapture fallback if active
-      window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
+      // tabCapture stop is handled by popup (sendMessage to SW directly)
       if (this._videoAudioAnalyser) {
         this._videoAudioAnalyser.disconnect();
         this._videoAudioAnalyser = null;
@@ -232,8 +232,7 @@
 
     _destroyVideoAudio() {
       this._stopMediaObserver();
-      // Stop tabCapture fallback if active
-      window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
+      // tabCapture stop is handled by popup (sendMessage to SW directly)
       if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
       if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
       if (this._videoAudioCtx && this._videoAudioCtx.state !== 'closed') {

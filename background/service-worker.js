@@ -303,7 +303,7 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
 
   const injected = await injectAndStart(details.tabId, state);
 
-  // Restart video audio capture if it was enabled
+  // Restart video audio capture + tabCapture fallback if audio was enabled
   if (injected && state.audioEnabled !== false) {
     try {
       await chrome.scripting.executeScript({
@@ -316,6 +316,8 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
         },
       });
     } catch (e) { /* ignore */ }
+    // Start tabCapture as fallback (content will stop it if media element found)
+    startTabAudio(details.tabId).catch(() => {});
   }
 });
 
