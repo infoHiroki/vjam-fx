@@ -317,7 +317,14 @@ class PopupController {
       for (const p of cat.presets) {
         const label = document.createElement('label');
         label.className = 'preset-item';
-        label.innerHTML = `<input type="checkbox" name="preset" value="${p.id}"><span>${p.name}</span>`;
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.name = 'preset';
+        input.value = p.id;
+        const span = document.createElement('span');
+        span.textContent = p.name;
+        label.appendChild(input);
+        label.appendChild(span);
         list.appendChild(label);
       }
     }
@@ -1262,7 +1269,7 @@ class PopupController {
     const BATCH = 20;
     for (let i = 0; i < toInject.length; i += BATCH) {
       await Promise.all(toInject.slice(i, i + BATCH).map(p =>
-        this._injectPreset(p.id).catch(() => {})
+        this._injectPreset(p.id).catch(e => console.warn('VJam FX: inject failed:', p.id, e))
       ));
     }
   }

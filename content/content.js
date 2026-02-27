@@ -250,6 +250,7 @@
     _stopVideoAudio() {
       // Disconnect analyser only — keep source→destination so audio keeps playing
       this._stopMediaObserver();
+      if (this._silenceCheckTimer) { clearInterval(this._silenceCheckTimer); this._silenceCheckTimer = null; }
       // tabCapture stop is handled by popup (sendMessage to SW directly)
       if (this._videoAudioAnalyser) {
         this._videoAudioAnalyser.disconnect();
@@ -261,6 +262,7 @@
 
     _destroyVideoAudio() {
       this._stopMediaObserver();
+      if (this._silenceCheckTimer) { clearInterval(this._silenceCheckTimer); this._silenceCheckTimer = null; }
       // tabCapture stop is handled by popup (sendMessage to SW directly)
       if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
       if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
@@ -545,8 +547,8 @@
         if (audioData) {
           lastAudioTime = timestamp;
           for (const [, layer] of self.activeLayers) {
-            layer.preset.updateAudio(audioData);
-            if (audioData.beat) {
+            if (typeof layer.preset.updateAudio === 'function') layer.preset.updateAudio(audioData);
+            if (audioData.beat && typeof layer.preset.onBeat === 'function') {
               layer.preset.onBeat(audioData.strength);
             }
           }
@@ -919,7 +921,7 @@
           if (this._textOverlay) this._textOverlay.stopAutoText();
           break;
         case 'setPresetParam': {
-          const layer = this._layers.find(l => l.id === msg.preset);
+          const layer = this.activeLayers.get(msg.preset);
           if (layer && layer.preset && typeof layer.preset.setParam === 'function') {
             layer.preset.setParam(msg.key, msg.value);
           }
