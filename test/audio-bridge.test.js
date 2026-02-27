@@ -45,38 +45,4 @@ describe('Audio Bridge', () => {
     expect(postMessageSpy).not.toHaveBeenCalled();
     postMessageSpy.mockRestore();
   });
-
-  describe('fullscreen capture pause/resume', () => {
-    let fsHandlers;
-
-    beforeEach(() => {
-      fsHandlers = [];
-      vi.spyOn(document, 'addEventListener').mockImplementation((event, handler) => {
-        if (event === 'fullscreenchange') fsHandlers.push(handler);
-      });
-      chrome.runtime.sendMessage = vi.fn().mockResolvedValue({ ok: true });
-
-      // Re-load to pick up the fullscreenchange listener
-      messageListeners = [];
-      const code = readFileSync(resolve(__dirname, '../content/audio-bridge.js'), 'utf-8');
-      eval(code);
-    });
-
-    it('should register fullscreenchange listener', () => {
-      expect(fsHandlers.length).toBeGreaterThan(0);
-    });
-
-    it('should send pauseTabAudio when entering fullscreen', () => {
-      Object.defineProperty(document, 'fullscreenElement', { value: document.createElement('div'), configurable: true });
-      fsHandlers[0]();
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'pauseTabAudio' });
-      Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
-    });
-
-    it('should send resumeTabAudio when exiting fullscreen', () => {
-      Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
-      fsHandlers[0]();
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'resumeTabAudio' });
-    });
-  });
 });

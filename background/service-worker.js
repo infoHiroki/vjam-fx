@@ -292,11 +292,21 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
   // Small delay to ensure page is ready
   await new Promise(r => setTimeout(r, 300));
 
-  await injectAndStart(details.tabId, state);
+  const injected = await injectAndStart(details.tabId, state);
 
-  // Restart tab audio capture if it was enabled
-  if (state.audioEnabled !== false) {
-    await startTabAudio(details.tabId);
+  // Restart video audio capture if it was enabled
+  if (injected && state.audioEnabled !== false) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: details.tabId },
+        world: 'MAIN',
+        func: () => {
+          if (window._vjamFxEngine) {
+            window._vjamFxEngine.handleMessage({ action: 'startVideoAudio' });
+          }
+        },
+      });
+    } catch (e) { /* ignore */ }
   }
 });
 

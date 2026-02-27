@@ -396,12 +396,12 @@ class PopupController {
         audioBtn.classList.toggle('on', this.audioEnabled);
 
         if (this.audioEnabled) {
-          await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
+          await this._sendCommand({ action: 'startVideoAudio' });
           if (this.isActive) {
             this._sendCommand({ action: 'setAudioEnabled', enabled: true });
           }
         } else {
-          await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
+          await this._sendCommand({ action: 'stopVideoAudio' });
           if (this.isActive) {
             this._sendCommand({ action: 'setAudioEnabled', enabled: false });
           }
@@ -414,7 +414,7 @@ class PopupController {
     const btnReset = document.getElementById('btn-reset');
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
-        await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
+        await this._sendCommand({ action: 'stopVideoAudio' });
         await this._sendCommand({ action: 'kill' });
         this.activeLayers.clear();
         this.activeFilters.clear();
@@ -485,9 +485,9 @@ class PopupController {
           if (autoBtn) autoBtn.classList.remove('active');
           await this._sendCommand({ action: 'stopAutoCycle' });
         }
-        // Start tab audio if needed
+        // Start video audio if needed
         if (this.audioEnabled) {
-          await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
+          await this._sendCommand({ action: 'startVideoAudio' });
         }
         this._saveState();
       });
@@ -647,9 +647,9 @@ class PopupController {
         await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
       }
 
-      // Start tab audio capture
+      // Start video audio capture
       if (this.audioEnabled) {
-        await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
+        await this._sendCommand({ action: 'startVideoAudio' });
       }
 
       await this._saveState();
@@ -663,7 +663,7 @@ class PopupController {
   }
 
   async _stopAll() {
-    await chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
+    await this._sendCommand({ action: 'stopVideoAudio' });
     await this._sendCommand({ action: 'stop' });
     this.isActive = false;
     this._coreInjected = false;

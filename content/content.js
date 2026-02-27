@@ -35,24 +35,6 @@
     return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 > 0.5;
   }
 
-  // Monkey-patch requestFullscreen: detach VJam overlay from DOM BEFORE Chrome
-  // evaluates fullscreen transition. Chrome enters "non-immersive" fullscreen
-  // (browser chrome visible) if a high-z-index fixed element exists outside the
-  // fullscreen subtree. Detaching is more robust than display:none — ensures
-  // Chrome's obscuring-content check finds nothing.
-  // Synchronous — user gesture is preserved. fullscreenchange re-attaches.
-  function _patchFullscreen(methodName) {
-    var orig = Element.prototype[methodName];
-    if (typeof orig !== 'function') return;
-    Element.prototype[methodName] = function() {
-      var overlay = document.querySelector('[data-vjam-fx="overlay"]');
-      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      return orig.apply(this, arguments);
-    };
-  }
-  _patchFullscreen('requestFullscreen');
-  _patchFullscreen('webkitRequestFullscreen');
-
   class VJamFXEngine {
     constructor() {
       this.active = false;
@@ -71,6 +53,24 @@
       this.activeFilters = new Set();
       this._osdEl = null;
       this._osdTimer = null;
+
+      // Video audio capture
+      this._videoAudioCtx = null;
+      this._videoAudioSource = null;
+      this._videoAudioAnalyser = null;
+      this._videoAudioFreqData = null;
+      this._videoAudioTimeData = null;
+      this._videoAudioBassLow = 0;
+      this._videoAudioBassHigh = 0;
+      this._videoAudioMidHigh = 0;
+      this._videoAudioTrebleHigh = 0;
+      this._videoAudioBassMax = 1e-6;
+      this._videoAudioMidMax = 1e-6;
+      this._videoAudioTrebleMax = 1e-6;
+      this._videoAudioRmsHistory = [];
+      this._videoAudioLastBeatTime = -1;
+      this._videoAudioOnsetTimes = [];
+      this._videoAudioTempo = 120;
 
       this._onBridgeMessage = null;
       this._onFullscreenChange = null;
@@ -103,6 +103,150 @@
         };
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
       }
+    }
+
+    // --- Video Audio Capture (createMediaElementSource) ---
+
+    _startVideoAudio() {
+      this._stopVideoAudio();
+      var video = document.querySelector('video');
+      if (!video) return;
+      try {
+        var ctx = new AudioContext();
+        // AudioContext may be suspended due to autoplay policy
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(function() {});
+        }
+        var src = ctx.createMediaElementSource(video);
+        var analyserNode = ctx.createAnalyser();
+        analyserNode.fftSize = 2048;
+        analyserNode.smoothingTimeConstant = 0;
+        src.connect(analyserNode);
+        src.connect(ctx.destination); // keep audio playing
+
+        var binCount = analyserNode.frequencyBinCount;
+        var freqPerBin = ctx.sampleRate / analyserNode.fftSize;
+        this._videoAudioCtx = ctx;
+        this._videoAudioSource = src;
+        this._videoAudioAnalyser = analyserNode;
+        this._videoAudioFreqData = new Float32Array(binCount);
+        this._videoAudioTimeData = new Float32Array(analyserNode.fftSize);
+        this._videoAudioBassLow = Math.min(Math.floor(20 / freqPerBin), binCount);
+        this._videoAudioBassHigh = Math.min(Math.floor(250 / freqPerBin), binCount);
+        this._videoAudioMidHigh = Math.min(Math.floor(4000 / freqPerBin), binCount);
+        this._videoAudioTrebleHigh = Math.min(Math.floor(16000 / freqPerBin), binCount);
+        this._videoAudioBassMax = 1e-6;
+        this._videoAudioMidMax = 1e-6;
+        this._videoAudioTrebleMax = 1e-6;
+        this._videoAudioRmsHistory = [];
+        this._videoAudioLastBeatTime = -1;
+        this._videoAudioOnsetTimes = [];
+        this._videoAudioTempo = 120;
+      } catch (e) {
+        // createMediaElementSource can only be called once per element
+        this._stopVideoAudio();
+      }
+    }
+
+    _stopVideoAudio() {
+      if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
+      if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
+      if (this._videoAudioCtx && this._videoAudioCtx.state !== 'closed') {
+        this._videoAudioCtx.close().catch(function() {});
+      }
+      this._videoAudioCtx = null;
+      this._videoAudioFreqData = null;
+      this._videoAudioTimeData = null;
+    }
+
+    _readVideoAudioData() {
+      if (!this._videoAudioAnalyser || !this._videoAudioTimeData) return null;
+
+      var analyserNode = this._videoAudioAnalyser;
+      var timeData = this._videoAudioTimeData;
+      var freqData = this._videoAudioFreqData;
+
+      analyserNode.getFloatTimeDomainData(timeData);
+      analyserNode.getFloatFrequencyData(freqData);
+
+      // RMS
+      var sum = 0;
+      for (var i = 0; i < timeData.length; i++) sum += timeData[i] * timeData[i];
+      var rms = Math.sqrt(sum / timeData.length);
+
+      // Frequency bands
+      var DECAY = 0.995;
+      var bassRaw = 0, midRaw = 0, trebleRaw = 0;
+      for (var j = this._videoAudioBassLow; j < this._videoAudioBassHigh; j++) {
+        bassRaw += Math.pow(10, freqData[j] / 20);
+      }
+      for (var k = this._videoAudioBassHigh; k < this._videoAudioMidHigh; k++) {
+        midRaw += Math.pow(10, freqData[k] / 20);
+      }
+      for (var m = this._videoAudioMidHigh; m < this._videoAudioTrebleHigh; m++) {
+        trebleRaw += Math.pow(10, freqData[m] / 20);
+      }
+      if (!isFinite(bassRaw)) bassRaw = 0;
+      if (!isFinite(midRaw)) midRaw = 0;
+      if (!isFinite(trebleRaw)) trebleRaw = 0;
+
+      this._videoAudioBassMax *= DECAY;
+      this._videoAudioMidMax *= DECAY;
+      this._videoAudioTrebleMax *= DECAY;
+      this._videoAudioBassMax = Math.max(this._videoAudioBassMax, bassRaw, 1e-6);
+      this._videoAudioMidMax = Math.max(this._videoAudioMidMax, midRaw, 1e-6);
+      this._videoAudioTrebleMax = Math.max(this._videoAudioTrebleMax, trebleRaw, 1e-6);
+
+      var bass = bassRaw / this._videoAudioBassMax;
+      var mid = midRaw / this._videoAudioMidMax;
+      var treble = trebleRaw / this._videoAudioTrebleMax;
+
+      // Beat detection: RMS spike
+      var beat = false;
+      var MIN_RMS_FOR_BEAT = 0.01;
+      var SPIKE_RATIO = 1.3;
+      var MIN_BEAT_INTERVAL = 0.25;
+      var now = performance.now() / 1000;
+
+      if (rms >= MIN_RMS_FOR_BEAT && this._videoAudioRmsHistory.length >= 3) {
+        var avg = 0;
+        for (var h = 0; h < this._videoAudioRmsHistory.length; h++) avg += this._videoAudioRmsHistory[h];
+        avg /= this._videoAudioRmsHistory.length;
+        if (avg > 0 && rms > avg * SPIKE_RATIO && now - this._videoAudioLastBeatTime >= MIN_BEAT_INTERVAL) {
+          beat = true;
+          this._videoAudioLastBeatTime = now;
+          this._videoAudioOnsetTimes.push(now);
+          if (this._videoAudioOnsetTimes.length > 100) this._videoAudioOnsetTimes.shift();
+          var cutoff = now - 10;
+          while (this._videoAudioOnsetTimes.length > 0 && this._videoAudioOnsetTimes[0] < cutoff) this._videoAudioOnsetTimes.shift();
+          // BPM estimation
+          if (this._videoAudioOnsetTimes.length >= 4) {
+            var start = Math.max(0, this._videoAudioOnsetTimes.length - 10);
+            var intervals = [];
+            for (var t = start + 1; t < this._videoAudioOnsetTimes.length; t++) {
+              var iv = this._videoAudioOnsetTimes[t] - this._videoAudioOnsetTimes[t - 1];
+              if (iv > 0.25 && iv < 1.2) intervals.push(iv);
+            }
+            if (intervals.length > 0) {
+              intervals.sort(function(a, b) { return a - b; });
+              var midIdx = Math.floor(intervals.length / 2);
+              var median = intervals.length % 2 === 0
+                ? (intervals[midIdx - 1] + intervals[midIdx]) / 2
+                : intervals[midIdx];
+              var newTempo = 60 / median;
+              this._videoAudioTempo = 0.7 * this._videoAudioTempo + 0.3 * newTempo;
+              this._videoAudioTempo = Math.max(60, Math.min(180, this._videoAudioTempo));
+            }
+          }
+        }
+      }
+      this._videoAudioRmsHistory.push(rms);
+      if (this._videoAudioRmsHistory.length > 30) this._videoAudioRmsHistory.shift();
+
+      var timeSinceBeat = now - this._videoAudioLastBeatTime;
+      var strength = (rms >= MIN_RMS_FOR_BEAT && timeSinceBeat < 0.2) ? 1.0 - (timeSinceBeat / 0.2) : 0;
+
+      return { beat: beat, bpm: this._videoAudioTempo, strength: strength, rms: rms, bass: bass, mid: mid, treble: treble };
     }
 
     createOverlay() {
@@ -260,9 +404,17 @@
         }
 
         // Feed audio to ALL active layers (throttled to 15Hz)
-        if (self.audioEnabled && self._externalAudioData && timestamp - lastAudioTime >= AUDIO_INTERVAL) {
-          const audioData = self._externalAudioData;
-          self._externalAudioData = null; // consume once
+        // Priority: video audio (createMediaElementSource) → external bridge (offscreen)
+        var audioData = null;
+        if (self.audioEnabled && timestamp - lastAudioTime >= AUDIO_INTERVAL) {
+          if (self._videoAudioAnalyser) {
+            audioData = self._readVideoAudioData();
+          } else if (self._externalAudioData) {
+            audioData = self._externalAudioData;
+            self._externalAudioData = null; // consume once
+          }
+        }
+        if (audioData) {
           lastAudioTime = timestamp;
           for (const [, layer] of self.activeLayers) {
             layer.preset.updateAudio(audioData);
@@ -301,6 +453,7 @@
 
     destroy() {
       this._stopAutoCycle();
+      this._stopVideoAudio();
       this.stop();
 
       if (this.overlay) {
@@ -568,6 +721,12 @@
           break;
         case 'stopAutoCycle':
           this._stopAutoCycle();
+          break;
+        case 'startVideoAudio':
+          this._startVideoAudio();
+          break;
+        case 'stopVideoAudio':
+          this._stopVideoAudio();
           break;
       }
     }
