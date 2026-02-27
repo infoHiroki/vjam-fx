@@ -87,6 +87,96 @@ body {
   transform: translateX(20px);
 }
 
+/* Settings Button */
+.settings-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+  line-height: 1;
+}
+
+.settings-btn:hover {
+  color: #00cc66;
+}
+
+.settings-btn.active {
+  color: #00cc66;
+}
+
+/* Settings Section */
+.settings-section {
+  background: #222;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.setting-row + .setting-row {
+  margin-top: 4px;
+}
+
+.setting-row label {
+  font-size: 11px;
+  color: #aaa;
+  min-width: 60px;
+}
+
+.setting-row select {
+  background: #2a2a2a;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+}
+
+.setting-row select:focus {
+  border-color: #00cc66;
+}
+
+.zoom-slider {
+  width: 80px;
+  accent-color: #00cc66;
+  cursor: pointer;
+}
+
+.zoom-value {
+  font-size: 10px;
+  color: #aaa;
+  min-width: 24px;
+  text-align: right;
+}
+
+.osd-btn {
+  background: #333;
+  color: #e0e0e0;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 1px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.osd-btn.on {
+  background: #00cc66;
+  color: #000;
+  border-color: #00cc66;
+}
+
 /* Action Bar */
 .action-bar {
   display: flex;
@@ -208,6 +298,28 @@ body {
   margin-bottom: 6px;
 }
 
+/* Lock Button */
+.lock-btn {
+  background: none;
+  border: none;
+  font-size: 9px;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0 4px;
+  color: #666;
+  transition: color 0.15s;
+  line-height: 1;
+  letter-spacing: 0.5px;
+}
+
+.lock-btn:hover {
+  color: #aaa;
+}
+
+.lock-btn.locked {
+  color: #ff9900;
+}
+
 /* Auto Toggle Button */
 .auto-toggle {
   background: #2a2a2a;
@@ -242,7 +354,7 @@ body {
 /* Blend Grid */
 .blend-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   margin-bottom: 10px;
 }
@@ -301,6 +413,112 @@ body {
   color: #000;
   border-color: #00cc66;
   font-weight: 600;
+}
+
+/* Scenes */
+.scenes-section {
+  margin-bottom: 8px;
+}
+
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.scene-save-btn {
+  background: #2a2a2a;
+  color: #888;
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 9px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.scene-save-btn:hover {
+  background: #333;
+  color: #ccc;
+}
+
+.scene-save-btn.active {
+  background: #ff9900;
+  color: #000;
+  border-color: #ff9900;
+  font-weight: 600;
+}
+
+.scene-btn {
+  background: #2a2a2a;
+  color: #666;
+  border: 1px dashed #444;
+  border-radius: 4px;
+  padding: 6px 2px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.scene-btn:hover {
+  background: #333;
+  color: #e0e0e0;
+}
+
+.scene-btn.saved {
+  color: #00cc66;
+  border-style: solid;
+  border-color: #00cc66;
+}
+
+.scene-btn.saved:hover {
+  background: #0a3a1a;
+}
+
+.scene-grid.save-mode .scene-btn {
+  border-color: #ff9900;
+  animation: scene-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes scene-pulse {
+  0%, 100% { border-color: #ff9900; }
+  50% { border-color: #663d00; }
+}
+
+/* Text Section */
+.text-section {
+  background: #222;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.text-input {
+  width: 100%;
+  background: #2a2a2a;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.text-input:focus {
+  border-color: #00cc66;
+}
+
+.text-section .setting-row select {
+  flex: 1;
+}
+
+.text-section .setting-row {
+  gap: 4px;
 }
 
 /* Controls */
@@ -366,6 +584,29 @@ body {
 
 .footer a:hover {
   text-decoration: underline;
+}
+
+/* Toast */
+.popup-toast {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 100;
+  white-space: nowrap;
+}
+
+.popup-toast.show {
+  opacity: 1;
 }
 
 /* Scrollbar */

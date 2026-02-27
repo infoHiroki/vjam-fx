@@ -108,8 +108,8 @@ async function injectAndStart(tabId, state) {
       if (!p5Ready) return false;
     }
 
-    // Inject remaining scripts (base-preset, presets, engine)
-    const remainingScripts = [...coreScripts.slice(1), ...presetFiles, 'content/content.js'];
+    // Inject remaining scripts (base-preset, presets, text-overlay, engine)
+    const remainingScripts = [...coreScripts.slice(1), ...presetFiles, 'content/text-overlay.js', 'content/image-effects.js', 'content/3d-presets.js', 'content/content.js'];
     for (const file of remainingScripts) {
       await chrome.scripting.executeScript({
         target: { tabId },
@@ -122,7 +122,7 @@ async function injectAndStart(tabId, state) {
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      func: (layers, blendMode, filters, autoCyclePresets, opacity, autoBlend, autoFilters) => {
+      func: (layers, blendMode, filters, autoCyclePresets, opacity, autoBlend, autoFilters, locks, textState) => {
         if (!window._vjamFxEngine) return;
         const engine = window._vjamFxEngine;
 
@@ -152,10 +152,19 @@ async function injectAndStart(tabId, state) {
 
         // Restart auto-cycle if it was active
         if (autoCyclePresets && autoCyclePresets.length > 0) {
-          engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: 8000, autoBlend: autoBlend, autoFilters: autoFilters });
+          engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: 8000, autoBlend: autoBlend, autoFilters: autoFilters, locks: locks || {} });
+        }
+
+        // Restore text state
+        if (textState && textState.text) {
+          engine.handleMessage({ action: 'textSetParams', params: { effect: textState.effect, font: textState.font } });
+          engine.handleMessage({ action: 'textDisplay', text: textState.text });
+          if (textState.autoText) {
+            engine.handleMessage({ action: 'textAutoStart', text: textState.text });
+          }
         }
       },
-      args: [layers, state.blendMode || 'screen', state.filters || [], state.autoCyclePresets || null, state.opacity, !!state.autoBlend, !!state.autoFilters],
+      args: [layers, state.blendMode || 'screen', state.filters || [], state.autoCyclePresets || null, state.opacity, !!state.autoBlend, !!state.autoFilters, state.locks || {}, state.textState || null],
     });
 
     return true;

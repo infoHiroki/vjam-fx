@@ -15,7 +15,7 @@
   // Guard against double-injection
   if (window._vjamFxEngine) return;
 
-  const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion'];
+  const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
 
   const FILTER_VALUES = {
     'invert':     'invert(1)',
@@ -71,6 +71,15 @@
       this._videoAudioLastBeatTime = -1;
       this._videoAudioOnsetTimes = [];
       this._videoAudioTempo = 120;
+
+      // Text overlay
+      this._textOverlay = null;
+
+      // Settings
+      this._fadeDuration = 1.5; // seconds for layer fade in/out
+      this._audioSensitivity = 1.0; // multiplier for audio levels
+      this._zoom = 1.0; // overlay scale
+      this._osdEnabled = true;
 
       this._onBridgeMessage = null;
       this._onFullscreenChange = null;
@@ -350,7 +359,8 @@
       var timeSinceBeat = now - this._videoAudioLastBeatTime;
       var strength = (rms >= MIN_RMS_FOR_BEAT && timeSinceBeat < 0.2) ? 1.0 - (timeSinceBeat / 0.2) : 0;
 
-      return { beat: beat, bpm: this._videoAudioTempo, strength: strength, rms: rms, bass: bass, mid: mid, treble: treble };
+      var sens = this._audioSensitivity;
+      return { beat: beat, bpm: this._videoAudioTempo, strength: Math.min(1, strength * sens), rms: rms * sens, bass: Math.min(1, bass * sens), mid: Math.min(1, mid * sens), treble: Math.min(1, treble * sens) };
     }
 
     createOverlay() {
@@ -400,6 +410,13 @@
       }
     }
 
+    setZoom(value) {
+      this._zoom = Math.max(0.5, Math.min(3, value));
+      if (this.overlay) {
+        this.overlay.style.transform = this._zoom === 1 ? '' : 'scale(' + this._zoom + ')';
+      }
+    }
+
     /**
      * Add/toggle a layer. If already active, remove it. If not, add it.
      */
@@ -424,7 +441,8 @@
       // Create a container div for this layer's canvas
       const layerDiv = document.createElement('div');
       layerDiv.setAttribute('data-vjam-layer', presetName);
-      layerDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity 0.8s ease-in;';
+      const fadeSec = this._fadeDuration > 0 ? this._fadeDuration + 's' : '0s';
+      layerDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity ' + fadeSec + ' ease-in;';
       this.overlay.appendChild(layerDiv);
 
       const PresetClass = window.VJamFX.presets[presetName];
@@ -454,7 +472,13 @@
 
       // Fade out then remove
       const container = layer.container;
-      container.style.transition = 'opacity 0.6s ease-out';
+      const fadeSec = this._fadeDuration > 0 ? this._fadeDuration : 0;
+      if (fadeSec === 0) {
+        layer.preset.destroy();
+        container.remove();
+        return;
+      }
+      container.style.transition = 'opacity ' + fadeSec + 's ease-out';
       container.style.opacity = '0';
       let cleaned = false;
       const onEnd = () => {
@@ -464,8 +488,8 @@
         container.remove();
       };
       container.addEventListener('transitionend', onEnd, { once: true });
-      // Fallback: force remove after 800ms
-      setTimeout(onEnd, 800);
+      // Fallback: force remove after fade + 200ms
+      setTimeout(onEnd, (fadeSec * 1000) + 200);
     }
 
     /**
@@ -526,7 +550,12 @@
               layer.preset.onBeat(audioData.strength);
             }
           }
+          if (self._textOverlay) {
+            self._textOverlay.updateAudio(audioData);
+            if (audioData.beat) self._textOverlay.onBeat(audioData.strength);
+          }
         }
+        if (self._textOverlay) self._textOverlay.tick();
 
         self._rafId = requestAnimationFrame(loop);
       };
@@ -558,6 +587,7 @@
     destroy() {
       this._stopAutoCycle();
       this._destroyVideoAudio();
+      if (this._textOverlay) { this._textOverlay.destroy(); this._textOverlay = null; }
       this.stop();
 
       if (this.overlay) {
@@ -615,17 +645,24 @@
     /**
      * Kill all layers but keep engine alive (quick reset)
      */
-    kill() {
-      // Immediately destroy all layers (no fade)
-      for (const [, layer] of this.activeLayers) {
-        layer.preset.destroy();
-        layer.container.remove();
+    kill(options) {
+      var locks = (options && options.locks) || {};
+      // Immediately destroy all layers (no fade) unless effect locked
+      if (!locks.effect) {
+        for (const [, layer] of this.activeLayers) {
+          layer.preset.destroy();
+          layer.container.remove();
+        }
+        this.activeLayers.clear();
+        this.currentPreset = null;
+        this.currentPresetName = null;
       }
-      this.activeLayers.clear();
-      this.currentPreset = null;
-      this.currentPresetName = null;
-      this.clearFilters();
-      this.setBlendMode('screen');
+      if (!locks.filter) {
+        this.clearFilters();
+      }
+      if (!locks.blend) {
+        this.setBlendMode('screen');
+      }
       this.setOpacity(1.0);
       this._stopAutoCycle();
       this.showOSD('RESET');
@@ -667,6 +704,8 @@
       this._autoCycleBaseInterval = intervalMs || 8000;
       this._autoBlend = !!(options && options.autoBlend);
       this._autoFilters = !!(options && options.autoFilters);
+      this._barsPerCycle = (options && options.barsPerCycle) || 16;
+      this._autoCycleLocks = (options && options.locks) || {};
 
       const self = this;
       const scheduleNext = () => {
@@ -680,7 +719,7 @@
           bpm = self._externalAudioData.bpm;
         }
         if (bpm > 0) {
-          interval = (60 / bpm) * 16 * 1000; // 16 beats in ms
+          interval = (60 / bpm) * (self._barsPerCycle || 16) * 1000; // beats in ms
           interval = Math.max(4000, Math.min(15000, interval)); // Clamp 4-15 seconds
         }
         self._autoCycleTimer = setTimeout(() => {
@@ -697,34 +736,44 @@
     _autoCycleTick() {
       const presets = this._autoCyclePresets;
       if (!presets || presets.length === 0) return;
+      const locks = this._autoCycleLocks || {};
 
-      // Choose 1-3 random layers
-      const count = 1 + Math.floor(Math.random() * Math.min(3, presets.length));
-      const shuffled = presets.slice().sort(() => Math.random() - 0.5);
-      const chosen = shuffled.slice(0, count);
+      // Choose 1-3 random layers (unless effect locked)
+      let chosen;
+      if (locks.effect) {
+        chosen = [...this.activeLayers.keys()];
+        if (chosen.length === 0) {
+          // Fallback: pick random if nothing active
+          chosen = [presets[Math.floor(Math.random() * presets.length)]];
+        }
+      } else {
+        const count = 1 + Math.floor(Math.random() * Math.min(3, presets.length));
+        const shuffled = presets.slice().sort(() => Math.random() - 0.5);
+        chosen = shuffled.slice(0, count);
 
-      // Remove layers not in chosen set
-      for (const name of this.activeLayers.keys()) {
-        if (!chosen.includes(name)) {
-          this._removeLayer(name);
+        // Remove layers not in chosen set
+        for (const name of this.activeLayers.keys()) {
+          if (!chosen.includes(name)) {
+            this._removeLayer(name);
+          }
+        }
+
+        // Add missing layers
+        for (const name of chosen) {
+          if (!this.activeLayers.has(name)) {
+            this._addLayer(name);
+          }
         }
       }
 
-      // Add missing layers
-      for (const name of chosen) {
-        if (!this.activeLayers.has(name)) {
-          this._addLayer(name);
-        }
-      }
-
-      // Auto-blend: randomize blend mode
-      if (this._autoBlend) {
+      // Auto-blend: randomize blend mode (unless blend locked)
+      if (this._autoBlend && !locks.blend) {
         const mode = VALID_BLEND_MODES[Math.floor(Math.random() * VALID_BLEND_MODES.length)];
         this.setBlendMode(mode);
       }
 
-      // Auto-filters: randomize filters (each 30% chance)
-      if (this._autoFilters) {
+      // Auto-filters: randomize filters (unless filter locked)
+      if (this._autoFilters && !locks.filter) {
         this.activeFilters.clear();
         const filterNames = Object.keys(FILTER_VALUES);
         for (let i = 0; i < filterNames.length; i++) {
@@ -750,7 +799,7 @@
     // --- OSD Feedback ---
 
     showOSD(text) {
-      if (!this.overlay) return;
+      if (!this.overlay || !this._osdEnabled) return;
       if (!this._osdEl) {
         this._osdEl = document.createElement('div');
         this._osdEl.style.cssText = [
@@ -822,13 +871,25 @@
           this.clearFilters();
           break;
         case 'kill':
-          this.kill();
+          this.kill({ locks: msg.locks });
           break;
         case 'randomizeFX':
           this.randomizeFX({ skipBlend: !!msg.skipBlend });
           break;
+        case 'setFadeDuration':
+          this._fadeDuration = msg.duration != null ? msg.duration : 1.5;
+          break;
+        case 'setAudioSensitivity':
+          this._audioSensitivity = msg.sensitivity != null ? msg.sensitivity : 1.0;
+          break;
+        case 'setZoom':
+          this.setZoom(msg.zoom != null ? msg.zoom : 1.0);
+          break;
+        case 'setOsdEnabled':
+          this._osdEnabled = msg.enabled !== false;
+          break;
         case 'startAutoCycle':
-          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters });
+          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks });
           break;
         case 'stopAutoCycle':
           this._stopAutoCycle();
@@ -839,7 +900,40 @@
         case 'stopVideoAudio':
           this._stopVideoAudio();
           break;
+        case 'textSetParams':
+          this._ensureTextOverlay();
+          if (this._textOverlay) this._textOverlay.setParams(msg.params || {});
+          break;
+        case 'textDisplay':
+          this._ensureTextOverlay();
+          if (this._textOverlay) this._textOverlay.displayText(msg.text, msg.effect, msg.position);
+          break;
+        case 'textClear':
+          if (this._textOverlay) this._textOverlay.clearAll();
+          break;
+        case 'textAutoStart':
+          this._ensureTextOverlay();
+          if (this._textOverlay) this._textOverlay.startAutoText(msg.text);
+          break;
+        case 'textAutoStop':
+          if (this._textOverlay) this._textOverlay.stopAutoText();
+          break;
+        case 'setPresetParam': {
+          const layer = this._layers.find(l => l.id === msg.preset);
+          if (layer && layer.preset && typeof layer.preset.setParam === 'function') {
+            layer.preset.setParam(msg.key, msg.value);
+          }
+          break;
+        }
       }
+    }
+
+    _ensureTextOverlay() {
+      if (this._textOverlay) return;
+      if (!window.VJamFX || !window.VJamFX.TextOverlay) return;
+      this.createOverlay();
+      this._textOverlay = new window.VJamFX.TextOverlay(this.overlay);
+      this._textOverlay.init();
     }
   }
 

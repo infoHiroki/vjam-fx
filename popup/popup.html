@@ -12,6 +12,7 @@
       <h1>VJam FX</h1>
       <div class="header-right">
         <span id="layer-count" class="layer-count"></span>
+        <button id="btn-settings" class="settings-btn" title="Settings">&#9881;</button>
         <label class="toggle-switch">
           <input type="checkbox" id="toggle">
           <span class="slider"></span>
@@ -19,18 +20,58 @@
       </div>
     </header>
 
+    <div id="settings-section" class="settings-section" style="display:none">
+      <div class="setting-row">
+        <label>Fade</label>
+        <select id="setting-fade">
+          <option value="0">0s</option>
+          <option value="0.5">0.5s</option>
+          <option value="1.5" selected>1.5s</option>
+          <option value="3">3s</option>
+          <option value="5">5s</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label>Cycle</label>
+        <select id="setting-cycle">
+          <option value="4">4 bars</option>
+          <option value="8">8 bars</option>
+          <option value="16" selected>16 bars</option>
+          <option value="32">32 bars</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label>Sensitivity</label>
+        <select id="setting-sensitivity">
+          <option value="lo">Lo</option>
+          <option value="mid" selected>Mid</option>
+          <option value="hi">Hi</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label>Zoom</label>
+        <input type="range" id="setting-zoom" min="50" max="300" value="100" class="zoom-slider">
+        <span id="zoom-value" class="zoom-value">1x</span>
+      </div>
+      <div class="setting-row">
+        <label>OSD</label>
+        <button id="setting-osd" class="osd-btn on">ON</button>
+      </div>
+    </div>
+
     <div class="action-bar">
       <button id="btn-reset" class="action-btn reset" title="Reset all">Reset</button>
       <button id="btn-next" class="action-btn" title="Random preset + FX">Next</button>
       <button id="btn-auto-cycle" class="action-btn" title="Auto cycle">Auto</button>
     </div>
 
+    <div class="section-label"><span>Effect</span><button id="lock-effect" class="lock-btn" title="Lock presets">Lock</button></div>
     <input type="text" id="preset-search" class="preset-search" placeholder="Search presets...">
     <div class="preset-list" id="preset-list">
       <!-- Presets injected by popup.js -->
     </div>
 
-    <div class="section-label"><span>Filters</span><button id="auto-filters" class="auto-toggle" title="Auto-rotate filters">Auto</button></div>
+    <div class="section-label"><span>Filters</span><button id="lock-filter" class="lock-btn" title="Lock filters">Lock</button><button id="auto-filters" class="auto-toggle" title="Auto-rotate filters">Auto</button></div>
     <div class="filter-grid" id="filter-grid">
       <button class="filter-btn" data-filter="invert">Invert</button>
       <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
@@ -42,11 +83,59 @@
       <button class="filter-btn" data-filter="blur">Blur</button>
     </div>
 
-    <div class="section-label"><span>Blend</span><button id="auto-blend" class="auto-toggle" title="Auto-rotate blend mode">Auto</button></div>
+    <div class="section-label"><span>Blend</span><button id="lock-blend" class="lock-btn" title="Lock blend mode">Lock</button><button id="auto-blend" class="auto-toggle" title="Auto-rotate blend mode">Auto</button></div>
     <div class="blend-grid" id="blend-grid">
       <button class="blend-btn" data-blend="lighten">Lighten</button>
       <button class="blend-btn" data-blend="difference">Diff</button>
       <button class="blend-btn" data-blend="exclusion">Exclusion</button>
+      <button class="blend-btn" data-blend="color-dodge">Dodge</button>
+    </div>
+
+    <div class="section-label"><span>Scenes</span><button id="btn-scene-save" class="scene-save-btn" title="Save mode">Save</button><button id="btn-scenes-toggle" class="settings-btn" title="Toggle scenes" style="font-size:12px">&#9660;</button></div>
+    <div id="scenes-section" class="scenes-section">
+      <div class="scene-grid" id="scene-grid">
+        <button class="scene-btn" data-slot="0">1</button>
+        <button class="scene-btn" data-slot="1">2</button>
+        <button class="scene-btn" data-slot="2">3</button>
+        <button class="scene-btn" data-slot="3">4</button>
+        <button class="scene-btn" data-slot="4">5</button>
+        <button class="scene-btn" data-slot="5">6</button>
+        <button class="scene-btn" data-slot="6">7</button>
+        <button class="scene-btn" data-slot="7">8</button>
+        <button class="scene-btn" data-slot="8">9</button>
+        <button class="scene-btn" data-slot="9">10</button>
+        <button class="scene-btn" data-slot="10">11</button>
+        <button class="scene-btn" data-slot="11">12</button>
+      </div>
+    </div>
+
+    <div class="section-label"><span>Text</span><button id="btn-text-toggle" class="settings-btn" title="Toggle text" style="font-size:12px">&#9660;</button></div>
+    <div id="text-section" class="text-section" style="display:none">
+      <div class="setting-row">
+        <input type="text" id="text-input" class="text-input" placeholder="Enter text...">
+      </div>
+      <div class="setting-row">
+        <button id="btn-text-on" class="action-btn" style="flex:1">ON</button>
+        <button id="btn-text-off" class="action-btn reset" style="flex:1">OFF</button>
+      </div>
+    </div>
+
+    <div class="section-label"><span>Images</span><button id="btn-images-toggle" class="settings-btn" title="Toggle images" style="font-size:12px">&#9660;</button></div>
+    <div id="images-section" class="text-section" style="display:none">
+      <div class="setting-row">
+        <select id="image-mode">
+          <option value="image-cycle">Cycle</option>
+          <option value="image-glitch">Glitch</option>
+          <option value="image-cyber">Cyber</option>
+        </select>
+        <span id="image-count" style="font-size:10px;color:#888">0/5</span>
+      </div>
+      <div class="setting-row">
+        <input type="file" id="image-file" accept="image/*" multiple style="display:none">
+        <button id="btn-image-upload" class="action-btn" style="flex:1">Upload</button>
+        <button id="btn-image-apply" class="action-btn" style="flex:1">Apply</button>
+        <button id="btn-image-clear" class="action-btn reset" style="flex:1">Clear</button>
+      </div>
     </div>
 
     <div class="controls">
@@ -59,6 +148,8 @@
         <button id="audio-toggle" class="audio-btn on">ON</button>
       </div>
     </div>
+
+    <div id="popup-toast" class="popup-toast"></div>
 
     <footer class="footer">
       <a id="vjam-link" href="https://vjam.vercel.app" target="_blank" rel="noopener">

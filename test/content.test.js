@@ -320,7 +320,7 @@ describe('VJamFXEngine', () => {
     it('should set a valid blend mode', () => {
       engine.createOverlay();
       engine.handleMessage({ action: 'randomizeFX' });
-      expect(['screen', 'lighten', 'difference', 'exclusion']).toContain(engine.blendMode);
+      expect(['screen', 'lighten', 'difference', 'exclusion', 'color-dodge']).toContain(engine.blendMode);
     });
   });
 
@@ -356,7 +356,7 @@ describe('VJamFXEngine', () => {
       engine.active = true;
       engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000, autoBlend: true });
       // After first tick, blend mode should be a valid one
-      expect(['screen', 'lighten', 'difference', 'exclusion']).toContain(engine.blendMode);
+      expect(['screen', 'lighten', 'difference', 'exclusion', 'color-dodge']).toContain(engine.blendMode);
       engine._stopAutoCycle();
     });
 

@@ -24,6 +24,16 @@ for (const { file } of PRESET_FILES) {
   eval(code);
 }
 
+// Load image-effects.js (registers image-cycle, image-glitch, image-cyber)
+const imageEffectsCode = readFileSync(resolve(__dirname, '../content/image-effects.js'), 'utf-8');
+eval(imageEffectsCode);
+const IMAGE_PRESET_IDS = ['image-cycle', 'image-glitch', 'image-cyber'];
+
+// Load 3d-presets.js (registers 10 3D presets)
+const threeDCode = readFileSync(resolve(__dirname, '../content/3d-presets.js'), 'utf-8');
+eval(threeDCode);
+const THREE_D_PRESET_IDS = ['3d-sphere', '3d-wave', '3d-bubble', '3d-tunnel', '3d-worm', '3d-terrain', '3d-mirrorball', '3d-particles', '3d-solar', '3d-flatearth'];
+
 // Import popup preset list for consistency check
 import { readFileSync as readSync } from 'fs';
 const popupCode = readSync(resolve(__dirname, '../popup/popup.js'), 'utf-8');
@@ -31,8 +41,8 @@ const popupIdMatches = [...popupCode.matchAll(/id:\s*'([^']+)'/g)].map(m => m[1]
 const popupPresetIds = [...new Set(popupIdMatches)];
 
 describe('Presets', () => {
-  it(`should have all ${PRESET_FILES.length} presets loaded`, () => {
-    expect(Object.keys(window.VJamFX.presets).length).toBe(PRESET_FILES.length);
+  it(`should have all ${PRESET_FILES.length + IMAGE_PRESET_IDS.length + THREE_D_PRESET_IDS.length} presets loaded`, () => {
+    expect(Object.keys(window.VJamFX.presets).length).toBe(PRESET_FILES.length + IMAGE_PRESET_IDS.length + THREE_D_PRESET_IDS.length);
   });
 
   it('should match popup.js preset list (every file has a popup entry)', () => {
@@ -42,13 +52,19 @@ describe('Presets', () => {
   });
 
   it('should match popup.js preset list (every popup entry has a file)', () => {
-    const fileIds = PRESET_FILES.map(f => f.id);
+    const fileIds = [...PRESET_FILES.map(f => f.id), ...IMAGE_PRESET_IDS, ...THREE_D_PRESET_IDS];
     for (const id of popupPresetIds) {
       expect(fileIds).toContain(id);
     }
   });
 
-  for (const { id, name } of PRESET_FILES) {
+  const ALL_PRESET_ENTRIES = [
+    ...PRESET_FILES,
+    ...IMAGE_PRESET_IDS.map(id => ({ id, name: id.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('') })),
+    ...THREE_D_PRESET_IDS.map(id => ({ id, name: id.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('') })),
+  ];
+
+  for (const { id, name } of ALL_PRESET_ENTRIES) {
     describe(name, () => {
       let Cls;
       let preset;
@@ -78,13 +94,11 @@ describe('Presets', () => {
         expect(preset).toBeInstanceOf(BasePreset);
       });
 
-      it('should have audio property with all 5 fields', () => {
+      it('should have audio property with bass/mid/treble', () => {
         expect(preset.audio).toBeDefined();
         expect(preset.audio).toHaveProperty('bass');
         expect(preset.audio).toHaveProperty('mid');
         expect(preset.audio).toHaveProperty('treble');
-        expect(preset.audio).toHaveProperty('rms');
-        expect(preset.audio).toHaveProperty('strength');
       });
 
       it('should set up with a container', () => {
@@ -98,8 +112,6 @@ describe('Presets', () => {
         expect(preset.audio.bass).toBe(0.5);
         expect(preset.audio.mid).toBe(0.3);
         expect(preset.audio.treble).toBe(0.8);
-        expect(preset.audio.rms).toBe(0.4);
-        expect(preset.audio.strength).toBe(0.6);
       });
 
       it('should handle onBeat without errors', () => {

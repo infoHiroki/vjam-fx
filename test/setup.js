@@ -61,6 +61,12 @@ globalThis.p5 = class p5Mock {
     this.CENTER = 'center';
     this.CLOSE = 'close';
     this.PIE = 'pie';
+    this.WEBGL = 'webgl';
+    this.TRIANGLES = 'triangles';
+    this.TRIANGLE_STRIP = 'triangle_strip';
+    this.TRIANGLE_FAN = 'triangle_fan';
+    this.POINTS = 'points';
+    this.NORMAL = 'normal';
     this.width = 800;
     this.height = 600;
     this.frameCount = 0;
@@ -68,7 +74,8 @@ globalThis.p5 = class p5Mock {
     // Stub drawing methods
     const noop = () => {};
     const methods = [
-      'createCanvas', 'resizeCanvas', 'pixelDensity', 'colorMode',
+      'createCanvas', 'resizeCanvas', 'pixelDensity', 'colorMode', 'imageMode',
+      'tint', 'noTint',
       'background', 'fill', 'noFill', 'stroke', 'noStroke', 'strokeWeight',
       'push', 'pop', 'translate', 'rotate', 'scale',
       'circle', 'ellipse', 'rect', 'line', 'arc', 'point',
@@ -76,7 +83,11 @@ globalThis.p5 = class p5Mock {
       'triangle', 'rectMode', 'quad',
       'map', 'noise', 'noiseSeed', 'noiseDetail',
       'noSmooth', 'smooth', 'blendMode',
-      'createGraphics', 'image', 'loadFont',
+      'createGraphics', 'image', 'loadFont', 'texture', 'textureMode',
+      'rotateX', 'rotateY', 'rotateZ',
+      'sphere', 'torus', 'box', 'cylinder', 'cone', 'plane',
+      'ambientLight', 'directionalLight', 'pointLight', 'specularMaterial', 'emissiveMaterial', 'ambientMaterial', 'normalMaterial',
+      'shader', 'resetShader', 'createShader',
       'textFont', 'textSize', 'textAlign', 'text', 'textWidth',
       'strokeCap', 'strokeJoin',
       'lerp', 'constrain', 'dist', 'abs', 'floor', 'ceil', 'round',
