@@ -78,8 +78,25 @@
           if (!this.overlay) return;
           const fsEl = document.fullscreenElement;
           const targetParent = fsEl || document.body;
-          if (this.overlay.parentNode === targetParent) return;
+          if (this.overlay.parentNode === targetParent) {
+            // Already in correct parent — just ensure visible
+            this.overlay.style.display = '';
+            return;
+          }
           targetParent.appendChild(this.overlay);
+          // Restore visibility (hidden by requestFullscreen intercept)
+          this.overlay.style.display = '';
+          if (fsEl) {
+            // Inside fullscreen element: position:fixed behaves differently, use absolute + 100%
+            this.overlay.style.position = 'absolute';
+            this.overlay.style.width = '100%';
+            this.overlay.style.height = '100%';
+          } else {
+            // Back to normal: restore fixed positioning with viewport units
+            this.overlay.style.position = 'fixed';
+            this.overlay.style.width = '100vw';
+            this.overlay.style.height = '100vh';
+          }
         };
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
       }
@@ -552,6 +569,30 @@
       }
     }
   }
+
+  // Intercept requestFullscreen to hide overlay before fullscreen transition.
+  // Chrome won't enter true fullscreen (hide browser chrome) if a z-index:MAX
+  // fixed element covers the viewport during the transition.
+  const _origRequestFullscreen = Element.prototype.requestFullscreen;
+  Element.prototype.requestFullscreen = function() {
+    const engine = window._vjamFxEngine;
+    if (engine && engine.overlay && engine.overlay.parentNode === document.body) {
+      engine.overlay.style.display = 'none';
+    }
+    var promise;
+    if (typeof _origRequestFullscreen === 'function') {
+      promise = _origRequestFullscreen.apply(this, arguments);
+    } else {
+      promise = Promise.resolve();
+    }
+    if (promise && typeof promise.catch === 'function') {
+      promise.catch(function() {
+        // Restore overlay if fullscreen request was rejected
+        if (engine && engine.overlay) engine.overlay.style.display = '';
+      });
+    }
+    return promise;
+  };
 
   window._vjamFxEngine = new VJamFXEngine();
   window.VJamFXEngine = VJamFXEngine;

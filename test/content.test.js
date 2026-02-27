@@ -474,7 +474,7 @@ describe('VJamFXEngine', () => {
       spy.mockRestore();
     });
 
-    it('should move overlay into fullscreen element', () => {
+    it('should move overlay into fullscreen element with absolute positioning', () => {
       engine.createOverlay();
       const fsEl = document.createElement('div');
       document.body.appendChild(fsEl);
@@ -482,10 +482,16 @@ describe('VJamFXEngine', () => {
       Object.defineProperty(document, 'fullscreenElement', { value: fsEl, configurable: true });
       document.dispatchEvent(new Event('fullscreenchange'));
       expect(fsEl.contains(engine.overlay)).toBe(true);
+      expect(engine.overlay.style.position).toBe('absolute');
+      expect(engine.overlay.style.width).toBe('100%');
+      expect(engine.overlay.style.height).toBe('100%');
       // Simulate exit fullscreen
       Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
       document.dispatchEvent(new Event('fullscreenchange'));
       expect(document.body.contains(engine.overlay)).toBe(true);
+      expect(engine.overlay.style.position).toBe('fixed');
+      expect(engine.overlay.style.width).toBe('100vw');
+      expect(engine.overlay.style.height).toBe('100vh');
       fsEl.remove();
     });
 
@@ -572,6 +578,92 @@ describe('VJamFXEngine', () => {
       // Should not call appendChild since overlay is already in body
       expect(appendSpy).not.toHaveBeenCalled();
       appendSpy.mockRestore();
+    });
+  });
+
+  describe('requestFullscreen intercept', () => {
+    let savedEngine;
+
+    beforeEach(() => {
+      savedEngine = window._vjamFxEngine;
+      window._vjamFxEngine = engine;
+    });
+
+    afterEach(() => {
+      window._vjamFxEngine = savedEngine;
+      Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+    });
+
+    it('should hide overlay before fullscreen request', () => {
+      engine.createOverlay();
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      el.requestFullscreen();
+      expect(engine.overlay.style.display).toBe('none');
+      el.remove();
+    });
+
+    it('should restore overlay on fullscreenchange after request', () => {
+      engine.createOverlay();
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      el.requestFullscreen();
+      expect(engine.overlay.style.display).toBe('none');
+      // Simulate fullscreen entered
+      Object.defineProperty(document, 'fullscreenElement', { value: el, configurable: true });
+      document.dispatchEvent(new Event('fullscreenchange'));
+      expect(engine.overlay.style.display).toBe('');
+      expect(el.contains(engine.overlay)).toBe(true);
+      el.remove();
+    });
+
+    it('should restore overlay on fullscreen exit', () => {
+      engine.createOverlay();
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      // Enter fullscreen
+      Object.defineProperty(document, 'fullscreenElement', { value: el, configurable: true });
+      document.dispatchEvent(new Event('fullscreenchange'));
+      // Exit fullscreen
+      Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+      document.dispatchEvent(new Event('fullscreenchange'));
+      expect(engine.overlay.style.display).toBe('');
+      expect(document.body.contains(engine.overlay)).toBe(true);
+      expect(engine.overlay.style.position).toBe('fixed');
+      el.remove();
+    });
+
+    it('should restore overlay if fullscreen request is rejected', async () => {
+      engine.createOverlay();
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      // Temporarily make the intercept's inner call reject
+      const currentRFS = Element.prototype.requestFullscreen;
+      Element.prototype.requestFullscreen = function() {
+        const eng = window._vjamFxEngine;
+        if (eng && eng.overlay && eng.overlay.parentNode === document.body) {
+          eng.overlay.style.display = 'none';
+        }
+        const p = Promise.reject(new Error('denied'));
+        p.catch(function() {
+          if (eng && eng.overlay) eng.overlay.style.display = '';
+        });
+        return p;
+      };
+      const p = el.requestFullscreen();
+      await p.catch(() => {});
+      expect(engine.overlay.style.display).toBe('');
+      // Restore
+      Element.prototype.requestFullscreen = currentRFS;
+      el.remove();
+    });
+
+    it('should not throw if engine has no overlay', () => {
+      // No overlay created
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      expect(() => el.requestFullscreen()).not.toThrow();
+      el.remove();
     });
   });
 
