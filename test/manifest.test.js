@@ -63,8 +63,12 @@ describe('manifest.json', () => {
     expect(manifest.content_scripts[0].matches).toContain('<all_urls>');
   });
 
+  it('should have storage permission for SW state persistence', () => {
+    expect(manifest.permissions).toContain('storage');
+  });
+
   it('should only request required permissions', () => {
-    expect(manifest.permissions.length).toBe(5);
+    expect(manifest.permissions.length).toBe(6);
   });
 
   it('should have service worker background script', () => {

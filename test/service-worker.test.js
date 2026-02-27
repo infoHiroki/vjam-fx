@@ -15,6 +15,28 @@ describe('Service Worker', () => {
     navigationListeners = [];
     tabRemoveListeners = [];
 
+    // In-memory store for chrome.storage.session mock
+    const sessionStore = {};
+    chrome.storage.session = {
+      get: vi.fn((key) => {
+        if (key === null) return Promise.resolve({ ...sessionStore });
+        if (typeof key === 'string') {
+          const result = {};
+          if (sessionStore[key] !== undefined) result[key] = sessionStore[key];
+          return Promise.resolve(result);
+        }
+        return Promise.resolve({});
+      }),
+      set: vi.fn((obj) => {
+        Object.assign(sessionStore, obj);
+        return Promise.resolve();
+      }),
+      remove: vi.fn((key) => {
+        delete sessionStore[key];
+        return Promise.resolve();
+      }),
+    };
+
     // Reset chrome mocks for service worker
     chrome.runtime.onMessage = {
       addListener: vi.fn((cb) => messageListeners.push(cb)),
@@ -63,7 +85,7 @@ describe('Service Worker', () => {
       expect(sendResponse).toHaveBeenCalledWith({ ok: true });
     });
 
-    it('should handle getState message after setState', () => {
+    it('should handle getState message after setState', async () => {
       const sendResponse1 = vi.fn();
       const sendResponse2 = vi.fn();
 
@@ -74,29 +96,33 @@ describe('Service Worker', () => {
         sendResponse1,
       );
 
-      // Get state
-      messageListeners[0](
+      // Get state (now async)
+      const result = messageListeners[0](
         { type: 'getState', tabId: 42 },
         {},
         sendResponse2,
       );
+      expect(result).toBe(true); // async response
+
+      await new Promise(r => setTimeout(r, 50));
 
       expect(sendResponse2).toHaveBeenCalledWith({
         state: { active: true, preset: 'mandala', blendMode: 'difference', micEnabled: false },
       });
     });
 
-    it('should return null for unknown tab', () => {
+    it('should return null for unknown tab', async () => {
       const sendResponse = vi.fn();
       messageListeners[0](
         { type: 'getState', tabId: 999 },
         {},
         sendResponse,
       );
+      await new Promise(r => setTimeout(r, 50));
       expect(sendResponse).toHaveBeenCalledWith({ state: null });
     });
 
-    it('should handle clearState message', () => {
+    it('should handle clearState message', async () => {
       const sendResponse1 = vi.fn();
       const sendResponse2 = vi.fn();
       const sendResponse3 = vi.fn();
@@ -115,13 +141,14 @@ describe('Service Worker', () => {
         sendResponse2,
       );
 
-      // Get state should be null
+      // Get state should be null (async)
       messageListeners[0](
         { type: 'getState', tabId: 1 },
         {},
         sendResponse3,
       );
 
+      await new Promise(r => setTimeout(r, 50));
       expect(sendResponse3).toHaveBeenCalledWith({ state: null });
     });
   });
@@ -207,7 +234,7 @@ describe('Service Worker', () => {
       expect(tabRemoveListeners.length).toBe(1);
     });
 
-    it('should clean up state when tab is closed', () => {
+    it('should clean up state when tab is closed', async () => {
       const sendResponse1 = vi.fn();
       const sendResponse2 = vi.fn();
 
@@ -221,12 +248,13 @@ describe('Service Worker', () => {
       // Close tab
       tabRemoveListeners[0](5);
 
-      // State should be gone
+      // State should be gone (async)
       messageListeners[0](
         { type: 'getState', tabId: 5 },
         {},
         sendResponse2,
       );
+      await new Promise(r => setTimeout(r, 50));
       expect(sendResponse2).toHaveBeenCalledWith({ state: null });
     });
   });

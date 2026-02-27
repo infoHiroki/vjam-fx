@@ -5,19 +5,48 @@
  */
 
 // Per-tab state: { tabId: { active, layers[], blendMode, audioEnabled, filters[] } }
+// In-memory cache (fast access) + chrome.storage.session (survives SW termination)
 const tabState = new Map();
 
-function setState(tabId, state) {
-  tabState.set(tabId, { ...state });
+function storageKey(tabId) {
+  return 'tab_' + tabId;
 }
 
-function getState(tabId) {
-  return tabState.get(tabId) || null;
+function setState(tabId, state) {
+  const copy = { ...state };
+  tabState.set(tabId, copy);
+  chrome.storage.session.set({ [storageKey(tabId)]: copy }).catch(() => {});
+}
+
+async function getState(tabId) {
+  const cached = tabState.get(tabId);
+  if (cached) return cached;
+  // Fallback: restore from storage.session (SW was restarted)
+  try {
+    const key = storageKey(tabId);
+    const result = await chrome.storage.session.get(key);
+    if (result[key]) {
+      tabState.set(tabId, result[key]);
+      return result[key];
+    }
+  } catch (e) { /* ignore */ }
+  return null;
 }
 
 function clearState(tabId) {
   tabState.delete(tabId);
+  chrome.storage.session.remove(storageKey(tabId)).catch(() => {});
 }
+
+// Restore in-memory cache from storage.session on SW startup
+chrome.storage.session.get(null).then((all) => {
+  for (const [key, value] of Object.entries(all)) {
+    if (key.startsWith('tab_')) {
+      const tabId = parseInt(key.slice(4), 10);
+      if (!isNaN(tabId)) tabState.set(tabId, value);
+    }
+  }
+}).catch(() => {});
 
 function isInjectableUrl(url) {
   if (!url) return false;
@@ -195,8 +224,8 @@ async function stopTabAudio(tabId) {
 
 // --- Event Listeners ---
 
-function updateBadge(tabId) {
-  const state = getState(tabId);
+async function updateBadge(tabId) {
+  const state = await getState(tabId);
   const isOn = state && state.active;
   try {
     chrome.action.setBadgeText({ text: isOn ? 'ON' : '', tabId });
@@ -212,8 +241,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     updateBadge(msg.tabId);
     sendResponse({ ok: true });
   } else if (msg.type === 'getState') {
-    const state = getState(msg.tabId);
-    sendResponse({ state });
+    getState(msg.tabId).then(state => sendResponse({ state }));
+    return true; // async response
   } else if (msg.type === 'clearState') {
     clearState(msg.tabId);
     updateBadge(msg.tabId);
@@ -239,7 +268,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.webNavigation.onCompleted.addListener(async (details) => {
   if (details.frameId !== 0) return;
 
-  const state = getState(details.tabId);
+  const state = await getState(details.tabId);
   if (!state || !state.active) return;
 
   // Small delay to ensure page is ready
