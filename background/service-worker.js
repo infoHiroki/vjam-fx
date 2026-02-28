@@ -123,7 +123,7 @@ async function injectAndStart(tabId, state) {
           target: { tabId },
           world: 'MAIN',
           files: [file],
-        }).catch(() => {})
+        }).catch(e => console.warn('VJam FX: re-inject failed:', file, e))
       ));
     }
 

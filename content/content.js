@@ -491,7 +491,7 @@
       const onEnd = () => {
         if (cleaned) return;
         cleaned = true;
-        layer.preset.destroy();
+        try { layer.preset.destroy(); } catch (e) { console.warn('VJam FX: destroy error', e); }
         container.remove();
       };
       container.addEventListener('transitionend', onEnd, { once: true });

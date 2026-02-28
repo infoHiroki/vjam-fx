@@ -512,7 +512,7 @@ class PopupController {
 
   async _loadScene(slot) {
     const scene = this.scenes[slot];
-    if (!scene) return;
+    if (!scene || this._busy) return;
 
     // Ensure engine is running
     if (!this.isActive) {
@@ -557,11 +557,11 @@ class PopupController {
     // Start audio if enabled
     if (this.audioEnabled) {
       await this._sendCommand({ action: 'startVideoAudio' });
-      chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
+      chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
     }
 
     this._updateUI();
-    this._saveState();
+    await this._saveState();
   }
 
   _clearScene(slot) {
@@ -1018,13 +1018,13 @@ class PopupController {
 
         if (this.audioEnabled) {
           await this._sendCommand({ action: 'startVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
+          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
           if (this.isActive) {
             this._sendCommand({ action: 'setAudioEnabled', enabled: true });
           }
         } else {
           await this._sendCommand({ action: 'stopVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
+          chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
           if (this.isActive) {
             this._sendCommand({ action: 'setAudioEnabled', enabled: false });
           }
@@ -1038,7 +1038,7 @@ class PopupController {
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
         await this._sendCommand({ action: 'stopVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
+        chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
         // Send kill with lock info so engine preserves locked state
         await this._sendCommand({ action: 'kill', locks: this.locks });
         if (!this.locks.effect) {
@@ -1132,7 +1132,7 @@ class PopupController {
         // Start video audio if needed
         if (this.audioEnabled) {
           await this._sendCommand({ action: 'startVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
+          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
         }
         this._saveState();
 
@@ -1312,7 +1312,7 @@ class PopupController {
       // Start video audio capture + tabCapture fallback
       if (this.audioEnabled) {
         await this._sendCommand({ action: 'startVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId });
+        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
       }
 
       // Apply settings to engine
@@ -1338,7 +1338,7 @@ class PopupController {
     this._busy = true;
     try {
     await this._sendCommand({ action: 'stopVideoAudio' });
-    chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId });
+    chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
     await this._sendCommand({ action: 'stop' });
     this.isActive = false;
     this._coreInjected = false;
@@ -1354,7 +1354,7 @@ class PopupController {
       await this._injectCore();
       await this._injectPreset(presetId);
       await this._sendCommand({ action: 'addLayer', preset: presetId });
-      this._saveState();
+      await this._saveState();
     } catch (e) {
       console.warn('VJam FX: Failed to add layer', e);
     }
@@ -1362,7 +1362,7 @@ class PopupController {
 
   async _removeLayer(presetId) {
     await this._sendCommand({ action: 'removeLayer', preset: presetId });
-    this._saveState();
+    await this._saveState();
   }
 
   async _sendCommand(msg) {
