@@ -290,34 +290,27 @@ body {
 .section-label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #666;
+  color: #999;
   margin-bottom: 6px;
+  margin-top: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #333;
+  gap: 4px;
 }
 
-/* Lock Button */
-.lock-btn {
-  background: none;
-  border: none;
-  font-size: 9px;
-  text-transform: uppercase;
-  cursor: pointer;
-  padding: 0 4px;
-  color: #666;
-  transition: color 0.15s;
-  line-height: 1;
-  letter-spacing: 0.5px;
+.section-label > span {
+  margin-right: auto;
 }
 
-.lock-btn:hover {
-  color: #aaa;
-}
-
-.lock-btn.locked {
-  color: #ff9900;
+/* Lock Toggle (unified with .auto-toggle) */
+.auto-toggle.locked {
+  background: #ff9900;
+  color: #000;
+  border-color: #ff9900;
+  font-weight: 600;
 }
 
 /* Auto Toggle Button */

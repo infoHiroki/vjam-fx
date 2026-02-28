@@ -713,7 +713,7 @@
       this._autoCycleBaseInterval = intervalMs || 8000;
       this._autoBlend = !!(options && options.autoBlend);
       this._autoFilters = !!(options && options.autoFilters);
-      this._barsPerCycle = (options && options.barsPerCycle) || 16;
+      this._barsPerCycle = (options && options.barsPerCycle) || 4;
       this._autoCycleLocks = (options && options.locks) || {};
 
       const self = this;
@@ -728,7 +728,7 @@
           bpm = self._externalAudioData.bpm;
         }
         if (bpm > 0) {
-          interval = (60 / bpm) * (self._barsPerCycle || 16) * 1000; // beats in ms
+          interval = (60 / bpm) * (self._barsPerCycle || 4) * 1000; // beats in ms
           interval = Math.max(4000, Math.min(15000, interval)); // Clamp 4-15 seconds
         }
         self._autoCycleTimer = setTimeout(() => {
@@ -832,7 +832,7 @@
           bpm = self._externalAudioData.bpm;
         }
         if (bpm > 0) {
-          interval = (60 / bpm) * 16 * 1000;
+          interval = (60 / bpm) * 4 * 1000;
           interval = Math.max(4000, Math.min(15000, interval));
         }
         self._autoFXTimer = setTimeout(() => {

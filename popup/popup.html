@@ -34,9 +34,9 @@
       <div class="setting-row">
         <label>Cycle</label>
         <select id="setting-cycle">
-          <option value="4">4 bars</option>
+          <option value="4" selected>4 bars</option>
           <option value="8">8 bars</option>
-          <option value="16" selected>16 bars</option>
+          <option value="16">16 bars</option>
           <option value="32">32 bars</option>
         </select>
       </div>
@@ -65,13 +65,13 @@
       <button id="btn-auto-cycle" class="action-btn" title="Auto cycle">Auto</button>
     </div>
 
-    <div class="section-label"><span>Effect</span><button id="lock-effect" class="lock-btn" title="Lock presets">Lock</button></div>
+    <div class="section-label"><span>Effect</span><button id="lock-effect" class="auto-toggle lock-toggle" title="Lock presets">Lock</button></div>
     <input type="text" id="preset-search" class="preset-search" placeholder="Search presets...">
     <div class="preset-list" id="preset-list">
       <!-- Presets injected by popup.js -->
     </div>
 
-    <div class="section-label"><span>Filters</span><button id="lock-filter" class="lock-btn" title="Lock filters">Lock</button><button id="auto-filters" class="auto-toggle" title="Auto-rotate filters">Auto</button></div>
+    <div class="section-label"><span>Filters</span><button id="lock-filter" class="auto-toggle lock-toggle" title="Lock filters">Lock</button><button id="auto-filters" class="auto-toggle" title="Auto-rotate filters">Auto</button></div>
     <div class="filter-grid" id="filter-grid">
       <button class="filter-btn" data-filter="invert">Invert</button>
       <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
@@ -83,7 +83,7 @@
       <button class="filter-btn" data-filter="blur">Blur</button>
     </div>
 
-    <div class="section-label"><span>Blend</span><button id="lock-blend" class="lock-btn" title="Lock blend mode">Lock</button><button id="auto-blend" class="auto-toggle" title="Auto-rotate blend mode">Auto</button></div>
+    <div class="section-label"><span>Blend</span><button id="lock-blend" class="auto-toggle lock-toggle" title="Lock blend mode">Lock</button><button id="auto-blend" class="auto-toggle" title="Auto-rotate blend mode">Auto</button></div>
     <div class="blend-grid" id="blend-grid">
       <button class="blend-btn" data-blend="lighten">Lighten</button>
       <button class="blend-btn" data-blend="difference">Diff</button>

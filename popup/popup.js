@@ -232,7 +232,7 @@ const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'colo
 
 const DEFAULT_SETTINGS = {
   fadeDuration: 1.5,
-  barsPerCycle: 16,
+  barsPerCycle: 4,
   sensitivity: 'mid',
   zoom: 1.0,
   osdEnabled: true,
@@ -939,47 +939,64 @@ class PopupController {
       btnReset.addEventListener('click', async () => {
         await this._sendCommand({ action: 'stopVideoAudio' });
         chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
-        // Send kill with lock info so engine preserves locked state
-        await this._sendCommand({ action: 'kill', locks: this.locks });
-        if (!this.locks.effect) {
-          this.activeLayers.clear();
-        }
-        if (!this.locks.filter) {
-          this.activeFilters.clear();
-        }
+        // Full reset (no lock respect — reset everything except scenes)
+        await this._sendCommand({ action: 'kill' });
+
+        // Stop text
+        await this._sendCommand({ action: 'textAutoStop' });
+        await this._sendCommand({ action: 'textClear' });
+        this.textState = null;
+
+        // Reset all state
+        this.activeLayers.clear();
+        this.activeFilters.clear();
         this.autoCycleActive = false;
         this.autoBlend = false;
         this.autoFilters = false;
-        if (!this.locks.blend) {
-          this.selectedBlendMode = 'screen';
-        }
+        this.selectedBlendMode = 'screen';
         this.opacity = 0.9;
         this.audioEnabled = true;
         this.isActive = false;
         this._coreInjected = false;
         this._injectedPresets.clear();
-        // Reset UI (respecting locks)
+        this.locks = { effect: false, blend: false, filter: false };
+
+        // Reset settings to defaults
+        this.settings = { ...DEFAULT_SETTINGS };
+        await this._saveSettings();
+        await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+        await this._sendCommand({ action: 'setZoom', zoom: 1.0 });
+        await this._sendCommand({ action: 'setOsdEnabled', enabled: true });
+        await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: 1.0 });
+
+        // Reset all UI
         const toggle = document.getElementById('toggle');
         if (toggle) toggle.checked = false;
-        if (!this.locks.effect) {
-          document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-        }
-        if (!this.locks.filter) {
-          document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-        }
+        document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.blend-btn').forEach(btn => btn.classList.remove('active'));
         const opacitySlider = document.getElementById('opacity-slider');
         if (opacitySlider) opacitySlider.value = 90;
         const audioBtn = document.getElementById('audio-toggle');
         if (audioBtn) { audioBtn.textContent = 'ON'; audioBtn.classList.add('on'); }
-        if (!this.locks.blend) {
-          document.querySelectorAll('.blend-btn').forEach(btn => btn.classList.remove('active'));
-        }
         const autoBtn = document.getElementById('btn-auto-cycle');
         if (autoBtn) autoBtn.classList.remove('active');
         const autoBlendBtn = document.getElementById('auto-blend');
         if (autoBlendBtn) autoBlendBtn.classList.remove('active');
         const autoFiltersBtn = document.getElementById('auto-filters');
         if (autoFiltersBtn) autoFiltersBtn.classList.remove('active');
+        // Reset lock UI
+        for (const key of ['effect', 'blend', 'filter']) {
+          const lockBtn = document.getElementById('lock-' + key);
+          if (lockBtn) { lockBtn.classList.remove('locked'); lockBtn.textContent = 'Lock'; }
+        }
+        // Reset text UI
+        const textInput = document.getElementById('text-input');
+        if (textInput) textInput.value = '';
+        const btnTextOn = document.getElementById('btn-text-on');
+        if (btnTextOn) btnTextOn.classList.remove('active');
+        // Reset settings UI
+        this._updateSettingsUI();
         this._updateLayerCount();
         this._saveState();
 
