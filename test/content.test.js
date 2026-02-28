@@ -604,6 +604,25 @@ describe('VJamFXEngine', () => {
     });
   });
 
+  describe('createMediaElementSource guard', () => {
+    it('should skip reconnection to same media element', () => {
+      const media = document.createElement('video');
+      // Simulate already connected
+      engine._videoAudioMedia = media;
+      engine._videoAudioCtx = { state: 'running', close: vi.fn().mockResolvedValue(undefined) };
+      const origCtx = engine._videoAudioCtx;
+      engine._connectMediaElement(media);
+      // Should not create new AudioContext
+      expect(engine._videoAudioCtx).toBe(origCtx);
+    });
+
+    it('should clear _videoAudioMedia on destroy', () => {
+      engine._videoAudioMedia = document.createElement('video');
+      engine._destroyVideoAudio();
+      expect(engine._videoAudioMedia).toBeNull();
+    });
+  });
+
   describe('silence check timer cleanup', () => {
     it('should clear silence timer on _stopVideoAudio', () => {
       engine._silenceCheckTimer = setInterval(() => {}, 1000);

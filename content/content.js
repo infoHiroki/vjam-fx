@@ -55,6 +55,7 @@
       this._osdTimer = null;
 
       // Video audio capture
+      this._videoAudioMedia = null;
       this._videoAudioCtx = null;
       this._videoAudioSource = null;
       this._videoAudioAnalyser = null;
@@ -150,6 +151,9 @@
 
     _connectMediaElement(media) {
       this._stopMediaObserver();
+      // Skip if already connected to this element
+      if (this._videoAudioMedia === media && this._videoAudioCtx) return;
+      this._videoAudioMedia = media;
       try {
         var ctx = new AudioContext();
         // AudioContext may be suspended due to autoplay policy
@@ -270,6 +274,7 @@
         this._videoAudioCtx.close().catch(function() {});
       }
       this._videoAudioCtx = null;
+      this._videoAudioMedia = null;
       this._videoAudioFreqData = null;
       this._videoAudioTimeData = null;
     }
