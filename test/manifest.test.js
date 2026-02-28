@@ -60,7 +60,8 @@ describe('manifest.json', () => {
   it('should have audio-bridge content script', () => {
     expect(manifest.content_scripts.length).toBe(1);
     expect(manifest.content_scripts[0].js).toContain('content/audio-bridge.js');
-    expect(manifest.content_scripts[0].matches).toContain('<all_urls>');
+    expect(manifest.content_scripts[0].matches).toContain('https://*/*');
+    expect(manifest.content_scripts[0].matches).toContain('http://*/*');
   });
 
   it('should have storage permission for SW state persistence', () => {

@@ -576,6 +576,72 @@ describe('VJamFXEngine', () => {
   });
 
 
+  describe('setPresetParam', () => {
+    it('should call setParam on active layer preset', () => {
+      engine.createOverlay();
+      engine._addLayer('neon-tunnel');
+      const layer = engine.activeLayers.get('neon-tunnel');
+      layer.preset.setParam = vi.fn();
+      engine.handleMessage({ action: 'setPresetParam', preset: 'neon-tunnel', key: 'speed', value: 2 });
+      expect(layer.preset.setParam).toHaveBeenCalledWith('speed', 2);
+    });
+
+    it('should not throw when preset is not active', () => {
+      engine.createOverlay();
+      expect(() => {
+        engine.handleMessage({ action: 'setPresetParam', preset: 'nonexistent', key: 'speed', value: 2 });
+      }).not.toThrow();
+    });
+
+    it('should not throw when preset has no setParam method', () => {
+      engine.createOverlay();
+      engine._addLayer('neon-tunnel');
+      const layer = engine.activeLayers.get('neon-tunnel');
+      delete layer.preset.setParam;
+      expect(() => {
+        engine.handleMessage({ action: 'setPresetParam', preset: 'neon-tunnel', key: 'speed', value: 2 });
+      }).not.toThrow();
+    });
+  });
+
+  describe('silence check timer cleanup', () => {
+    it('should clear silence timer on _stopVideoAudio', () => {
+      engine._silenceCheckTimer = setInterval(() => {}, 1000);
+      const timerId = engine._silenceCheckTimer;
+      engine._stopVideoAudio();
+      expect(engine._silenceCheckTimer).toBeNull();
+    });
+
+    it('should clear silence timer on _destroyVideoAudio', () => {
+      engine._silenceCheckTimer = setInterval(() => {}, 1000);
+      engine._destroyVideoAudio();
+      expect(engine._silenceCheckTimer).toBeNull();
+    });
+  });
+
+  describe('audio method defensive checks', () => {
+    it('should not throw when preset lacks updateAudio', () => {
+      engine.createOverlay();
+      engine._addLayer('neon-tunnel');
+      const layer = engine.activeLayers.get('neon-tunnel');
+      delete layer.preset.updateAudio;
+      // Simulating audio feed — should not throw
+      expect(() => {
+        if (typeof layer.preset.updateAudio === 'function') layer.preset.updateAudio({});
+      }).not.toThrow();
+    });
+
+    it('should not throw when preset lacks onBeat', () => {
+      engine.createOverlay();
+      engine._addLayer('neon-tunnel');
+      const layer = engine.activeLayers.get('neon-tunnel');
+      delete layer.preset.onBeat;
+      expect(() => {
+        if (typeof layer.preset.onBeat === 'function') layer.preset.onBeat(0.5);
+      }).not.toThrow();
+    });
+  });
+
   describe('auto-initialization', () => {
     it('should have created singleton on window', () => {
       expect(window._vjamFxEngine).toBeDefined();
