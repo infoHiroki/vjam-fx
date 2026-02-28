@@ -222,11 +222,6 @@ const PRESET_CATEGORIES = [
     { id: 'cyber-rain-heavy', name: 'Cyber Rain' },
     { id: 'ceiling-drip', name: 'Ceiling Drip' },
   ]},
-  { label: 'Image FX', presets: [
-    { id: 'image-cycle', name: 'Image Cycle' },
-    { id: 'image-glitch', name: 'Image Glitch' },
-    { id: 'image-cyber', name: 'Image Cyber' },
-  ]},
 ];
 
 // Flat list for compatibility
@@ -251,7 +246,7 @@ class PopupController {
     this.activeLayers = new Set();  // preset IDs currently active
     this.activeFilters = new Set();
     this.selectedBlendMode = 'screen';
-    this.opacity = 1.0;
+    this.opacity = 0.9;
     this.isActive = false;
     this.audioEnabled = true;
     this.autoCycleActive = false;
@@ -282,7 +277,6 @@ class PopupController {
 
     await this._loadSettings();
     await this._loadScenes();
-    await this._loadImages();
     this._buildPresetList();
     await this._syncState();
     this._bindEvents();
@@ -585,36 +579,6 @@ class PopupController {
     this._saveScenes();
   }
 
-  async _loadImages() {
-    try {
-      const result = await chrome.storage.local.get('vjamfx_images');
-      if (result.vjamfx_images && Array.isArray(result.vjamfx_images)) {
-        this._imageDataUrls = result.vjamfx_images;
-      }
-    } catch (e) { /* storage not available */ }
-    this._updateImageCount();
-  }
-
-  async _saveImages() {
-    try {
-      await chrome.storage.local.set({ vjamfx_images: this._imageDataUrls || [] });
-    } catch (e) { /* storage not available */ }
-  }
-
-  _updateImageCount() {
-    const el = document.getElementById('image-count');
-    if (el) el.textContent = `${(this._imageDataUrls || []).length}/5`;
-  }
-
-  _readFileAsDataUrl(file) {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-  }
-
   _updateSettingsUI() {
     const fadeEl = document.getElementById('setting-fade');
     if (fadeEl) fadeEl.value = String(this.settings.fadeDuration);
@@ -840,17 +804,6 @@ class PopupController {
       });
     }
 
-    // Text section toggle
-    const textToggleBtn = document.getElementById('btn-text-toggle');
-    const textSection = document.getElementById('text-section');
-    if (textToggleBtn && textSection) {
-      textToggleBtn.addEventListener('click', () => {
-        const isOpen = textSection.style.display !== 'none';
-        textSection.style.display = isOpen ? 'none' : '';
-        textToggleBtn.textContent = isOpen ? '\u25BC' : '\u25B2';
-      });
-    }
-
     // Text ON
     const btnTextOn = document.getElementById('btn-text-on');
     if (btnTextOn) {
@@ -882,85 +835,6 @@ class PopupController {
         if (btnOn) btnOn.classList.remove('active');
         this.textState = null;
 
-        this._saveState();
-      });
-    }
-
-    // Images toggle
-    const imagesToggleBtn = document.getElementById('btn-images-toggle');
-    const imagesSection = document.getElementById('images-section');
-    if (imagesToggleBtn && imagesSection) {
-      imagesToggleBtn.addEventListener('click', () => {
-        const isOpen = imagesSection.style.display !== 'none';
-        imagesSection.style.display = isOpen ? 'none' : '';
-        imagesToggleBtn.textContent = isOpen ? '\u25BC' : '\u25B2';
-      });
-    }
-
-    // Image Upload
-    const btnImageUpload = document.getElementById('btn-image-upload');
-    const imageFile = document.getElementById('image-file');
-    if (btnImageUpload && imageFile) {
-      btnImageUpload.addEventListener('click', () => imageFile.click());
-      imageFile.addEventListener('change', async (e) => {
-        const files = Array.from(e.target.files || []);
-        if (files.length === 0) return;
-        const existing = this._imageDataUrls || [];
-        const remaining = 5 - existing.length;
-        const toAdd = files.slice(0, remaining);
-        for (const file of toAdd) {
-          if (file.size > 1024 * 1024) continue; // 1MB max per image
-          const dataUrl = await this._readFileAsDataUrl(file);
-          if (dataUrl) existing.push(dataUrl);
-        }
-        this._imageDataUrls = existing.slice(0, 5);
-        this._updateImageCount();
-        this._saveImages();
-        imageFile.value = '';
-      });
-    }
-
-    // Image Apply
-    const btnImageApply = document.getElementById('btn-image-apply');
-    if (btnImageApply) {
-      btnImageApply.addEventListener('click', async () => {
-        if (!this._imageDataUrls || this._imageDataUrls.length === 0) return;
-        const modeSelect = document.getElementById('image-mode');
-        const mode = modeSelect ? modeSelect.value : 'image-cycle';
-        // Ensure the image preset is active as a layer
-        if (!this.activeLayers.has(mode)) {
-          if (!this.isActive) {
-            this.isActive = true;
-            const toggle = document.getElementById('toggle');
-            if (toggle) toggle.checked = true;
-            await this._injectCore();
-          }
-          await this._injectPreset(mode);
-          await this._sendCommand({ action: 'addLayer', preset: mode });
-          this.activeLayers.add(mode);
-          this._updateUI();
-        }
-        // Send images to the preset
-        await this._sendCommand({ action: 'setPresetParam', preset: mode, key: 'localImages', value: this._imageDataUrls });
-        this._saveState();
-      });
-    }
-
-    // Image Clear
-    const btnImageClear = document.getElementById('btn-image-clear');
-    if (btnImageClear) {
-      btnImageClear.addEventListener('click', async () => {
-        this._imageDataUrls = [];
-        this._updateImageCount();
-        this._saveImages();
-        // Remove all image presets from layers
-        for (const id of ['image-cycle', 'image-glitch', 'image-cyber']) {
-          if (this.activeLayers.has(id)) {
-            await this._sendCommand({ action: 'removeLayer', preset: id });
-            this.activeLayers.delete(id);
-          }
-        }
-        this._updateUI();
         this._saveState();
       });
     }
@@ -1079,7 +953,7 @@ class PopupController {
         if (!this.locks.blend) {
           this.selectedBlendMode = 'screen';
         }
-        this.opacity = 1.0;
+        this.opacity = 0.9;
         this.audioEnabled = true;
         this.isActive = false;
         this._coreInjected = false;
@@ -1094,7 +968,7 @@ class PopupController {
           document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         }
         const opacitySlider = document.getElementById('opacity-slider');
-        if (opacitySlider) opacitySlider.value = 100;
+        if (opacitySlider) opacitySlider.value = 90;
         const audioBtn = document.getElementById('audio-toggle');
         if (audioBtn) { audioBtn.textContent = 'ON'; audioBtn.classList.add('on'); }
         if (!this.locks.blend) {
@@ -1288,7 +1162,7 @@ class PopupController {
     }
 
     // Inject base-preset and engine
-    for (const file of ['content/base-preset.js', 'content/text-overlay.js', 'content/image-effects.js', 'content/content.js']) {
+    for (const file of ['content/base-preset.js', 'content/text-overlay.js', 'content/content.js']) {
       await chrome.scripting.executeScript({
         target: { tabId: this._tabId },
         world: 'MAIN',

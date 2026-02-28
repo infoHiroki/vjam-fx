@@ -127,8 +127,8 @@ async function injectAndStart(tabId, state) {
       ));
     }
 
-    // Inject text-overlay, image-effects, engine
-    for (const file of ['content/text-overlay.js', 'content/image-effects.js', 'content/content.js']) {
+    // Inject text-overlay, engine
+    for (const file of ['content/text-overlay.js', 'content/content.js']) {
       await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
