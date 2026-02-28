@@ -35,7 +35,7 @@ describe('PopupController', () => {
   });
 
   describe('preset list', () => {
-    it('should have 60 presets available', () => {
+    it('should have 194 presets available', () => {
       expect(controller.presets.length).toBe(194);
     });
 
