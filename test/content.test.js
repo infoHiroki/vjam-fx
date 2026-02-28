@@ -433,6 +433,54 @@ describe('VJamFXEngine', () => {
     });
   });
 
+  describe('standalone autoFX', () => {
+    it('should start and stop standalone autoFX via messages', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoFX', autoBlend: true, autoFilters: true });
+      expect(engine._autoFXTimer).not.toBeNull();
+      expect(engine._autoFXBlend).toBe(true);
+      expect(engine._autoFXFilters).toBe(true);
+      engine.handleMessage({ action: 'stopAutoFX' });
+      expect(engine._autoFXTimer).toBeNull();
+    });
+
+    it('should randomize blend on autoFX tick when autoBlend is true', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.setBlendMode('screen');
+      engine._autoFXBlend = true;
+      engine._autoFXFilters = false;
+      engine._autoFXTick();
+      expect(['screen', 'lighten', 'difference', 'exclusion', 'color-dodge']).toContain(engine.blendMode);
+    });
+
+    it('should randomize filters on autoFX tick when autoFilters is true', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine._autoFXBlend = false;
+      engine._autoFXFilters = true;
+      engine._autoFXTick();
+      expect(engine._autoFXFilters).toBe(true);
+    });
+
+    it('should stop autoFX on kill', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoFX', autoBlend: true, autoFilters: false });
+      expect(engine._autoFXTimer).not.toBeNull();
+      engine.kill({});
+      expect(engine._autoFXTimer).toBeNull();
+    });
+
+    it('should not start timer when both blend and filters are false', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.startAutoFX({ autoBlend: false, autoFilters: false });
+      expect(engine._autoFXTimer).toBeFalsy();
+    });
+  });
+
   describe('fade transitions', () => {
     it('should start layer with opacity 0 and transition', () => {
       engine.createOverlay();

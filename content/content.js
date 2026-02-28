@@ -573,6 +573,7 @@
     stop() {
       this.active = false;
       this._stopAutoCycle();
+      this._stopAutoFX();
 
       if (this._rafId) {
         cancelAnimationFrame(this._rafId);
@@ -672,6 +673,7 @@
       }
       this.setOpacity(1.0);
       this._stopAutoCycle();
+      this._stopAutoFX();
       this.showOSD('RESET');
     }
 
@@ -812,6 +814,59 @@
       }
     }
 
+    // --- Standalone Auto Blend/Filter (without preset Auto-Cycle) ---
+
+    startAutoFX(options) {
+      this._stopAutoFX();
+      this._autoFXBlend = !!(options && options.autoBlend);
+      this._autoFXFilters = !!(options && options.autoFilters);
+      if (!this._autoFXBlend && !this._autoFXFilters) return;
+
+      const self = this;
+      const scheduleNext = () => {
+        let interval = 8000;
+        let bpm = 0;
+        if (self._videoAudioAnalyser && self._videoAudioTempo > 0) {
+          bpm = self._videoAudioTempo;
+        } else if (self._externalAudioData && self._externalAudioData.bpm > 0) {
+          bpm = self._externalAudioData.bpm;
+        }
+        if (bpm > 0) {
+          interval = (60 / bpm) * 16 * 1000;
+          interval = Math.max(4000, Math.min(15000, interval));
+        }
+        self._autoFXTimer = setTimeout(() => {
+          self._autoFXTick();
+          scheduleNext();
+        }, interval);
+      };
+      scheduleNext();
+    }
+
+    _autoFXTick() {
+      if (this._autoFXBlend) {
+        const mode = VALID_BLEND_MODES[Math.floor(Math.random() * VALID_BLEND_MODES.length)];
+        this.setBlendMode(mode);
+      }
+      if (this._autoFXFilters) {
+        this.activeFilters.clear();
+        const filterNames = Object.keys(FILTER_VALUES);
+        for (let i = 0; i < filterNames.length; i++) {
+          if (Math.random() < 0.3) {
+            this.activeFilters.add(filterNames[i]);
+          }
+        }
+        this._applyFilters();
+      }
+    }
+
+    _stopAutoFX() {
+      if (this._autoFXTimer) {
+        clearTimeout(this._autoFXTimer);
+        this._autoFXTimer = null;
+      }
+    }
+
     // --- OSD Feedback ---
 
     showOSD(text) {
@@ -912,6 +967,12 @@
           break;
         case 'updateAutoCycleOptions':
           this.updateAutoCycleOptions({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, locks: msg.locks });
+          break;
+        case 'startAutoFX':
+          this.startAutoFX({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters });
+          break;
+        case 'stopAutoFX':
+          this._stopAutoFX();
           break;
         case 'startVideoAudio':
           this._startVideoAudio();
