@@ -397,6 +397,40 @@ describe('VJamFXEngine', () => {
       expect(engine._autoFilters).toBe(true);
       engine._stopAutoCycle();
     });
+
+    it('should skip first tick when skipFirstTick option is true', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine._addLayer('neon-tunnel');
+      expect(engine.activeLayers.size).toBe(1);
+      // startAutoCycle with skipFirstTick should not change layers immediately
+      engine.startAutoCycle(['kaleidoscope', 'mandala'], 100000, { skipFirstTick: true });
+      expect(engine.activeLayers.has('neon-tunnel')).toBe(true);
+      engine._stopAutoCycle();
+    });
+
+    it('should update options via updateAutoCycleOptions without restarting timer', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 100000, autoBlend: false, autoFilters: false });
+      expect(engine._autoBlend).toBe(false);
+      expect(engine._autoFilters).toBe(false);
+      const timer = engine._autoCycleTimer;
+      // Update options via message
+      engine.handleMessage({ action: 'updateAutoCycleOptions', autoBlend: true, autoFilters: true });
+      expect(engine._autoBlend).toBe(true);
+      expect(engine._autoFilters).toBe(true);
+      // Timer should not be reset
+      expect(engine._autoCycleTimer).toBe(timer);
+      engine._stopAutoCycle();
+    });
+
+    it('should ignore updateAutoCycleOptions when auto-cycle is not running', () => {
+      engine.createOverlay();
+      engine.active = true;
+      engine.updateAutoCycleOptions({ autoBlend: true });
+      expect(engine._autoBlend).toBeFalsy();
+    });
   });
 
   describe('fade transitions', () => {

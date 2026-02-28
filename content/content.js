@@ -735,9 +735,18 @@
         }, interval);
       };
 
-      // Immediate first tick
-      this._autoCycleTick();
+      // Skip first tick when only updating options (e.g. toggling Auto Blend/Filter)
+      if (!(options && options.skipFirstTick)) {
+        this._autoCycleTick();
+      }
       scheduleNext();
+    }
+
+    updateAutoCycleOptions(options) {
+      if (!this._autoCyclePresets) return;
+      if (options.autoBlend !== undefined) this._autoBlend = !!options.autoBlend;
+      if (options.autoFilters !== undefined) this._autoFilters = !!options.autoFilters;
+      if (options.locks !== undefined) this._autoCycleLocks = options.locks;
     }
 
     _autoCycleTick() {
@@ -896,10 +905,13 @@
           this._osdEnabled = msg.enabled !== false;
           break;
         case 'startAutoCycle':
-          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks });
+          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks, skipFirstTick: msg.skipFirstTick });
           break;
         case 'stopAutoCycle':
           this._stopAutoCycle();
+          break;
+        case 'updateAutoCycleOptions':
+          this.updateAutoCycleOptions({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, locks: msg.locks });
           break;
         case 'startVideoAudio':
           this._startVideoAudio();

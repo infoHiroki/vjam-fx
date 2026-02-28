@@ -453,6 +453,10 @@ body {
   font-weight: 600;
 }
 
+.scene-slot {
+  position: relative;
+}
+
 .scene-btn {
   background: #2a2a2a;
   color: #666;
@@ -463,6 +467,7 @@ body {
   cursor: pointer;
   transition: all 0.15s;
   text-align: center;
+  width: 100%;
 }
 
 .scene-btn:hover {
@@ -478,6 +483,33 @@ body {
 
 .scene-btn.saved:hover {
   background: #0a3a1a;
+}
+
+.scene-del {
+  display: none;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #cc3333;
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.scene-del:hover {
+  background: #ff4444;
+}
+
+.scene-slot.saved .scene-del {
+  display: block;
 }
 
 .scene-grid.save-mode .scene-btn {

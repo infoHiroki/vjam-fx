@@ -178,4 +178,44 @@ describe('PopupController', () => {
       expect(controller.audioEnabled).toBe(true);
     });
   });
+
+  describe('scenes', () => {
+    it('should save Auto state in scene', () => {
+      controller.activeLayers.add('neon-tunnel');
+      controller.selectedBlendMode = 'lighten';
+      controller.autoCycleActive = true;
+      controller.autoBlend = true;
+      controller.autoFilters = false;
+      controller._saveScene(0);
+      const scene = controller.scenes[0];
+      expect(scene.autoCycleActive).toBe(true);
+      expect(scene.autoBlend).toBe(true);
+      expect(scene.autoFilters).toBe(false);
+      expect(scene.layers).toContain('neon-tunnel');
+    });
+
+    it('should save scene without Auto state', () => {
+      controller.activeLayers.add('kaleidoscope');
+      controller.autoCycleActive = false;
+      controller._saveScene(1);
+      const scene = controller.scenes[1];
+      expect(scene.autoCycleActive).toBe(false);
+      expect(scene.autoBlend).toBe(false);
+      expect(scene.autoFilters).toBe(false);
+    });
+
+    it('should clear scene slot', () => {
+      controller._saveScene(2);
+      expect(controller.scenes[2]).not.toBeNull();
+      controller._clearScene(2);
+      expect(controller.scenes[2]).toBeNull();
+    });
+
+    it('should have 12 scene slots initialized to null', () => {
+      expect(controller.scenes.length).toBe(12);
+      for (const s of controller.scenes) {
+        expect(s).toBeNull();
+      }
+    });
+  });
 });

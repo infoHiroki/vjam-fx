@@ -495,7 +495,10 @@ class PopupController {
   _updateSceneButtons() {
     document.querySelectorAll('.scene-btn').forEach(btn => {
       const slot = parseInt(btn.dataset.slot, 10);
-      btn.classList.toggle('saved', this.scenes[slot] != null);
+      const saved = this.scenes[slot] != null;
+      btn.classList.toggle('saved', saved);
+      const slotDiv = btn.closest('.scene-slot');
+      if (slotDiv) slotDiv.classList.toggle('saved', saved);
     });
   }
 
@@ -506,6 +509,9 @@ class PopupController {
       filters: [...this.activeFilters],
       opacity: this.opacity,
       locks: { ...this.locks },
+      autoCycleActive: this.autoCycleActive,
+      autoBlend: this.autoBlend,
+      autoFilters: this.autoFilters,
     };
     this._saveScenes();
   }
@@ -553,6 +559,16 @@ class PopupController {
 
     // Restore locks
     if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
+
+    // Restore Auto state
+    this.autoCycleActive = !!scene.autoCycleActive;
+    this.autoBlend = !!scene.autoBlend;
+    this.autoFilters = !!scene.autoFilters;
+    if (this.autoCycleActive) {
+      await this._injectAllPresets();
+      const allIds = this.presets.map(p => p.id);
+      await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
+    }
 
     // Start audio if enabled
     if (this.audioEnabled) {
@@ -811,6 +827,16 @@ class PopupController {
           this._loadScene(slot);
 
         }
+      });
+    }
+
+    // Scene delete buttons
+    const sceneDelBtns = document.querySelectorAll('.scene-del');
+    for (const btn of sceneDelBtns) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const slot = parseInt(btn.dataset.slot, 10);
+        this._clearScene(slot);
       });
     }
 
@@ -1125,9 +1151,14 @@ class PopupController {
         this._updateLayerCount();
         if (this.autoCycleActive) {
           this.autoCycleActive = false;
+          this.autoBlend = false;
+          this.autoFilters = false;
           const autoBtn = document.getElementById('btn-auto-cycle');
           if (autoBtn) autoBtn.classList.remove('active');
-          await this._sendCommand({ action: 'stopAutoCycle' });
+          const abBtn = document.getElementById('auto-blend');
+          if (abBtn) { abBtn.classList.remove('active'); abBtn.classList.add('disabled'); }
+          const afBtn = document.getElementById('auto-filters');
+          if (afBtn) { afBtn.classList.remove('active'); afBtn.classList.add('disabled'); }
         }
         // Start video audio if needed
         if (this.audioEnabled) {
@@ -1191,9 +1222,7 @@ class PopupController {
         if (!this.autoCycleActive) return;
         this.autoBlend = !this.autoBlend;
         autoBlendBtn.classList.toggle('active', this.autoBlend);
-        // Re-send startAutoCycle with updated flags
-        const allIds = this.presets.map(p => p.id);
-        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+        await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         this._saveState();
       });
     }
@@ -1205,9 +1234,7 @@ class PopupController {
         if (!this.autoCycleActive) return;
         this.autoFilters = !this.autoFilters;
         autoFiltersBtn.classList.toggle('active', this.autoFilters);
-        // Re-send startAutoCycle with updated flags
-        const allIds = this.presets.map(p => p.id);
-        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+        await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         this._saveState();
       });
     }
