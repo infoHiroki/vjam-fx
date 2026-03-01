@@ -372,13 +372,14 @@ class PopupController {
         sceneBatch.push({ action: 'startVideoAudio' });
       }
 
-      await this._dispatch(sceneBatch);
+      await this._sendBatch(sceneBatch);
 
       if (this.audioEnabled) {
         chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('loadScene/tabAudio', e));
       }
 
       this._updateUI();
+      await this._saveState();
     } finally {
       this._busy = false;
     }
@@ -480,7 +481,7 @@ class PopupController {
         this.settings.fadeDuration = parseFloat(fadeEl.value);
         this._saveSettings();
         if (this.isActive) {
-          this._dispatch({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+          this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
         }
       });
     }
@@ -494,7 +495,7 @@ class PopupController {
         // Re-send auto-cycle with updated bars if active
         if (this.autoCycleActive) {
           const allIds = this.presets.map(p => p.id);
-          this._dispatch({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+          this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
         }
       });
     }
@@ -506,7 +507,7 @@ class PopupController {
         this.settings.sensitivity = sensEl.value;
         this._saveSettings();
         if (this.isActive) {
-          this._dispatch({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
+          this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
         }
       });
     }
@@ -519,7 +520,7 @@ class PopupController {
         this.settings.zoom = value / 100;
         if (zoomVal) zoomVal.textContent = this.settings.zoom + 'x';
         if (this.isActive) {
-          this._dispatch({ action: 'setZoom', zoom: this.settings.zoom });
+          this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
         }
       }, 50);
       zoomEl.addEventListener('input', () => {
@@ -540,7 +541,7 @@ class PopupController {
         osdBtn.classList.toggle('on', this.settings.osdEnabled);
         this._saveSettings();
         if (this.isActive) {
-          this._dispatch({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
+          this._sendCommand({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
         }
       });
     }
@@ -643,9 +644,10 @@ class PopupController {
             if (toggle) toggle.checked = true;
             await this._injectCore();
           }
-          await this._dispatch({ action: 'textAutoStart', text: text });
+          await this._sendCommand({ action: 'textAutoStart', text: text });
           btnTextOn.classList.add('active');
           this.textState = { text, autoText: true };
+          this._saveState();
         } finally {
           this._busy = false;
         }
@@ -659,10 +661,11 @@ class PopupController {
         if (this._busy) return;
         this._busy = true;
         try {
-          await this._dispatch([{ action: 'textClear' }, { action: 'textAutoStop' }]);
+          await this._sendBatch([{ action: 'textClear' }, { action: 'textAutoStop' }]);
           const btnOn = document.getElementById('btn-text-on');
           if (btnOn) btnOn.classList.remove('active');
           this.textState = null;
+          this._saveState();
         } finally {
           this._busy = false;
         }
@@ -698,9 +701,10 @@ class PopupController {
           this.autoCycleActive = false;
           const autoBtn = document.getElementById('btn-auto-cycle');
           if (autoBtn) autoBtn.classList.remove('active');
-          this._dispatch({ action: 'stopAutoCycle' });
+          this._sendCommand({ action: 'stopAutoCycle' });
         }
         this._updateLayerCount();
+        this._saveState();
       });
     }
 
@@ -719,8 +723,9 @@ class PopupController {
           btn.classList.add('active');
         }
         if (this.isActive) {
-          this._dispatch({ action: 'setBlendMode', blendMode: this.selectedBlendMode });
+          this._sendCommand({ action: 'setBlendMode', blendMode: this.selectedBlendMode });
         }
+        this._saveState();
       });
     }
 
@@ -730,7 +735,7 @@ class PopupController {
       const throttledOpacity = _throttle((value) => {
         this.opacity = value / 100;
         if (this.isActive) {
-          this._dispatch({ action: 'setOpacity', opacity: this.opacity });
+          this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
         }
       }, 50);
       opacitySlider.addEventListener('input', (e) => {
@@ -738,7 +743,7 @@ class PopupController {
       });
       opacitySlider.addEventListener('change', () => {
         this.opacity = parseInt(opacitySlider.value, 10) / 100;
-        this._dispatch({ action: 'setOpacity', opacity: this.opacity });
+        this._saveState();
       });
     }
 
@@ -756,14 +761,15 @@ class PopupController {
           if (this.audioEnabled) {
             const audioBatch = [{ action: 'startVideoAudio' }];
             if (this.isActive) audioBatch.push({ action: 'setAudioEnabled', enabled: true });
-            await this._dispatch(audioBatch);
+            await this._sendBatch(audioBatch);
             chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('audio/startTab', e));
           } else {
             const audioBatch = [{ action: 'stopVideoAudio' }];
             if (this.isActive) audioBatch.push({ action: 'setAudioEnabled', enabled: false });
-            await this._dispatch(audioBatch);
+            await this._sendBatch(audioBatch);
             chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('audio/stopTab', e));
           }
+          this._saveState();
         } finally {
           this._busy = false;
         }
@@ -777,8 +783,8 @@ class PopupController {
         if (this._busy) return;
         this._busy = true;
         try {
-        // Dispatch all reset commands through SW
-        await this._dispatch([
+        // Batch all reset commands in one executeScript call
+        await this._sendBatch([
           { action: 'stopVideoAudio' },
           { action: 'kill' },
           { action: 'textAutoStop' },
@@ -787,7 +793,6 @@ class PopupController {
           { action: 'setZoom', zoom: 1.0 },
           { action: 'setOsdEnabled', enabled: true },
           { action: 'setAudioSensitivity', sensitivity: 1.0 },
-          { action: 'stop' },
         ]);
         chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('reset/tabAudio', e));
         this.textState = null;
@@ -839,6 +844,7 @@ class PopupController {
         // Reset settings UI
         this._updateSettingsUI();
         this._updateLayerCount();
+        this._saveState();
 
         } finally {
           this._busy = false;
@@ -884,7 +890,7 @@ class PopupController {
           if (this.audioEnabled) {
             nextBatch.push({ action: 'startVideoAudio' });
           }
-          await this._dispatch(nextBatch);
+          await this._sendBatch(nextBatch);
           if (this.audioEnabled) {
             chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('next/tabAudio', e));
           }
@@ -903,6 +909,7 @@ class PopupController {
             const afBtn = document.getElementById('auto-filters');
             if (afBtn) afBtn.classList.remove('active');
           }
+          this._saveState();
         } finally {
           this._busy = false;
         }
@@ -927,7 +934,7 @@ class PopupController {
           const autoFiltersBtn = document.getElementById('auto-filters');
           if (autoFiltersBtn) autoFiltersBtn.classList.add('active');
           // Stop standalone autoFX (auto-cycle handles blend/filter)
-          await this._dispatch({ action: 'stopAutoFX' });
+          await this._sendCommand({ action: 'stopAutoFX' });
           if (!this.isActive) {
             const toggle = document.getElementById('toggle');
             if (toggle) toggle.checked = true;
@@ -935,14 +942,15 @@ class PopupController {
           }
           await this._injectAllPresets();
           const allIds = this.presets.map(p => p.id);
-          await this._dispatch({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+          await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
         } else {
-          await this._dispatch({ action: 'stopAutoCycle' });
+          await this._sendCommand({ action: 'stopAutoCycle' });
           // If blend/filter still on, start standalone autoFX
           if (this.autoBlend || this.autoFilters) {
-            await this._dispatch({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+            await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
           }
         }
+        this._saveState();
         } finally {
           this._busy = false;
         }
@@ -961,8 +969,9 @@ class PopupController {
           this.activeFilters.add(filter);
         }
         if (this.isActive) {
-          this._dispatch({ action: 'toggleFilter', filter: filter });
+          this._sendCommand({ action: 'toggleFilter', filter: filter });
         }
+        this._saveState();
       });
     }
 
@@ -973,12 +982,13 @@ class PopupController {
         this.autoBlend = !this.autoBlend;
         autoBlendBtn.classList.toggle('active', this.autoBlend);
         if (this.autoCycleActive) {
-          await this._dispatch({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
+          await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         } else if (this.autoBlend || this.autoFilters) {
-          await this._dispatch({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+          await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
         } else {
-          await this._dispatch({ action: 'stopAutoFX' });
+          await this._sendCommand({ action: 'stopAutoFX' });
         }
+        this._saveState();
       });
     }
 
@@ -989,12 +999,13 @@ class PopupController {
         this.autoFilters = !this.autoFilters;
         autoFiltersBtn.classList.toggle('active', this.autoFilters);
         if (this.autoCycleActive) {
-          await this._dispatch({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
+          await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         } else if (this.autoBlend || this.autoFilters) {
-          await this._dispatch({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+          await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
         } else {
-          await this._dispatch({ action: 'stopAutoFX' });
+          await this._sendCommand({ action: 'stopAutoFX' });
         }
+        this._saveState();
       });
     }
   }
@@ -1098,12 +1109,14 @@ class PopupController {
       batch.push({ action: 'setZoom', zoom: this.settings.zoom });
       batch.push({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
       batch.push({ action: 'setOpacity', opacity: this.opacity });
-      await this._dispatch(batch);
+      await this._sendBatch(batch);
 
-      // Start tabCapture fallback (separate from dispatch — goes to SW directly)
+      // Start tabCapture fallback (separate from batch — goes to SW)
       if (this.audioEnabled) {
         chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('startAll/tabAudio', e));
       }
+
+      await this._saveState();
     } catch (e) {
       this.isActive = false;
       this._coreInjected = false;
@@ -1119,11 +1132,13 @@ class PopupController {
     if (this._busy) return;
     this._busy = true;
     try {
-      await this._dispatch([{ action: 'stopVideoAudio' }, { action: 'stop' }]);
+      await this._sendCommand({ action: 'stopVideoAudio' });
       chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('stopAll/tabAudio', e));
+      await this._sendCommand({ action: 'stop' });
       this.isActive = false;
       this._coreInjected = false;
       this._injectedPresets.clear();
+      await this._saveState();
     } finally {
       this._busy = false;
     }
@@ -1133,14 +1148,16 @@ class PopupController {
     try {
       await this._injectCore();
       await this._injectPreset(presetId);
-      await this._dispatch({ action: 'addLayer', preset: presetId });
+      await this._sendCommand({ action: 'addLayer', preset: presetId });
+      await this._saveState();
     } catch (e) {
       console.warn('VJam FX: Failed to add layer', e);
     }
   }
 
   async _removeLayer(presetId) {
-    await this._dispatch({ action: 'removeLayer', preset: presetId });
+    await this._sendCommand({ action: 'removeLayer', preset: presetId });
+    await this._saveState();
   }
 
   _showBanner(text, type = 'error') {

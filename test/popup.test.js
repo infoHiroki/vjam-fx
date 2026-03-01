@@ -88,8 +88,7 @@ describe('PopupController', () => {
     it('should send stop command on toggle OFF', async () => {
       controller.isActive = true;
       await controller._stopAll();
-      // _stopAll uses _dispatch which goes through SW (sendMessage), not executeScript
-      expect(chrome.runtime.sendMessage).toHaveBeenCalled();
+      expect(chrome.scripting.executeScript).toHaveBeenCalled();
       expect(controller.isActive).toBe(false);
     });
   });
@@ -297,37 +296,17 @@ describe('PopupController', () => {
     });
   });
 
-  describe('_dispatch', () => {
-    it('should send command type message to SW', async () => {
-      chrome.runtime.sendMessage.mockClear();
-      await controller._dispatch([{ action: 'setOpacity', opacity: 0.5 }]);
-      const calls = chrome.runtime.sendMessage.mock.calls.map(c => c[0]);
-      const cmdCalls = calls.filter(c => c && c.type === 'command');
-      expect(cmdCalls.length).toBe(1);
-      expect(cmdCalls[0].tabId).toBe(1);
-      expect(cmdCalls[0].actions).toEqual([{ action: 'setOpacity', opacity: 0.5 }]);
-    });
-
-    it('should not send if no tabId', async () => {
-      controller._tabId = null;
-      chrome.runtime.sendMessage.mockClear();
-      const result = await controller._dispatch({ action: 'stop' });
-      expect(result).toBeNull();
-      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
-    });
-
-    it('should wrap single action in array', async () => {
-      chrome.runtime.sendMessage.mockClear();
-      await controller._dispatch({ action: 'setBlendMode', blendMode: 'difference' });
-      const call = chrome.runtime.sendMessage.mock.calls[0][0];
-      expect(call.type).toBe('command');
-      expect(call.actions).toEqual([{ action: 'setBlendMode', blendMode: 'difference' }]);
-    });
-
-    it('should return state from SW response', async () => {
-      chrome.runtime.sendMessage.mockResolvedValueOnce({ ok: true, state: { active: true, layers: ['rain'] } });
-      const state = await controller._dispatch({ action: 'start', preset: 'rain' });
-      expect(state).toEqual({ active: true, layers: ['rain'] });
+  describe('_startAll batching', () => {
+    it('should use fewer executeScript calls than before', async () => {
+      controller.activeLayers.add('neon-tunnel');
+      chrome.scripting.executeScript.mockClear();
+      await controller._startAll();
+      // Core inject (p5 + verify + base + text-overlay + engine) = ~5 calls
+      // Preset inject = 1 call
+      // Batch = 1 call (start + filters + settings in one)
+      // Total should be much less than the old 10+ calls
+      const callCount = chrome.scripting.executeScript.mock.calls.length;
+      expect(callCount).toBeLessThanOrEqual(8);
     });
   });
 
