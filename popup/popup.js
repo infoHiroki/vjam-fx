@@ -1087,6 +1087,9 @@ class PopupController {
           await this._injectAllPresets();
           const allIds = this.presets.map(p => p.id);
           await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+          // Clear preset checkboxes — auto-cycle manages presets automatically
+          document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+          this._updateLayerCount();
         } else {
           await this._sendCommand({ action: 'stopAutoCycle' });
           // If blend/filter still on, start standalone autoFX

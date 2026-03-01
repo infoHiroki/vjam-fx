@@ -177,7 +177,38 @@ body {
   border-color: #00cc66;
 }
 
-/* Action Bar */
+/* Hero Button (Auto) */
+.action-hero {
+  margin-bottom: 6px;
+}
+
+.hero-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #00cc66, #00aa55);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 2px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.hero-btn:hover {
+  background: linear-gradient(135deg, #00dd77, #00bb66);
+  transform: scale(1.02);
+}
+
+.hero-btn.active {
+  background: linear-gradient(135deg, #ff6600, #ff4400);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(255, 102, 0, 0.3);
+}
+
+/* Action Bar (secondary) */
 .action-bar {
   display: flex;
   gap: 4px;
