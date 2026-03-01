@@ -58,24 +58,10 @@
       this._osdEl = null;
       this._osdTimer = null;
 
-      // Video audio capture
-      this._videoAudioMedia = null;
-      this._videoAudioCtx = null;
-      this._videoAudioSource = null;
-      this._videoAudioAnalyser = null;
-      this._videoAudioFreqData = null;
-      this._videoAudioTimeData = null;
-      this._videoAudioBassLow = 0;
-      this._videoAudioBassHigh = 0;
-      this._videoAudioMidHigh = 0;
-      this._videoAudioTrebleHigh = 0;
-      this._videoAudioBassMax = 1e-6;
-      this._videoAudioMidMax = 1e-6;
-      this._videoAudioTrebleMax = 1e-6;
-      this._videoAudioRmsHistory = [];
-      this._videoAudioLastBeatTime = -1;
-      this._videoAudioOnsetTimes = [];
-      this._videoAudioTempo = 120;
+      // Video audio capture (delegated to VideoAudioCapture)
+      this._videoAudio = (window.VJamFX && window.VJamFX.VideoAudioCapture)
+        ? new window.VJamFX.VideoAudioCapture()
+        : null;
 
       // Text overlay
       this._textOverlay = null;
@@ -124,259 +110,23 @@
       }
     }
 
-    // --- Media Audio Capture (createMediaElementSource) ---
+    // --- Media Audio Capture (delegated to VideoAudioCapture) ---
 
     _startVideoAudio() {
-      // Already connected — just reconnect analyser
-      if (this._videoAudioCtx && this._videoAudioSource) {
-        if (this._videoAudioCtx.state === 'suspended') {
-          this._videoAudioCtx.resume().catch(function(e) { logWarn('audioCtx', e); });
-        }
-        if (this._videoAudioAnalyser) {
-          // Already fully connected
-          return;
-        }
-        // Recreate analyser and reconnect
-        var analyserNode = this._videoAudioCtx.createAnalyser();
-        analyserNode.fftSize = 2048;
-        analyserNode.smoothingTimeConstant = 0;
-        this._videoAudioSource.connect(analyserNode);
-        this._videoAudioAnalyser = analyserNode;
-        var binCount = analyserNode.frequencyBinCount;
-        this._videoAudioFreqData = new Float32Array(binCount);
-        this._videoAudioTimeData = new Float32Array(analyserNode.fftSize);
-        return;
-      }
-
-      var media = document.querySelector('video, audio');
-      if (media) {
-        this._connectMediaElement(media);
-      } else {
-        // No media element yet — watch for one to appear
-        // tabCapture fallback is started by popup directly (sendMessage to SW)
-        this._startMediaObserver();
-      }
-    }
-
-    _connectMediaElement(media) {
-      this._stopMediaObserver();
-      // Skip if already connected to this element
-      if (this._videoAudioMedia === media && this._videoAudioCtx) return;
-      this._videoAudioMedia = media;
-      try {
-        var ctx = new AudioContext();
-        // AudioContext may be suspended due to autoplay policy
-        if (ctx.state === 'suspended') {
-          ctx.resume().catch(function(e) { logWarn('audioCtx', e); });
-        }
-        var src = ctx.createMediaElementSource(media);
-        var newAnalyser = ctx.createAnalyser();
-        newAnalyser.fftSize = 2048;
-        newAnalyser.smoothingTimeConstant = 0;
-        src.connect(newAnalyser);
-        src.connect(ctx.destination); // keep audio playing
-
-        var binCount = newAnalyser.frequencyBinCount;
-        var freqPerBin = ctx.sampleRate / newAnalyser.fftSize;
-        this._videoAudioCtx = ctx;
-        this._videoAudioSource = src;
-        this._videoAudioAnalyser = newAnalyser;
-        this._videoAudioFreqData = new Float32Array(binCount);
-        this._videoAudioTimeData = new Float32Array(newAnalyser.fftSize);
-        this._videoAudioBassLow = Math.min(Math.floor(20 / freqPerBin), binCount);
-        this._videoAudioBassHigh = Math.min(Math.floor(250 / freqPerBin), binCount);
-        this._videoAudioMidHigh = Math.min(Math.floor(4000 / freqPerBin), binCount);
-        this._videoAudioTrebleHigh = Math.min(Math.floor(16000 / freqPerBin), binCount);
-        this._videoAudioBassMax = 1e-6;
-        this._videoAudioMidMax = 1e-6;
-        this._videoAudioTrebleMax = 1e-6;
-        this._videoAudioRmsHistory = [];
-        this._videoAudioLastBeatTime = -1;
-        this._videoAudioOnsetTimes = [];
-        this._videoAudioTempo = 120;
-        // Delay stopTabCapture — verify analyser produces non-silent data first
-        // (createMediaElementSource can "succeed" but return silence due to CORS/MSE)
-        var self = this;
-        var checkCount = 0;
-        if (self._silenceCheckTimer) clearInterval(self._silenceCheckTimer);
-        var checkTimer = self._silenceCheckTimer = setInterval(function() {
-          checkCount++;
-          if (!self._videoAudioAnalyser) { clearInterval(checkTimer); return; }
-          var testData = new Float32Array(self._videoAudioAnalyser.fftSize);
-          self._videoAudioAnalyser.getFloatTimeDomainData(testData);
-          var hasSignal = false;
-          for (var i = 0; i < testData.length; i++) {
-            if (testData[i] !== 0) { hasSignal = true; break; }
-          }
-          if (hasSignal) {
-            // Real audio confirmed — stop tabCapture fallback
-            window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
-            clearInterval(checkTimer);
-          } else if (checkCount >= 10) {
-            // 2 seconds of silence — CORS/MSE restriction likely, keep tabCapture
-            // Disconnect our silent analyser so engine falls through to _externalAudioData
-            if (self._videoAudioAnalyser) { self._videoAudioAnalyser.disconnect(); self._videoAudioAnalyser = null; }
-            self._videoAudioFreqData = null;
-            self._videoAudioTimeData = null;
-            clearInterval(checkTimer);
-          }
-        }, 200);
-      } catch (e) {
-        // createMediaElementSource failed (e.g. already called on this element)
-        // Do NOT stop tabCapture — let it continue as fallback audio source
-        if (ctx && ctx.state !== 'closed') ctx.close().catch(function(e) { logWarn('audioCtx', e); });
-      }
-    }
-
-    _startMediaObserver() {
-      if (this._mediaObserver) return;
-      var self = this;
-      this._mediaObserver = new MutationObserver(function(mutations) {
-        for (var i = 0; i < mutations.length; i++) {
-          for (var j = 0; j < mutations[i].addedNodes.length; j++) {
-            var node = mutations[i].addedNodes[j];
-            if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
-              self._connectMediaElement(node);
-              return;
-            }
-            // Check children of added subtree
-            if (node.querySelector) {
-              var media = node.querySelector('video, audio');
-              if (media) {
-                self._connectMediaElement(media);
-                return;
-              }
-            }
-          }
-        }
-      });
-      this._mediaObserver.observe(document.documentElement, { childList: true, subtree: true });
-    }
-
-    _stopMediaObserver() {
-      if (this._mediaObserver) {
-        this._mediaObserver.disconnect();
-        this._mediaObserver = null;
-      }
+      if (this._videoAudio) this._videoAudio.start();
     }
 
     _stopVideoAudio() {
-      // Disconnect analyser only — keep source→destination so audio keeps playing
-      this._stopMediaObserver();
-      if (this._silenceCheckTimer) { clearInterval(this._silenceCheckTimer); this._silenceCheckTimer = null; }
-      // tabCapture stop is handled by popup (sendMessage to SW directly)
-      if (this._videoAudioAnalyser) {
-        this._videoAudioAnalyser.disconnect();
-        this._videoAudioAnalyser = null;
-      }
-      this._videoAudioFreqData = null;
-      this._videoAudioTimeData = null;
+      if (this._videoAudio) this._videoAudio.stop();
     }
 
     _destroyVideoAudio() {
-      this._stopMediaObserver();
-      if (this._silenceCheckTimer) { clearInterval(this._silenceCheckTimer); this._silenceCheckTimer = null; }
-      // tabCapture stop is handled by popup (sendMessage to SW directly)
-      if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
-      if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
-      if (this._videoAudioCtx && this._videoAudioCtx.state !== 'closed') {
-        this._videoAudioCtx.close().catch(function(e) { logWarn('audioCtx', e); });
-      }
-      this._videoAudioCtx = null;
-      this._videoAudioMedia = null;
-      this._videoAudioFreqData = null;
-      this._videoAudioTimeData = null;
+      if (this._videoAudio) this._videoAudio.destroy();
     }
 
     _readVideoAudioData() {
-      if (!this._videoAudioAnalyser || !this._videoAudioTimeData) return null;
-
-      var analyserNode = this._videoAudioAnalyser;
-      var timeData = this._videoAudioTimeData;
-      var freqData = this._videoAudioFreqData;
-
-      analyserNode.getFloatTimeDomainData(timeData);
-      analyserNode.getFloatFrequencyData(freqData);
-
-      // RMS
-      var sum = 0;
-      for (var i = 0; i < timeData.length; i++) sum += timeData[i] * timeData[i];
-      var rms = Math.sqrt(sum / timeData.length);
-
-      // Frequency bands
-      var DECAY = 0.995;
-      var bassRaw = 0, midRaw = 0, trebleRaw = 0;
-      for (var j = this._videoAudioBassLow; j < this._videoAudioBassHigh; j++) {
-        bassRaw += Math.pow(10, freqData[j] / 20);
-      }
-      for (var k = this._videoAudioBassHigh; k < this._videoAudioMidHigh; k++) {
-        midRaw += Math.pow(10, freqData[k] / 20);
-      }
-      for (var m = this._videoAudioMidHigh; m < this._videoAudioTrebleHigh; m++) {
-        trebleRaw += Math.pow(10, freqData[m] / 20);
-      }
-      if (!isFinite(bassRaw)) bassRaw = 0;
-      if (!isFinite(midRaw)) midRaw = 0;
-      if (!isFinite(trebleRaw)) trebleRaw = 0;
-
-      this._videoAudioBassMax *= DECAY;
-      this._videoAudioMidMax *= DECAY;
-      this._videoAudioTrebleMax *= DECAY;
-      this._videoAudioBassMax = Math.max(this._videoAudioBassMax, bassRaw, 1e-6);
-      this._videoAudioMidMax = Math.max(this._videoAudioMidMax, midRaw, 1e-6);
-      this._videoAudioTrebleMax = Math.max(this._videoAudioTrebleMax, trebleRaw, 1e-6);
-
-      var bass = bassRaw / this._videoAudioBassMax;
-      var mid = midRaw / this._videoAudioMidMax;
-      var treble = trebleRaw / this._videoAudioTrebleMax;
-
-      // Beat detection: RMS spike
-      var beat = false;
-      var MIN_RMS_FOR_BEAT = 0.01;
-      var SPIKE_RATIO = 1.3;
-      var MIN_BEAT_INTERVAL = 0.25;
-      var now = performance.now() / 1000;
-
-      if (rms >= MIN_RMS_FOR_BEAT && this._videoAudioRmsHistory.length >= 3) {
-        var avg = 0;
-        for (var h = 0; h < this._videoAudioRmsHistory.length; h++) avg += this._videoAudioRmsHistory[h];
-        avg /= this._videoAudioRmsHistory.length;
-        if (avg > 0 && rms > avg * SPIKE_RATIO && now - this._videoAudioLastBeatTime >= MIN_BEAT_INTERVAL) {
-          beat = true;
-          this._videoAudioLastBeatTime = now;
-          this._videoAudioOnsetTimes.push(now);
-          if (this._videoAudioOnsetTimes.length > 100) this._videoAudioOnsetTimes.shift();
-          var cutoff = now - 10;
-          while (this._videoAudioOnsetTimes.length > 0 && this._videoAudioOnsetTimes[0] < cutoff) this._videoAudioOnsetTimes.shift();
-          // BPM estimation
-          if (this._videoAudioOnsetTimes.length >= 4) {
-            var start = Math.max(0, this._videoAudioOnsetTimes.length - 10);
-            var intervals = [];
-            for (var t = start + 1; t < this._videoAudioOnsetTimes.length; t++) {
-              var iv = this._videoAudioOnsetTimes[t] - this._videoAudioOnsetTimes[t - 1];
-              if (iv > 0.25 && iv < 1.2) intervals.push(iv);
-            }
-            if (intervals.length > 0) {
-              intervals.sort(function(a, b) { return a - b; });
-              var midIdx = Math.floor(intervals.length / 2);
-              var median = intervals.length % 2 === 0
-                ? (intervals[midIdx - 1] + intervals[midIdx]) / 2
-                : intervals[midIdx];
-              var newTempo = 60 / median;
-              this._videoAudioTempo = 0.7 * this._videoAudioTempo + 0.3 * newTempo;
-              this._videoAudioTempo = Math.max(60, Math.min(180, this._videoAudioTempo));
-            }
-          }
-        }
-      }
-      this._videoAudioRmsHistory.push(rms);
-      if (this._videoAudioRmsHistory.length > 30) this._videoAudioRmsHistory.shift();
-
-      var timeSinceBeat = now - this._videoAudioLastBeatTime;
-      var strength = (rms >= MIN_RMS_FOR_BEAT && timeSinceBeat < 0.2) ? 1.0 - (timeSinceBeat / 0.2) : 0;
-
-      var sens = this._audioSensitivity;
-      return { beat: beat, bpm: this._videoAudioTempo, strength: Math.min(1, strength * sens), rms: rms * sens, bass: Math.min(1, bass * sens), mid: Math.min(1, mid * sens), treble: Math.min(1, treble * sens) };
+      if (!this._videoAudio) return null;
+      return this._videoAudio.readData(this._audioSensitivity);
     }
 
     createOverlay() {
@@ -556,7 +306,7 @@
         // Priority: video audio (createMediaElementSource) → external bridge (offscreen)
         var audioData = null;
         if (self.audioEnabled && timestamp - lastAudioTime >= AUDIO_INTERVAL) {
-          if (self._videoAudioAnalyser) {
+          if (self._videoAudio && self._videoAudio.hasAnalyser()) {
             audioData = self._readVideoAudioData();
           } else if (self._externalAudioData) {
             audioData = self._externalAudioData;
@@ -750,8 +500,8 @@
         // Priority: video audio tempo → external bridge data
         let interval = self._autoCycleBaseInterval;
         let bpm = 0;
-        if (self._videoAudioAnalyser && self._videoAudioTempo > 0) {
-          bpm = self._videoAudioTempo;
+        if (self._videoAudio && self._videoAudio.hasAnalyser() && self._videoAudio.getTempo() > 0) {
+          bpm = self._videoAudio.getTempo();
         } else if (self._externalAudioData && self._externalAudioData.bpm > 0) {
           bpm = self._externalAudioData.bpm;
         }
@@ -854,8 +604,8 @@
       const scheduleNext = () => {
         let interval = 8000;
         let bpm = 0;
-        if (self._videoAudioAnalyser && self._videoAudioTempo > 0) {
-          bpm = self._videoAudioTempo;
+        if (self._videoAudio && self._videoAudio.hasAnalyser() && self._videoAudio.getTempo() > 0) {
+          bpm = self._videoAudio.getTempo();
         } else if (self._externalAudioData && self._externalAudioData.bpm > 0) {
           bpm = self._externalAudioData.bpm;
         }
