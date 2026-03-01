@@ -437,8 +437,11 @@ class PopupController {
     if (this.textState) {
       const textInput = document.getElementById('text-input');
       if (textInput && this.textState.text) textInput.value = this.textState.text;
-      const btnTextOn = document.getElementById('btn-text-on');
-      if (btnTextOn) btnTextOn.classList.toggle('active', !!this.textState.autoText);
+      const btnTextToggle = document.getElementById('btn-text-toggle');
+      if (btnTextToggle && this.textState.autoText) {
+        btnTextToggle.classList.add('active');
+        btnTextToggle.textContent = 'OFF';
+      }
     }
 
     this._updateLayerCount();
@@ -765,38 +768,42 @@ class PopupController {
       });
     }
 
-    // Text ON
-    const btnTextOn = document.getElementById('btn-text-on');
-    if (btnTextOn) {
-      btnTextOn.addEventListener('click', async () => {
-        const textInput = document.getElementById('text-input');
-        const text = textInput ? textInput.value.trim() : '';
-        if (!text) return;
-        if (!this.isActive) {
-          this.isActive = true;
-          const toggle = document.getElementById('toggle');
-          if (toggle) toggle.checked = true;
-          await this._injectCore();
+    // Text toggle
+    const btnTextToggle = document.getElementById('btn-text-toggle');
+    const textInput = document.getElementById('text-input');
+    const textToggleOn = async () => {
+      const text = textInput ? textInput.value.trim() : '';
+      if (!text) return;
+      if (!this.isActive) {
+        this.isActive = true;
+        const toggle = document.getElementById('toggle');
+        if (toggle) toggle.checked = true;
+        await this._injectCore();
+      }
+      await this._sendCommand({ action: 'textAutoStart', text: text });
+      if (btnTextToggle) { btnTextToggle.classList.add('active'); btnTextToggle.textContent = 'OFF'; }
+      this.textState = { text, autoText: true };
+      this._saveState();
+    };
+    const textToggleOff = async () => {
+      await this._sendCommand({ action: 'textClear' });
+      await this._sendCommand({ action: 'textAutoStop' });
+      if (btnTextToggle) { btnTextToggle.classList.remove('active'); btnTextToggle.textContent = 'GO'; }
+      this.textState = null;
+      this._saveState();
+    };
+    if (btnTextToggle) {
+      btnTextToggle.addEventListener('click', () => {
+        if (this.textState && this.textState.autoText) {
+          textToggleOff();
+        } else {
+          textToggleOn();
         }
-        await this._sendCommand({ action: 'textAutoStart', text: text });
-        btnTextOn.classList.add('active');
-        this.textState = { text, autoText: true };
-
-        this._saveState();
       });
     }
-
-    // Text OFF
-    const btnTextOff = document.getElementById('btn-text-off');
-    if (btnTextOff) {
-      btnTextOff.addEventListener('click', async () => {
-        await this._sendCommand({ action: 'textClear' });
-        await this._sendCommand({ action: 'textAutoStop' });
-        const btnOn = document.getElementById('btn-text-on');
-        if (btnOn) btnOn.classList.remove('active');
-        this.textState = null;
-
-        this._saveState();
+    if (textInput) {
+      textInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') textToggleOn();
       });
     }
 
@@ -952,8 +959,8 @@ class PopupController {
         // Reset text UI
         const textInput = document.getElementById('text-input');
         if (textInput) textInput.value = '';
-        const btnTextOn = document.getElementById('btn-text-on');
-        if (btnTextOn) btnTextOn.classList.remove('active');
+        const btnTextToggle = document.getElementById('btn-text-toggle');
+        if (btnTextToggle) { btnTextToggle.classList.remove('active'); btnTextToggle.textContent = 'GO'; }
         // Reset settings UI
         this._updateSettingsUI();
         this._updateLayerCount();

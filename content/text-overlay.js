@@ -432,6 +432,10 @@ class TextOverlay {
       var effect = effectNames[Math.floor(Math.random() * effectNames.length)];
       var colors = ['#ffffff','#00ff88','#ff0066','#00ccff','#ffcc00','#ff6600','#cc00ff'];
       self.color = colors[Math.floor(Math.random() * colors.length)];
+      var fontKey = TEXT_FONT_NAMES[Math.floor(Math.random() * TEXT_FONT_NAMES.length)];
+      self.pendingFont = fontKey;
+      loadGoogleFont(fontKey);
+      self.fontSize = 40 + Math.floor(Math.random() * 100);
       self.displayText(text, effect, 'random');
       var interval = 3000 + Math.random() * 4000;
       if (self.audio.bpm > 0) {
