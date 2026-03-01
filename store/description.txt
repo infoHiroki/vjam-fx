@@ -1,0 +1,32 @@
+Turn any website into a VJ stage.
+
+VJam FX overlays music-reactive visuals on any webpage — YouTube, Spotify, SoundCloud, or any site with audio. No setup needed. Just click and play.
+
+🎨 194 Visual Presets
+14 categories: Particles, Geometry, Wave, Tunnel, Grid, Abstract, Nature, Text, Neon, Retro, Glitch, Minimal, Psychedelic, 3D.
+
+🎵 Beat-Reactive
+Visuals react to music in real-time. Works with any audio playing on the page — videos, music players, or streaming services.
+
+⚡ Auto Mode
+One-click auto-cycling with beat sync. Presets change on the beat. Add auto-rotation for blend modes and filters too.
+
+🎛️ Full Control
+- Multi-layer compositing (stack multiple presets)
+- 4 blend modes (Lighten, Difference, Exclusion, Dodge)
+- 8 CSS filters (Invert, Hue Rotate, Grayscale, Saturate, Brightness, Contrast, Sepia, Blur)
+- Adjustable opacity and fade transitions
+- Lock any section to keep your favorites
+
+💾 12 Scene Slots
+Save and recall your favorite combinations instantly.
+
+✏️ Text Effects
+Overlay animated text with randomized fonts, colors, and positions.
+
+🔒 Privacy
+- No data collection
+- No external servers
+- All processing happens locally in your browser
+
+Built by the team behind VJam — the browser-based VJ app.

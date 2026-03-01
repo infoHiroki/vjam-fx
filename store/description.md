@@ -4,7 +4,7 @@
 VJam FX — VJ Effects for Any Website
 
 ## Short Description (132 chars max)
-Overlay 194 music-reactive VJ visuals on any webpage. 14 categories, multi-layer, beat detection, auto-cycle, scenes. Free.
+Overlay 194 music-reactive VJ visuals on any webpage. Beat detection, auto-cycle, multi-layer, filters, blend modes, scenes. Free.
 
 ## Detailed Description
 
@@ -26,31 +26,28 @@ VJam FX overlays real-time music-reactive visual effects on top of any website. 
 - Audio Reactive (16): Frequency Rings, Equalizer, Sine Waves, Waveform
 - Particles (8): Particle Storm, Fireflies, Confetti, Sparks
 - Weather (4): Rain, Neon Rain, Cyber Rain, Snow
-- Image FX (3): Image Glitch, Image Kaleidoscope, Image Mirror
 
 **Features:**
 - Multi-layer: up to 3 presets running simultaneously with smooth fade transitions
 - Real-time beat detection from video/audio elements — no microphone required
 - Tab audio capture fallback for full audio coverage
 - 8 CSS filters: Invert, Hue Rotate, Grayscale, Saturate, Brightness, Contrast, Sepia, Blur
-- 4 blend modes: Screen, Lighten, Difference, Exclusion
+- 4 blend modes: Lighten, Difference, Exclusion, Color Dodge
 - Auto-cycle: BPM-connected automatic preset rotation
 - Auto Blend / Auto Filter: randomize blend modes and filters during Auto
-- Scenes: save and load preset+filter+blend configurations
+- 12 Scene slots: save and load preset+filter+blend configurations
 - Text Effects: random text overlays with auto font/position/color
-- Image FX: image-based visual effects
-- Lock: lock current preset selection
-- On-screen display feedback
+- Lock: lock presets, filters, or blend mode independently
 - Effects persist across page navigations
 - Zero impact when OFF — no background processes
 
 **How to use:**
 1. Click the VJam FX icon in your toolbar
-2. Toggle ON
-3. Press "Next" for random presets, or select manually
-4. Press "Auto" for continuous BPM-synced cycling
-5. Play a video — audio-reactive visuals start automatically (no microphone needed)
-6. Save your favorite configurations to Scene slots
+2. Toggle ON and press "Auto" for instant BPM-synced visuals
+3. Or press "Next" for random presets, or select manually from 194 presets
+4. Play a video — audio-reactive visuals start automatically (no microphone needed)
+5. Customize with filters, blend modes, and opacity
+6. Save your favorite configurations to 12 Scene slots
 
 **Privacy:**
 - Audio is captured directly from video/audio elements on the page — no microphone needed
