@@ -15,10 +15,6 @@
   // Guard against double-injection
   if (window._vjamFxEngine) return;
 
-  function logWarn(context, e) {
-    console.warn('VJam FX [' + context + ']:', e && e.message ? e.message : e);
-  }
-
   const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
 
   const FILTER_VALUES = {
@@ -117,11 +113,6 @@
         };
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
       }
-
-      if (!this._onBeforeUnload) {
-        this._onBeforeUnload = () => { this.destroy(); };
-        window.addEventListener('beforeunload', this._onBeforeUnload);
-      }
     }
 
     // --- Media Audio Capture (createMediaElementSource) ---
@@ -130,7 +121,7 @@
       // Already connected — just reconnect analyser
       if (this._videoAudioCtx && this._videoAudioSource) {
         if (this._videoAudioCtx.state === 'suspended') {
-          this._videoAudioCtx.resume().catch(function(e) { logWarn('audioCtx', e); });
+          this._videoAudioCtx.resume().catch(function() {});
         }
         if (this._videoAudioAnalyser) {
           // Already fully connected
@@ -167,7 +158,7 @@
         var ctx = new AudioContext();
         // AudioContext may be suspended due to autoplay policy
         if (ctx.state === 'suspended') {
-          ctx.resume().catch(function(e) { logWarn('audioCtx', e); });
+          ctx.resume().catch(function() {});
         }
         var src = ctx.createMediaElementSource(media);
         var newAnalyser = ctx.createAnalyser();
@@ -224,7 +215,7 @@
       } catch (e) {
         // createMediaElementSource failed (e.g. already called on this element)
         // Do NOT stop tabCapture — let it continue as fallback audio source
-        if (ctx && ctx.state !== 'closed') ctx.close().catch(function(e) { logWarn('audioCtx', e); });
+        if (ctx && ctx.state !== 'closed') ctx.close().catch(function() {});
       }
     }
 
@@ -280,7 +271,7 @@
       if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
       if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
       if (this._videoAudioCtx && this._videoAudioCtx.state !== 'closed') {
-        this._videoAudioCtx.close().catch(function(e) { logWarn('audioCtx', e); });
+        this._videoAudioCtx.close().catch(function() {});
       }
       this._videoAudioCtx = null;
       this._videoAudioMedia = null;
@@ -488,11 +479,6 @@
 
       // Fade out then remove
       const container = layer.container;
-      // Guard: if container is already detached, just destroy the preset
-      if (!container.parentNode) {
-        try { layer.preset.destroy(); } catch (e) { console.warn('VJam FX: destroy error', e); }
-        return;
-      }
       const fadeSec = this._fadeDuration > 0 ? this._fadeDuration : 0;
       if (fadeSec === 0) {
         layer.preset.destroy();
@@ -594,16 +580,6 @@
         this._rafId = null;
       }
 
-      // Clear OSD timer and element
-      if (this._osdTimer) {
-        clearTimeout(this._osdTimer);
-        this._osdTimer = null;
-      }
-      if (this._osdEl) {
-        this._osdEl.remove();
-        this._osdEl = null;
-      }
-
       // Destroy all layers
       for (const [, layer] of this.activeLayers) {
         layer.preset.destroy();
@@ -634,11 +610,6 @@
       if (this._onFullscreenChange) {
         document.removeEventListener('fullscreenchange', this._onFullscreenChange);
         this._onFullscreenChange = null;
-      }
-
-      if (this._onBeforeUnload) {
-        window.removeEventListener('beforeunload', this._onBeforeUnload);
-        this._onBeforeUnload = null;
       }
 
       this._externalAudioData = null;
@@ -923,7 +894,6 @@
     }
 
     handleMessage(msg) {
-      if (!msg || typeof msg.action !== 'string') return;
       switch (msg.action) {
         case 'start':
           this.startPreset(msg.preset);
@@ -951,17 +921,14 @@
           if (!this.audioEnabled) this._externalAudioData = null;
           break;
         case 'addLayer':
-          if (typeof msg.preset !== 'string') break;
           if (!this.activeLayers.has(msg.preset)) {
             this._addLayer(msg.preset);
           }
           break;
         case 'removeLayer':
-          if (typeof msg.preset !== 'string') break;
           this._removeLayer(msg.preset);
           break;
         case 'toggleLayer':
-          if (typeof msg.preset !== 'string') break;
           this.toggleLayer(msg.preset);
           break;
         case 'setFilter':
@@ -992,7 +959,6 @@
           this._osdEnabled = msg.enabled !== false;
           break;
         case 'startAutoCycle':
-          if (!Array.isArray(msg.presets)) break;
           this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks, skipFirstTick: msg.skipFirstTick });
           break;
         case 'stopAutoCycle':
@@ -1018,7 +984,6 @@
           if (this._textOverlay) this._textOverlay.setParams(msg.params || {});
           break;
         case 'textDisplay':
-          if (typeof msg.text !== 'string' || msg.text.length > 200) break;
           this._ensureTextOverlay();
           if (this._textOverlay) this._textOverlay.displayText(msg.text, msg.effect, msg.position);
           break;
@@ -1026,7 +991,6 @@
           if (this._textOverlay) this._textOverlay.clearAll();
           break;
         case 'textAutoStart':
-          if (typeof msg.text !== 'string' || msg.text.length > 200) break;
           this._ensureTextOverlay();
           if (this._textOverlay) this._textOverlay.startAutoText(msg.text);
           break;
@@ -1040,13 +1004,6 @@
           }
           break;
         }
-      }
-    }
-
-    handleBatch(messages) {
-      if (!Array.isArray(messages)) return;
-      for (let i = 0; i < messages.length; i++) {
-        this.handleMessage(messages[i]);
       }
     }
 

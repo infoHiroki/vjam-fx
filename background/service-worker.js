@@ -4,10 +4,6 @@
  * Supports multi-layer presets and CSS filters.
  */
 
-function logWarn(context, e) {
-  console.warn('VJam FX [' + context + ']:', e && e.message ? e.message : e);
-}
-
 // Per-tab state: { tabId: { active, layers[], blendMode, audioEnabled, filters[] } }
 // In-memory cache (fast access) + chrome.storage.session (survives SW termination)
 const tabState = new Map();
@@ -19,7 +15,7 @@ function storageKey(tabId) {
 function setState(tabId, state) {
   const copy = { ...state };
   tabState.set(tabId, copy);
-  chrome.storage.session.set({ [storageKey(tabId)]: copy }).catch(e => logWarn('setState', e));
+  chrome.storage.session.set({ [storageKey(tabId)]: copy }).catch(() => {});
 }
 
 async function getState(tabId) {
@@ -39,7 +35,7 @@ async function getState(tabId) {
 
 function clearState(tabId) {
   tabState.delete(tabId);
-  chrome.storage.session.remove(storageKey(tabId)).catch(e => logWarn('clearState', e));
+  chrome.storage.session.remove(storageKey(tabId)).catch(() => {});
 }
 
 // Restore in-memory cache from storage.session on SW startup
@@ -50,7 +46,7 @@ chrome.storage.session.get(null).then((all) => {
       if (!isNaN(tabId)) tabState.set(tabId, value);
     }
   }
-}).catch(e => logWarn('restoreState', e));
+}).catch(() => {});
 
 function isInjectableUrl(url) {
   if (!url) return false;
@@ -226,7 +222,7 @@ async function startTabAudio(tabId) {
   try {
     // Stop existing capture first (idempotent)
     if (activeTabAudioTabId !== null) {
-      await stopTabAudio(activeTabAudioTabId).catch(e => logWarn('tabAudio/stopExisting', e));
+      await stopTabAudio(activeTabAudioTabId).catch(() => {});
     }
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
     await ensureOffscreen();
@@ -313,7 +309,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.tabs.sendMessage(activeTabAudioTabId, {
       type: 'audioData',
       data: msg.data,
-    }).catch(e => logWarn('audioRelay', e));
+    }).catch(() => {}); // ignore if tab is gone
     sendResponse({ ok: true });
   }
   return false;
@@ -343,9 +339,9 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
           }
         },
       });
-    } catch (e) { logWarn('navRestore/videoAudio', e); }
+    } catch (e) { /* ignore */ }
     // Start tabCapture as fallback (content will stop it if media element found)
-    startTabAudio(details.tabId).catch(e => logWarn('navRestore/tabAudio', e));
+    startTabAudio(details.tabId).catch(() => {});
   }
 });
 
@@ -353,6 +349,6 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   clearState(tabId);
   if (activeTabAudioTabId === tabId) {
-    stopTabAudio(tabId).catch(e => logWarn('tabRemoved/stop', e));
+    stopTabAudio(tabId).catch(() => {});
   }
 });

@@ -4,25 +4,228 @@
  * Syncs state with Service Worker for navigation persistence
  */
 
-function logWarn(context, e) {
-  console.warn('VJam FX [' + context + ']:', e && e.message ? e.message : e);
-}
+const PRESET_CATEGORIES = [
+  { label: 'Immersive', presets: [
+    { id: 'neon-tunnel', name: 'Neon Tunnel' },
+    { id: 'laser-tunnel', name: 'Laser Tunnel' },
+    { id: 'infinite-zoom', name: 'Infinite Zoom' },
+    { id: 'hypnotic', name: 'Hypnotic' },
+    { id: 'wormhole', name: 'Wormhole' },
+    { id: 'warp-speed', name: 'Warp Speed' },
+    { id: 'tunnel-zoom', name: 'Tunnel Zoom' },
+    { id: 'root-tunnel', name: 'Root Tunnel' },
+    { id: 'helix-tunnel', name: 'Helix Tunnel' },
+    { id: 'deep-dive', name: 'Deep Dive' },
+    { id: 'deep-ocean', name: 'Deep Ocean' },
+    { id: 'portal-ring', name: 'Portal Ring' },
+    { id: 'cyber-corridor', name: 'Cyber Corridor' },
+    { id: 'time-warp', name: 'Time Warp' },
+    { id: 'gravity-well', name: 'Gravity Well' },
+    { id: 'plasma-wave', name: 'Plasma Wave' },
+    { id: 'aurora', name: 'Aurora' },
+    { id: 'northern-lights', name: 'Northern Lights' },
+    { id: 'crystal-cave', name: 'Crystal Cave' },
+    { id: 'chrome-wave', name: 'Chrome Wave' },
+    { id: 'sunset-drive', name: 'Sunset Drive' },
+    { id: 'neon-highway', name: 'Neon Highway' },
+    { id: 'dna-aurora', name: 'DNA Aurora' },
+    { id: 'plasma-ball', name: 'Plasma Ball' },
+    { id: 'hologram', name: 'Hologram' },
+  ]},
+  { label: 'Frames & Film', presets: [
+    { id: 'neon-frame', name: 'Neon Frame' },
+    { id: 'light-leak', name: 'Light Leak' },
+    { id: 'film-burn', name: 'Film Burn' },
+    { id: 'film-scratch', name: 'Film Scratch' },
+    { id: 'scan-line', name: 'Scan Line' },
+    { id: 'vhs-noise', name: 'VHS Noise' },
+    { id: 'vhs-tracking', name: 'VHS Tracking' },
+    { id: 'film-grain', name: 'Film Grain' },
+    { id: 'film-countdown', name: 'Film Countdown' },
+    { id: 'film-reel', name: 'Film Reel' },
+    { id: 'vhs-rewind', name: 'VHS Rewind' },
+    { id: 'polaroid-flash', name: 'Polaroid Flash' },
+    { id: 'tape-distort', name: 'Tape Distort' },
+  ]},
+  { label: 'Patterns', presets: [
+    { id: 'kaleidoscope', name: 'Kaleidoscope' },
+    { id: 'mandala', name: 'Mandala' },
+    { id: 'sacred-geometry', name: 'Sacred Geometry' },
+    { id: 'moire', name: 'Moire' },
+    { id: 'prism', name: 'Prism' },
+    { id: 'barcode', name: 'Barcode' },
+    { id: 'spirograph', name: 'Spirograph' },
+    { id: 'cyber-mandala', name: 'Cyber Mandala' },
+    { id: 'penrose-tile', name: 'Penrose Tile' },
+    { id: 'checker-wave', name: 'Checker Wave' },
+    { id: 'hermann-grid', name: 'Hermann Grid' },
+    { id: 'op-art', name: 'Op Art' },
+    { id: 'stained-glass', name: 'Stained Glass' },
+    { id: 'dot-halftone', name: 'Dot Halftone' },
+    { id: 'wave-rings', name: 'Wave Rings' },
+    { id: 'pendulum-wave', name: 'Pendulum Wave' },
+  ]},
+  { label: 'Organic', presets: [
+    { id: 'cellular', name: 'Cellular' },
+    { id: 'liquid', name: 'Liquid' },
+    { id: 'voronoi', name: 'Voronoi' },
+    { id: 'smoke', name: 'Smoke' },
+    { id: 'oil-spill', name: 'Oil Spill' },
+    { id: 'coral-reef', name: 'Coral Reef' },
+    { id: 'flow-field', name: 'Flow Field' },
+    { id: 'ant-colony', name: 'Ant Colony' },
+    { id: 'bioluminescence', name: 'Bioluminescence' },
+    { id: 'ink-blot', name: 'Ink Blot' },
+    { id: 'ink-wash', name: 'Ink Wash' },
+    { id: 'lava-lamp', name: 'Lava Lamp' },
+    { id: 'lava-rise', name: 'Lava Rise' },
+    { id: 'bubble-float', name: 'Bubble Float' },
+    { id: 'growth-spiral', name: 'Growth Spiral' },
+    { id: 'mycelium', name: 'Mycelium' },
+    { id: 'fungal-web', name: 'Fungal Web' },
+  ]},
+  { label: 'Nature', presets: [
+    { id: 'fractal-tree', name: 'Fractal Tree' },
+    { id: 'flower-bloom', name: 'Flower Bloom' },
+    { id: 'autumn-fall', name: 'Autumn Fall' },
+    { id: 'dandelion-seeds', name: 'Dandelion Seeds' },
+    { id: 'petal-storm', name: 'Petal Storm' },
+    { id: 'meadow-breeze', name: 'Meadow Breeze' },
+    { id: 'leaf-vein', name: 'Leaf Vein' },
+    { id: 'vine-growth', name: 'Vine Growth' },
+    { id: 'neon-vines', name: 'Neon Vines' },
+    { id: 'forest-canopy', name: 'Forest Canopy' },
+    { id: 'northern-forest', name: 'Northern Forest' },
+    { id: 'seed-burst', name: 'Seed Burst' },
+    { id: 'pollen-cloud', name: 'Pollen Cloud' },
+    { id: 'tree-ring', name: 'Tree Ring' },
+    { id: 'moss-carpet', name: 'Moss Carpet' },
+    { id: 'lichen-spread', name: 'Lichen Spread' },
+    { id: 'spore-drift', name: 'Spore Drift' },
+  ]},
+  { label: 'Water', presets: [
+    { id: 'water-surface', name: 'Water Surface' },
+    { id: 'river-stream', name: 'River Stream' },
+    { id: 'waterfall-mist', name: 'Waterfall Mist' },
+    { id: 'tide-wave', name: 'Tide Wave' },
+    { id: 'tide-pool', name: 'Tide Pool' },
+    { id: 'rain-puddles', name: 'Rain Puddles' },
+    { id: 'pond-life', name: 'Pond Life' },
+    { id: 'kelp-forest', name: 'Kelp Forest' },
+    { id: 'ice-formation', name: 'Ice Formation' },
+    { id: 'erosion-line', name: 'Erosion Line' },
+  ]},
+  { label: 'Grid & Tech', presets: [
+    { id: 'glitch-grid', name: 'Glitch Grid' },
+    { id: 'hexgrid-pulse', name: 'Hexgrid Pulse' },
+    { id: 'grid-warp', name: 'Grid Warp' },
+    { id: 'circuit-board', name: 'Circuit Board' },
+    { id: 'crt-monitor', name: 'CRT Monitor' },
+    { id: 'retro-terminal', name: 'Retro Terminal' },
+    { id: 'circuit-trace', name: 'Circuit Trace' },
+    { id: 'cyber-grid', name: 'Cyber Grid' },
+    { id: 'hex-network', name: 'Hex Network' },
+    { id: 'led-matrix', name: 'LED Matrix' },
+    { id: 'dot-matrix', name: 'Dot Matrix' },
+    { id: 'neural-net', name: 'Neural Net' },
+    { id: 'isometric-city', name: 'Isometric City' },
+    { id: 'wireframe-city', name: 'Wireframe City' },
+    { id: 'floating-ui', name: 'Floating UI' },
+    { id: 'data-stream', name: 'Data Stream' },
+    { id: 'data-cascade', name: 'Data Cascade' },
+    { id: 'data-sprites', name: 'Data Sprites' },
+    { id: 'matrix-code', name: 'Matrix Code' },
+    { id: 'matrix-rain', name: 'Matrix Rain' },
+  ]},
+  { label: 'Space', presets: [
+    { id: 'starfield', name: 'Starfield' },
+    { id: 'constellation', name: 'Constellation' },
+    { id: 'bokeh', name: 'Bokeh' },
+    { id: 'terrain', name: 'Terrain' },
+    { id: 'meteor-shower', name: 'Meteor Shower' },
+    { id: 'orbits', name: 'Orbits' },
+    { id: 'cyber-sun', name: 'Cyber Sun' },
+    { id: 'dna-helix', name: 'DNA Helix' },
+    { id: 'crystal-lattice', name: 'Crystal Lattice' },
+    { id: 'radar', name: 'Radar' },
+    { id: 'sand-dunes', name: 'Sand Dunes' },
+  ]},
+  { label: 'Neon & Glow', presets: [
+    { id: 'neon-80s', name: 'Neon 80s' },
+    { id: 'neon-bars', name: 'Neon Bars' },
+    { id: 'neon-dust', name: 'Neon Dust' },
+    { id: 'neon-jellyfish', name: 'Neon Jellyfish' },
+    { id: 'neon-smoke', name: 'Neon Smoke' },
+    { id: 'electric-arc', name: 'Electric Arc' },
+    { id: 'electric-city', name: 'Electric City' },
+    { id: 'electric-fence', name: 'Electric Fence' },
+    { id: 'lightning', name: 'Lightning' },
+    { id: 'light-swarm', name: 'Light Swarm' },
+    { id: 'fireflies', name: 'Fireflies' },
+    { id: 'ember-drift', name: 'Ember Drift' },
+    { id: 'cathode-glow', name: 'Cathode Glow' },
+    { id: 'fire-wall', name: 'Fire Wall' },
+    { id: 'paper-lantern', name: 'Paper Lantern' },
+  ]},
+  { label: 'Glitch & Retro', presets: [
+    { id: 'glitch-8bit', name: 'Glitch 8bit' },
+    { id: 'glitch-wave', name: 'Glitch Wave' },
+    { id: 'cyber-glitch', name: 'Cyber Glitch' },
+    { id: 'digital-noise', name: 'Digital Noise' },
+    { id: 'static-burst', name: 'Static Burst' },
+    { id: 'static-snow', name: 'Static Snow' },
+    { id: 'radio-static', name: 'Radio Static' },
+    { id: 'scramble-channel', name: 'Scramble Channel' },
+    { id: 'flicker-strobe', name: 'Flicker Strobe' },
+    { id: 'old-tv', name: 'Old TV' },
+    { id: 'crt-scan', name: 'CRT Scan' },
+    { id: 'retro-arcade', name: 'Retro Arcade' },
+    { id: 'retro-wave', name: 'Retro Wave' },
+    { id: 'arcade-blocks', name: 'Arcade Blocks' },
+    { id: 'pixel-cascade', name: 'Pixel Cascade' },
+    { id: 'pixel-mosaic', name: 'Pixel Mosaic' },
+    { id: 'pixel-rain', name: 'Pixel Rain' },
+    { id: 'pixel-sort-b', name: 'Pixel Sort' },
+    { id: 'ascii-art', name: 'ASCII Art' },
+  ]},
+  { label: 'Audio Reactive', presets: [
+    { id: 'frequency-rings', name: 'Frequency Rings' },
+    { id: 'equalizer', name: 'Equalizer' },
+    { id: 'sine-waves', name: 'Sine Waves' },
+    { id: 'gradient-sweep', name: 'Gradient Sweep' },
+    { id: 'wireframe-sphere', name: 'Wireframe Sphere' },
+    { id: 'analog-wave', name: 'Analog Wave' },
+    { id: 'audio-mesh', name: 'Audio Mesh' },
+    { id: 'boombox-meter', name: 'Boombox Meter' },
+    { id: 'dial-tone', name: 'Dial Tone' },
+    { id: 'oscilloscope', name: 'Oscilloscope' },
+    { id: 'pulse-ring', name: 'Pulse Ring' },
+    { id: 'radial-burst', name: 'Radial Burst' },
+    { id: 'synth-wave', name: 'Synth Wave' },
+    { id: 'vinyl-groove', name: 'Vinyl Groove' },
+    { id: 'cassette-reel', name: 'Cassette Reel' },
+    { id: 'honeycomb-pulse', name: 'Honeycomb Pulse' },
+  ]},
+  { label: 'Particles', presets: [
+    { id: 'snowfall', name: 'Snowfall' },
+    { id: 'confetti-burst', name: 'Confetti Burst' },
+    { id: 'particle-storm', name: 'Particle Storm' },
+    { id: 'dust-motes', name: 'Dust Motes' },
+    { id: 'bird-murmuration', name: 'Bird Murmuration' },
+    { id: 'smoke-stack', name: 'Smoke Stack' },
+    { id: 'fog-bank', name: 'Fog Bank' },
+    { id: 'wind-ripple', name: 'Wind Ripple' },
+  ]},
+  { label: 'Weather', presets: [
+    { id: 'rain', name: 'Rain' },
+    { id: 'neon-rain', name: 'Neon Rain' },
+    { id: 'cyber-rain-heavy', name: 'Cyber Rain' },
+    { id: 'ceiling-drip', name: 'Ceiling Drip' },
+  ]},
+];
 
-function _throttle(fn, ms) {
-  let last = 0, timer = null;
-  return function(...args) {
-    const now = Date.now();
-    if (now - last >= ms) {
-      last = now;
-      fn.apply(this, args);
-    } else {
-      clearTimeout(timer);
-      timer = setTimeout(() => { last = Date.now(); fn.apply(this, args); }, ms - (now - last));
-    }
-  };
-}
-
-import { PRESET_CATEGORIES, ALL_PRESETS } from './preset-catalog.js';
+// Flat list for compatibility
+const ALL_PRESETS = PRESET_CATEGORIES.flatMap(c => c.presets);
 
 const FILTER_NAMES = ['invert', 'hue-rotate', 'grayscale', 'saturate', 'brightness', 'contrast', 'sepia', 'blur'];
 const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
@@ -311,68 +514,66 @@ class PopupController {
     const scene = this.scenes[slot];
     if (!scene || this._busy) return;
     this._busy = true;
-    try {
-      // Ensure engine is running
-      if (!this.isActive) {
-        this.isActive = true;
-        const toggle = document.getElementById('toggle');
-        if (toggle) toggle.checked = true;
-        await this._injectCore();
-      }
 
-      // Kill current state
-      await this._sendCommand({ action: 'kill' });
-
-      // Restore layers
-      this.activeLayers.clear();
-      for (const id of scene.layers) {
-        this.activeLayers.add(id);
-        await this._injectPreset(id);
-      }
-      const layers = [...this.activeLayers];
-      if (layers.length > 0) {
-        await this._sendCommand({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
-        for (let i = 1; i < layers.length; i++) {
-          await this._sendCommand({ action: 'addLayer', preset: layers[i] });
-        }
-      }
-
-      // Restore blend, filters, opacity
-      this.selectedBlendMode = scene.blendMode || 'screen';
-      this.activeFilters.clear();
-      if (scene.filters) {
-        for (const f of scene.filters) {
-          this.activeFilters.add(f);
-          await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
-        }
-      }
-      this.opacity = scene.opacity != null ? scene.opacity : 1.0;
-      await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
-
-      // Restore locks
-      if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
-
-      // Restore Auto state
-      this.autoCycleActive = !!scene.autoCycleActive;
-      this.autoBlend = !!scene.autoBlend;
-      this.autoFilters = !!scene.autoFilters;
-      if (this.autoCycleActive) {
-        await this._injectAllPresets();
-        const allIds = this.presets.map(p => p.id);
-        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
-      }
-
-      // Start audio if enabled
-      if (this.audioEnabled) {
-        await this._sendCommand({ action: 'startVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('loadScene/tabAudio', e));
-      }
-
-      this._updateUI();
-      await this._saveState();
-    } finally {
-      this._busy = false;
+    // Ensure engine is running
+    if (!this.isActive) {
+      this.isActive = true;
+      const toggle = document.getElementById('toggle');
+      if (toggle) toggle.checked = true;
+      await this._injectCore();
     }
+
+    // Kill current state
+    await this._sendCommand({ action: 'kill' });
+
+    // Restore layers
+    this.activeLayers.clear();
+    for (const id of scene.layers) {
+      this.activeLayers.add(id);
+      await this._injectPreset(id);
+    }
+    const layers = [...this.activeLayers];
+    if (layers.length > 0) {
+      await this._sendCommand({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
+      for (let i = 1; i < layers.length; i++) {
+        await this._sendCommand({ action: 'addLayer', preset: layers[i] });
+      }
+    }
+
+    // Restore blend, filters, opacity
+    this.selectedBlendMode = scene.blendMode || 'screen';
+    this.activeFilters.clear();
+    if (scene.filters) {
+      for (const f of scene.filters) {
+        this.activeFilters.add(f);
+        await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+      }
+    }
+    this.opacity = scene.opacity != null ? scene.opacity : 1.0;
+    await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
+
+    // Restore locks
+    if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
+
+    // Restore Auto state
+    this.autoCycleActive = !!scene.autoCycleActive;
+    this.autoBlend = !!scene.autoBlend;
+    this.autoFilters = !!scene.autoFilters;
+    if (this.autoCycleActive) {
+      await this._injectAllPresets();
+      const allIds = this.presets.map(p => p.id);
+      await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
+    }
+
+    // Start audio if enabled
+    if (this.audioEnabled) {
+      await this._sendCommand({ action: 'startVideoAudio' });
+      chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+    }
+
+    this._updateUI();
+    await this._saveState();
+    this._busy = false;
   }
 
   _clearScene(slot) {
@@ -506,15 +707,12 @@ class PopupController {
     const zoomEl = document.getElementById('setting-zoom');
     const zoomVal = document.getElementById('zoom-value');
     if (zoomEl) {
-      const throttledZoom = _throttle((val) => {
-        if (this.isActive) {
-          this._sendCommand({ action: 'setZoom', zoom: val });
-        }
-      }, 50);
       zoomEl.addEventListener('input', () => {
         this.settings.zoom = parseInt(zoomEl.value, 10) / 100;
         if (zoomVal) zoomVal.textContent = this.settings.zoom + 'x';
-        throttledZoom(this.settings.zoom);
+        if (this.isActive) {
+          this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
+        }
       });
       zoomEl.addEventListener('change', () => {
         this._saveSettings();
@@ -596,14 +794,6 @@ class PopupController {
 
         }
       });
-      btn.addEventListener('keydown', (e) => {
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-          const slot = parseInt(btn.dataset.slot, 10);
-          if (this.scenes[slot] != null) {
-            this._clearScene(slot);
-          }
-        }
-      });
     }
 
     // Scene delete buttons
@@ -620,25 +810,20 @@ class PopupController {
     const btnTextOn = document.getElementById('btn-text-on');
     if (btnTextOn) {
       btnTextOn.addEventListener('click', async () => {
-        if (this._busy) return;
-        this._busy = true;
-        try {
-          const textInput = document.getElementById('text-input');
-          const text = textInput ? textInput.value.trim() : '';
-          if (!text) return;
-          if (!this.isActive) {
-            this.isActive = true;
-            const toggle = document.getElementById('toggle');
-            if (toggle) toggle.checked = true;
-            await this._injectCore();
-          }
-          await this._sendCommand({ action: 'textAutoStart', text: text });
-          btnTextOn.classList.add('active');
-          this.textState = { text, autoText: true };
-          this._saveState();
-        } finally {
-          this._busy = false;
+        const textInput = document.getElementById('text-input');
+        const text = textInput ? textInput.value.trim() : '';
+        if (!text) return;
+        if (!this.isActive) {
+          this.isActive = true;
+          const toggle = document.getElementById('toggle');
+          if (toggle) toggle.checked = true;
+          await this._injectCore();
         }
+        await this._sendCommand({ action: 'textAutoStart', text: text });
+        btnTextOn.classList.add('active');
+        this.textState = { text, autoText: true };
+
+        this._saveState();
       });
     }
 
@@ -646,18 +831,13 @@ class PopupController {
     const btnTextOff = document.getElementById('btn-text-off');
     if (btnTextOff) {
       btnTextOff.addEventListener('click', async () => {
-        if (this._busy) return;
-        this._busy = true;
-        try {
-          await this._sendCommand({ action: 'textClear' });
-          await this._sendCommand({ action: 'textAutoStop' });
-          const btnOn = document.getElementById('btn-text-on');
-          if (btnOn) btnOn.classList.remove('active');
-          this.textState = null;
-          this._saveState();
-        } finally {
-          this._busy = false;
-        }
+        await this._sendCommand({ action: 'textClear' });
+        await this._sendCommand({ action: 'textAutoStop' });
+        const btnOn = document.getElementById('btn-text-on');
+        if (btnOn) btnOn.classList.remove('active');
+        this.textState = null;
+
+        this._saveState();
       });
     }
 
@@ -721,16 +901,11 @@ class PopupController {
     // Opacity slider
     const opacitySlider = document.getElementById('opacity-slider');
     if (opacitySlider) {
-      const throttledOpacity = _throttle((val) => {
-        if (this.isActive) {
-          this._sendCommand({ action: 'setOpacity', opacity: val });
-        }
-      }, 50);
       opacitySlider.addEventListener('input', (e) => {
         this.opacity = parseInt(e.target.value, 10) / 100;
-        throttledOpacity(this.opacity);
-      });
-      opacitySlider.addEventListener('change', () => {
+        if (this.isActive) {
+          this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
+        }
         this._saveState();
       });
     }
@@ -739,30 +914,24 @@ class PopupController {
     const audioBtn = document.getElementById('audio-toggle');
     if (audioBtn) {
       audioBtn.addEventListener('click', async () => {
-        if (this._busy) return;
-        this._busy = true;
-        try {
-          this.audioEnabled = !this.audioEnabled;
-          audioBtn.textContent = this.audioEnabled ? 'ON' : 'OFF';
-          audioBtn.classList.toggle('on', this.audioEnabled);
+        this.audioEnabled = !this.audioEnabled;
+        audioBtn.textContent = this.audioEnabled ? 'ON' : 'OFF';
+        audioBtn.classList.toggle('on', this.audioEnabled);
 
-          if (this.audioEnabled) {
-            await this._sendCommand({ action: 'startVideoAudio' });
-            chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('audio/tabStart', e));
-            if (this.isActive) {
-              this._sendCommand({ action: 'setAudioEnabled', enabled: true });
-            }
-          } else {
-            await this._sendCommand({ action: 'stopVideoAudio' });
-            chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('audio/tabStop', e));
-            if (this.isActive) {
-              this._sendCommand({ action: 'setAudioEnabled', enabled: false });
-            }
+        if (this.audioEnabled) {
+          await this._sendCommand({ action: 'startVideoAudio' });
+          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+          if (this.isActive) {
+            this._sendCommand({ action: 'setAudioEnabled', enabled: true });
           }
-          this._saveState();
-        } finally {
-          this._busy = false;
+        } else {
+          await this._sendCommand({ action: 'stopVideoAudio' });
+          chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
+          if (this.isActive) {
+            this._sendCommand({ action: 'setAudioEnabled', enabled: false });
+          }
         }
+        this._saveState();
       });
     }
 
@@ -770,74 +939,69 @@ class PopupController {
     const btnReset = document.getElementById('btn-reset');
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
-        if (this._busy) return;
-        this._busy = true;
-        try {
-          await this._sendCommand({ action: 'stopVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('reset/tabStop', e));
-          // Full reset (no lock respect — reset everything except scenes)
-          await this._sendCommand({ action: 'kill' });
+        await this._sendCommand({ action: 'stopVideoAudio' });
+        chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
+        // Full reset (no lock respect — reset everything except scenes)
+        await this._sendCommand({ action: 'kill' });
 
-          // Stop text
-          await this._sendCommand({ action: 'textAutoStop' });
-          await this._sendCommand({ action: 'textClear' });
-          this.textState = null;
+        // Stop text
+        await this._sendCommand({ action: 'textAutoStop' });
+        await this._sendCommand({ action: 'textClear' });
+        this.textState = null;
 
-          // Reset all state
-          this.activeLayers.clear();
-          this.activeFilters.clear();
-          this.autoCycleActive = false;
-          this.autoBlend = false;
-          this.autoFilters = false;
-          this.selectedBlendMode = 'screen';
-          this.opacity = 0.9;
-          this.audioEnabled = true;
-          this.isActive = false;
-          this._coreInjected = false;
-          this._injectedPresets.clear();
-          this.locks = { effect: false, blend: false, filter: false };
+        // Reset all state
+        this.activeLayers.clear();
+        this.activeFilters.clear();
+        this.autoCycleActive = false;
+        this.autoBlend = false;
+        this.autoFilters = false;
+        this.selectedBlendMode = 'screen';
+        this.opacity = 0.9;
+        this.audioEnabled = true;
+        this.isActive = false;
+        this._coreInjected = false;
+        this._injectedPresets.clear();
+        this.locks = { effect: false, blend: false, filter: false };
 
-          // Reset settings to defaults
-          this.settings = { ...DEFAULT_SETTINGS };
-          await this._saveSettings();
-          await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
-          await this._sendCommand({ action: 'setZoom', zoom: 1.0 });
-          await this._sendCommand({ action: 'setOsdEnabled', enabled: true });
-          await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: 1.0 });
+        // Reset settings to defaults
+        this.settings = { ...DEFAULT_SETTINGS };
+        await this._saveSettings();
+        await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+        await this._sendCommand({ action: 'setZoom', zoom: 1.0 });
+        await this._sendCommand({ action: 'setOsdEnabled', enabled: true });
+        await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: 1.0 });
 
-          // Reset all UI
-          const toggle = document.getElementById('toggle');
-          if (toggle) toggle.checked = false;
-          document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-          document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-          document.querySelectorAll('.blend-btn').forEach(btn => btn.classList.remove('active'));
-          const opacitySlider = document.getElementById('opacity-slider');
-          if (opacitySlider) opacitySlider.value = 90;
-          const audioBtn = document.getElementById('audio-toggle');
-          if (audioBtn) { audioBtn.textContent = 'ON'; audioBtn.classList.add('on'); }
-          const autoBtn = document.getElementById('btn-auto-cycle');
-          if (autoBtn) autoBtn.classList.remove('active');
-          const autoBlendBtn = document.getElementById('auto-blend');
-          if (autoBlendBtn) autoBlendBtn.classList.remove('active');
-          const autoFiltersBtn = document.getElementById('auto-filters');
-          if (autoFiltersBtn) autoFiltersBtn.classList.remove('active');
-          // Reset lock UI
-          for (const key of ['effect', 'blend', 'filter']) {
-            const lockBtn = document.getElementById('lock-' + key);
-            if (lockBtn) { lockBtn.classList.remove('locked'); lockBtn.textContent = 'Lock'; }
-          }
-          // Reset text UI
-          const textInput = document.getElementById('text-input');
-          if (textInput) textInput.value = '';
-          const btnTextOn = document.getElementById('btn-text-on');
-          if (btnTextOn) btnTextOn.classList.remove('active');
-          // Reset settings UI
-          this._updateSettingsUI();
-          this._updateLayerCount();
-          this._saveState();
-        } finally {
-          this._busy = false;
+        // Reset all UI
+        const toggle = document.getElementById('toggle');
+        if (toggle) toggle.checked = false;
+        document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.blend-btn').forEach(btn => btn.classList.remove('active'));
+        const opacitySlider = document.getElementById('opacity-slider');
+        if (opacitySlider) opacitySlider.value = 90;
+        const audioBtn = document.getElementById('audio-toggle');
+        if (audioBtn) { audioBtn.textContent = 'ON'; audioBtn.classList.add('on'); }
+        const autoBtn = document.getElementById('btn-auto-cycle');
+        if (autoBtn) autoBtn.classList.remove('active');
+        const autoBlendBtn = document.getElementById('auto-blend');
+        if (autoBlendBtn) autoBlendBtn.classList.remove('active');
+        const autoFiltersBtn = document.getElementById('auto-filters');
+        if (autoFiltersBtn) autoFiltersBtn.classList.remove('active');
+        // Reset lock UI
+        for (const key of ['effect', 'blend', 'filter']) {
+          const lockBtn = document.getElementById('lock-' + key);
+          if (lockBtn) { lockBtn.classList.remove('locked'); lockBtn.textContent = 'Lock'; }
         }
+        // Reset text UI
+        const textInput = document.getElementById('text-input');
+        if (textInput) textInput.value = '';
+        const btnTextOn = document.getElementById('btn-text-on');
+        if (btnTextOn) btnTextOn.classList.remove('active');
+        // Reset settings UI
+        this._updateSettingsUI();
+        this._updateLayerCount();
+        this._saveState();
+
       });
     }
 
@@ -845,62 +1009,57 @@ class PopupController {
     const btnNext = document.getElementById('btn-next');
     if (btnNext) {
       btnNext.addEventListener('click', async () => {
-        if (this._busy) return;
-        this._busy = true;
-        try {
-          if (!this.isActive) {
-            this.isActive = true;
-            const toggle = document.getElementById('toggle');
-            if (toggle) toggle.checked = true;
-            await this._injectCore();
-          }
-          // Kill with locks so engine preserves locked state
-          await this._sendCommand({ action: 'kill', locks: this.locks });
-          if (!this.locks.effect) {
-            const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
-            const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
-            const chosen = shuffled.slice(0, count);
-            // Only inject chosen presets (not all 204)
-            for (const p of chosen) {
-              await this._injectPreset(p.id);
-            }
-            const first = chosen[0];
-            await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode });
-            for (let i = 1; i < chosen.length; i++) {
-              await this._sendCommand({ action: 'addLayer', preset: chosen[i].id });
-            }
-            this.activeLayers.clear();
-            for (const p of chosen) this.activeLayers.add(p.id);
-          }
-          if (!this.locks.filter) {
-            for (const f of this.activeFilters) {
-              await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
-            }
-          }
-          document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
-            cb.checked = this.activeLayers.has(cb.value);
-          });
-          this._updateLayerCount();
-          if (this.autoCycleActive) {
-            this.autoCycleActive = false;
-            this.autoBlend = false;
-            this.autoFilters = false;
-            const autoBtn = document.getElementById('btn-auto-cycle');
-            if (autoBtn) autoBtn.classList.remove('active');
-            const abBtn = document.getElementById('auto-blend');
-            if (abBtn) abBtn.classList.remove('active');
-            const afBtn = document.getElementById('auto-filters');
-            if (afBtn) afBtn.classList.remove('active');
-          }
-          // Start video audio if needed
-          if (this.audioEnabled) {
-            await this._sendCommand({ action: 'startVideoAudio' });
-            chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('next/tabAudio', e));
-          }
-          this._saveState();
-        } finally {
-          this._busy = false;
+        if (!this.isActive) {
+          this.isActive = true;
+          const toggle = document.getElementById('toggle');
+          if (toggle) toggle.checked = true;
+          await this._injectCore();
         }
+        // Kill with locks so engine preserves locked state
+        await this._sendCommand({ action: 'kill', locks: this.locks });
+        if (!this.locks.effect) {
+          const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
+          const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
+          const chosen = shuffled.slice(0, count);
+          // Only inject chosen presets (not all 204)
+          for (const p of chosen) {
+            await this._injectPreset(p.id);
+          }
+          const first = chosen[0];
+          await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode });
+          for (let i = 1; i < chosen.length; i++) {
+            await this._sendCommand({ action: 'addLayer', preset: chosen[i].id });
+          }
+          this.activeLayers.clear();
+          for (const p of chosen) this.activeLayers.add(p.id);
+        }
+        if (!this.locks.filter) {
+          for (const f of this.activeFilters) {
+            await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+          }
+        }
+        document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
+          cb.checked = this.activeLayers.has(cb.value);
+        });
+        this._updateLayerCount();
+        if (this.autoCycleActive) {
+          this.autoCycleActive = false;
+          this.autoBlend = false;
+          this.autoFilters = false;
+          const autoBtn = document.getElementById('btn-auto-cycle');
+          if (autoBtn) autoBtn.classList.remove('active');
+          const abBtn = document.getElementById('auto-blend');
+          if (abBtn) abBtn.classList.remove('active');
+          const afBtn = document.getElementById('auto-filters');
+          if (afBtn) afBtn.classList.remove('active');
+        }
+        // Start video audio if needed
+        if (this.audioEnabled) {
+          await this._sendCommand({ action: 'startVideoAudio' });
+          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+        }
+        this._saveState();
+
       });
     }
 
@@ -908,40 +1067,34 @@ class PopupController {
     const btnAutoCycle = document.getElementById('btn-auto-cycle');
     if (btnAutoCycle) {
       btnAutoCycle.addEventListener('click', async () => {
-        if (this._busy) return;
-        this._busy = true;
-        try {
-          this.autoCycleActive = !this.autoCycleActive;
-          btnAutoCycle.classList.toggle('active', this.autoCycleActive);
-          if (this.autoCycleActive) {
-            // Auto ON → also enable Auto Blend + Auto Filter
-            this.autoBlend = true;
-            this.autoFilters = true;
-            const autoBlendBtn = document.getElementById('auto-blend');
-            if (autoBlendBtn) autoBlendBtn.classList.add('active');
-            const autoFiltersBtn = document.getElementById('auto-filters');
-            if (autoFiltersBtn) autoFiltersBtn.classList.add('active');
-            // Stop standalone autoFX (auto-cycle handles blend/filter)
-            await this._sendCommand({ action: 'stopAutoFX' });
-            if (!this.isActive) {
-              const toggle = document.getElementById('toggle');
-              if (toggle) toggle.checked = true;
-              await this._startAll();
-            }
-            await this._injectAllPresets();
-            const allIds = this.presets.map(p => p.id);
-            await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
-          } else {
-            await this._sendCommand({ action: 'stopAutoCycle' });
-            // If blend/filter still on, start standalone autoFX
-            if (this.autoBlend || this.autoFilters) {
-              await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
-            }
+        this.autoCycleActive = !this.autoCycleActive;
+        btnAutoCycle.classList.toggle('active', this.autoCycleActive);
+        if (this.autoCycleActive) {
+          // Auto ON → also enable Auto Blend + Auto Filter
+          this.autoBlend = true;
+          this.autoFilters = true;
+          const autoBlendBtn = document.getElementById('auto-blend');
+          if (autoBlendBtn) autoBlendBtn.classList.add('active');
+          const autoFiltersBtn = document.getElementById('auto-filters');
+          if (autoFiltersBtn) autoFiltersBtn.classList.add('active');
+          // Stop standalone autoFX (auto-cycle handles blend/filter)
+          await this._sendCommand({ action: 'stopAutoFX' });
+          if (!this.isActive) {
+            const toggle = document.getElementById('toggle');
+            if (toggle) toggle.checked = true;
+            await this._startAll();
           }
-          this._saveState();
-        } finally {
-          this._busy = false;
+          await this._injectAllPresets();
+          const allIds = this.presets.map(p => p.id);
+          await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+        } else {
+          await this._sendCommand({ action: 'stopAutoCycle' });
+          // If blend/filter still on, start standalone autoFX
+          if (this.autoBlend || this.autoFilters) {
+            await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+          }
         }
+        this._saveState();
       });
     }
 
@@ -1097,7 +1250,7 @@ class PopupController {
       // Start video audio capture + tabCapture fallback
       if (this.audioEnabled) {
         await this._sendCommand({ action: 'startVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('startAll/tabAudio', e));
+        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
       }
 
       // Apply settings to engine
@@ -1124,7 +1277,7 @@ class PopupController {
     this._busy = true;
     try {
       await this._sendCommand({ action: 'stopVideoAudio' });
-      chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('stopAll/tabAudio', e));
+      chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
       await this._sendCommand({ action: 'stop' });
       this.isActive = false;
       this._coreInjected = false;
@@ -1151,18 +1304,6 @@ class PopupController {
     await this._saveState();
   }
 
-  _showBanner(text, type = 'error') {
-    const existing = document.querySelector('.vjam-banner');
-    if (existing) existing.remove();
-    const banner = document.createElement('div');
-    banner.className = 'vjam-banner vjam-banner-' + type;
-    banner.setAttribute('role', 'alert');
-    banner.textContent = text;
-    const popup = document.querySelector('.popup');
-    if (popup) popup.prepend(banner);
-    setTimeout(() => banner.remove(), 3000);
-  }
-
   async _sendCommand(msg) {
     if (!this._tabId) return;
     try {
@@ -1177,13 +1318,12 @@ class PopupController {
         args: [msg],
       });
     } catch (e) {
-      logWarn('sendCommand', e);
-      this._showBanner('Effect command failed');
+      console.warn('VJam FX: Failed to send command', e);
     }
   }
 }
 
-export { PopupController, _throttle, logWarn };
+export { PopupController };
 
 // Auto-init in popup context
 if (typeof document !== 'undefined' && document.getElementById) {

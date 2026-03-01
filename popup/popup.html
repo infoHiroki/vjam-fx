@@ -12,9 +12,9 @@
       <h1>VJam FX</h1>
       <div class="header-right">
         <span id="layer-count" class="layer-count"></span>
-        <button id="btn-settings" class="settings-btn" title="Settings" aria-label="Settings">&#9881;</button>
+        <button id="btn-settings" class="settings-btn" title="Settings">&#9881;</button>
         <label class="toggle-switch">
-          <input type="checkbox" id="toggle" aria-label="Toggle VJ effects">
+          <input type="checkbox" id="toggle">
           <span class="slider"></span>
         </label>
       </div>
@@ -22,7 +22,7 @@
 
     <div id="settings-section" class="settings-section" style="display:none">
       <div class="setting-row">
-        <label for="setting-fade">Fade</label>
+        <label>Fade</label>
         <select id="setting-fade">
           <option value="0">0s</option>
           <option value="0.5">0.5s</option>
@@ -32,7 +32,7 @@
         </select>
       </div>
       <div class="setting-row">
-        <label for="setting-cycle">Cycle</label>
+        <label>Cycle</label>
         <select id="setting-cycle">
           <option value="4" selected>4 bars</option>
           <option value="8">8 bars</option>
@@ -41,7 +41,7 @@
         </select>
       </div>
       <div class="setting-row">
-        <label for="setting-sensitivity">Sensitivity</label>
+        <label>Sensitivity</label>
         <select id="setting-sensitivity">
           <option value="lo">Lo</option>
           <option value="mid" selected>Mid</option>
@@ -49,30 +49,30 @@
         </select>
       </div>
       <div class="setting-row">
-        <label for="setting-zoom">Zoom</label>
+        <label>Zoom</label>
         <input type="range" id="setting-zoom" min="50" max="300" value="100" class="zoom-slider">
         <span id="zoom-value" class="zoom-value">1x</span>
       </div>
       <div class="setting-row">
         <label>OSD</label>
-        <button id="setting-osd" class="osd-btn on" aria-label="Toggle OSD display">ON</button>
+        <button id="setting-osd" class="osd-btn on">ON</button>
       </div>
     </div>
 
     <div class="action-bar">
-      <button id="btn-reset" class="action-btn reset" title="Reset all" aria-label="Reset all effects">Reset</button>
-      <button id="btn-next" class="action-btn" title="Random preset + FX" aria-label="Random preset and effects">Next</button>
-      <button id="btn-auto-cycle" class="action-btn" title="Auto cycle" aria-label="Auto cycle presets">Auto</button>
+      <button id="btn-reset" class="action-btn reset" title="Reset all">Reset</button>
+      <button id="btn-next" class="action-btn" title="Random preset + FX">Next</button>
+      <button id="btn-auto-cycle" class="action-btn" title="Auto cycle">Auto</button>
     </div>
 
-    <div class="section-label"><span>Effect</span><button id="lock-effect" class="auto-toggle lock-toggle" title="Lock presets" aria-label="Lock presets">Lock</button></div>
+    <div class="section-label"><span>Effect</span><button id="lock-effect" class="auto-toggle lock-toggle" title="Lock presets">Lock</button></div>
     <input type="text" id="preset-search" class="preset-search" placeholder="Search presets...">
     <div class="preset-list" id="preset-list">
       <!-- Presets injected by popup.js -->
     </div>
 
-    <div class="section-label"><span>Filters</span><button id="lock-filter" class="auto-toggle lock-toggle" title="Lock filters" aria-label="Lock filters">Lock</button><button id="auto-filters" class="auto-toggle" title="Auto-rotate filters" aria-label="Auto-rotate filters">Auto</button></div>
-    <div class="filter-grid" id="filter-grid" role="group" aria-label="CSS filters">
+    <div class="section-label"><span>Filters</span><button id="lock-filter" class="auto-toggle lock-toggle" title="Lock filters">Lock</button><button id="auto-filters" class="auto-toggle" title="Auto-rotate filters">Auto</button></div>
+    <div class="filter-grid" id="filter-grid">
       <button class="filter-btn" data-filter="invert">Invert</button>
       <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
       <button class="filter-btn" data-filter="grayscale">Gray</button>
@@ -83,40 +83,40 @@
       <button class="filter-btn" data-filter="blur">Blur</button>
     </div>
 
-    <div class="section-label"><span>Blend</span><button id="lock-blend" class="auto-toggle lock-toggle" title="Lock blend mode" aria-label="Lock blend mode">Lock</button><button id="auto-blend" class="auto-toggle" title="Auto-rotate blend mode" aria-label="Auto-rotate blend mode">Auto</button></div>
-    <div class="blend-grid" id="blend-grid" role="group" aria-label="Blend modes">
+    <div class="section-label"><span>Blend</span><button id="lock-blend" class="auto-toggle lock-toggle" title="Lock blend mode">Lock</button><button id="auto-blend" class="auto-toggle" title="Auto-rotate blend mode">Auto</button></div>
+    <div class="blend-grid" id="blend-grid">
       <button class="blend-btn" data-blend="lighten">Lighten</button>
       <button class="blend-btn" data-blend="difference">Diff</button>
       <button class="blend-btn" data-blend="exclusion">Exclusion</button>
       <button class="blend-btn" data-blend="color-dodge">Dodge</button>
     </div>
 
-    <div class="section-label"><span>Scenes</span><button id="btn-scene-save" class="scene-save-btn" title="Save mode" aria-label="Save scene">Save</button><button id="btn-scenes-toggle" class="settings-btn" title="Toggle scenes" style="font-size:12px" aria-label="Toggle scenes panel">&#9660;</button></div>
+    <div class="section-label"><span>Scenes</span><button id="btn-scene-save" class="scene-save-btn" title="Save mode">Save</button><button id="btn-scenes-toggle" class="settings-btn" title="Toggle scenes" style="font-size:12px">&#9660;</button></div>
     <div id="scenes-section" class="scenes-section">
-      <div class="scene-grid" id="scene-grid" role="group" aria-label="Scene slots">
-        <div class="scene-slot" data-slot="0"><button class="scene-btn" data-slot="0" aria-label="Scene 1">1</button><button class="scene-del" data-slot="0" aria-label="Delete scene 1">&times;</button></div>
-        <div class="scene-slot" data-slot="1"><button class="scene-btn" data-slot="1" aria-label="Scene 2">2</button><button class="scene-del" data-slot="1" aria-label="Delete scene 2">&times;</button></div>
-        <div class="scene-slot" data-slot="2"><button class="scene-btn" data-slot="2" aria-label="Scene 3">3</button><button class="scene-del" data-slot="2" aria-label="Delete scene 3">&times;</button></div>
-        <div class="scene-slot" data-slot="3"><button class="scene-btn" data-slot="3" aria-label="Scene 4">4</button><button class="scene-del" data-slot="3" aria-label="Delete scene 4">&times;</button></div>
-        <div class="scene-slot" data-slot="4"><button class="scene-btn" data-slot="4" aria-label="Scene 5">5</button><button class="scene-del" data-slot="4" aria-label="Delete scene 5">&times;</button></div>
-        <div class="scene-slot" data-slot="5"><button class="scene-btn" data-slot="5" aria-label="Scene 6">6</button><button class="scene-del" data-slot="5" aria-label="Delete scene 6">&times;</button></div>
-        <div class="scene-slot" data-slot="6"><button class="scene-btn" data-slot="6" aria-label="Scene 7">7</button><button class="scene-del" data-slot="6" aria-label="Delete scene 7">&times;</button></div>
-        <div class="scene-slot" data-slot="7"><button class="scene-btn" data-slot="7" aria-label="Scene 8">8</button><button class="scene-del" data-slot="7" aria-label="Delete scene 8">&times;</button></div>
-        <div class="scene-slot" data-slot="8"><button class="scene-btn" data-slot="8" aria-label="Scene 9">9</button><button class="scene-del" data-slot="8" aria-label="Delete scene 9">&times;</button></div>
-        <div class="scene-slot" data-slot="9"><button class="scene-btn" data-slot="9" aria-label="Scene 10">10</button><button class="scene-del" data-slot="9" aria-label="Delete scene 10">&times;</button></div>
-        <div class="scene-slot" data-slot="10"><button class="scene-btn" data-slot="10" aria-label="Scene 11">11</button><button class="scene-del" data-slot="10" aria-label="Delete scene 11">&times;</button></div>
-        <div class="scene-slot" data-slot="11"><button class="scene-btn" data-slot="11" aria-label="Scene 12">12</button><button class="scene-del" data-slot="11" aria-label="Delete scene 12">&times;</button></div>
+      <div class="scene-grid" id="scene-grid">
+        <div class="scene-slot" data-slot="0"><button class="scene-btn" data-slot="0">1</button><button class="scene-del" data-slot="0">&times;</button></div>
+        <div class="scene-slot" data-slot="1"><button class="scene-btn" data-slot="1">2</button><button class="scene-del" data-slot="1">&times;</button></div>
+        <div class="scene-slot" data-slot="2"><button class="scene-btn" data-slot="2">3</button><button class="scene-del" data-slot="2">&times;</button></div>
+        <div class="scene-slot" data-slot="3"><button class="scene-btn" data-slot="3">4</button><button class="scene-del" data-slot="3">&times;</button></div>
+        <div class="scene-slot" data-slot="4"><button class="scene-btn" data-slot="4">5</button><button class="scene-del" data-slot="4">&times;</button></div>
+        <div class="scene-slot" data-slot="5"><button class="scene-btn" data-slot="5">6</button><button class="scene-del" data-slot="5">&times;</button></div>
+        <div class="scene-slot" data-slot="6"><button class="scene-btn" data-slot="6">7</button><button class="scene-del" data-slot="6">&times;</button></div>
+        <div class="scene-slot" data-slot="7"><button class="scene-btn" data-slot="7">8</button><button class="scene-del" data-slot="7">&times;</button></div>
+        <div class="scene-slot" data-slot="8"><button class="scene-btn" data-slot="8">9</button><button class="scene-del" data-slot="8">&times;</button></div>
+        <div class="scene-slot" data-slot="9"><button class="scene-btn" data-slot="9">10</button><button class="scene-del" data-slot="9">&times;</button></div>
+        <div class="scene-slot" data-slot="10"><button class="scene-btn" data-slot="10">11</button><button class="scene-del" data-slot="10">&times;</button></div>
+        <div class="scene-slot" data-slot="11"><button class="scene-btn" data-slot="11">12</button><button class="scene-del" data-slot="11">&times;</button></div>
       </div>
     </div>
 
     <div class="section-label"><span>Text</span></div>
     <div id="text-section" class="text-section">
       <div class="setting-row">
-        <input type="text" id="text-input" class="text-input" placeholder="Enter text..." maxlength="200" aria-label="Text for overlay">
+        <input type="text" id="text-input" class="text-input" placeholder="Enter text...">
       </div>
       <div class="setting-row">
-        <button id="btn-text-on" class="action-btn" style="flex:1" aria-label="Start text effect">ON</button>
-        <button id="btn-text-off" class="action-btn reset" style="flex:1" aria-label="Stop text effect">OFF</button>
+        <button id="btn-text-on" class="action-btn" style="flex:1">ON</button>
+        <button id="btn-text-off" class="action-btn reset" style="flex:1">OFF</button>
       </div>
     </div>
 
@@ -127,7 +127,7 @@
       </div>
       <div class="control-row">
         <label>Audio</label>
-        <button id="audio-toggle" class="audio-btn on" aria-label="Toggle audio">ON</button>
+        <button id="audio-toggle" class="audio-btn on">ON</button>
       </div>
     </div>
 
