@@ -581,8 +581,7 @@
       }
 
       // Destroy all layers
-      for (const [name] of this.activeLayers) {
-        const layer = this.activeLayers.get(name);
+      for (const [, layer] of this.activeLayers) {
         layer.preset.destroy();
         layer.container.remove();
       }

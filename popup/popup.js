@@ -513,6 +513,7 @@ class PopupController {
   async _loadScene(slot) {
     const scene = this.scenes[slot];
     if (!scene || this._busy) return;
+    this._busy = true;
 
     // Ensure engine is running
     if (!this.isActive) {
@@ -572,6 +573,7 @@ class PopupController {
 
     this._updateUI();
     await this._saveState();
+    this._busy = false;
   }
 
   _clearScene(slot) {
@@ -684,7 +686,7 @@ class PopupController {
         // Re-send auto-cycle with updated bars if active
         if (this.autoCycleActive) {
           const allIds = this.presets.map(p => p.id);
-          this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle });
+          this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
         }
       });
     }
@@ -1256,6 +1258,7 @@ class PopupController {
       await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
       await this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
       await this._sendCommand({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
+      await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
 
       await this._saveState();
     } catch (e) {
@@ -1273,13 +1276,13 @@ class PopupController {
     if (this._busy) return;
     this._busy = true;
     try {
-    await this._sendCommand({ action: 'stopVideoAudio' });
-    chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
-    await this._sendCommand({ action: 'stop' });
-    this.isActive = false;
-    this._coreInjected = false;
-    this._injectedPresets.clear();
-    await this._saveState();
+      await this._sendCommand({ action: 'stopVideoAudio' });
+      chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
+      await this._sendCommand({ action: 'stop' });
+      this.isActive = false;
+      this._coreInjected = false;
+      this._injectedPresets.clear();
+      await this._saveState();
     } finally {
       this._busy = false;
     }
