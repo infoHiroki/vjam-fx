@@ -320,20 +320,20 @@ class PopupController {
         await this._injectCore();
       }
 
-      // Restore layers (inject presets first)
+      // Kill current state
+      await this._sendCommand({ action: 'kill' });
+
+      // Restore layers
       this.activeLayers.clear();
       for (const id of scene.layers) {
         this.activeLayers.add(id);
         await this._injectPreset(id);
       }
-
-      // Build command batch
-      const batch = [{ action: 'kill' }];
       const layers = [...this.activeLayers];
       if (layers.length > 0) {
-        batch.push({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
+        await this._sendCommand({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
         for (let i = 1; i < layers.length; i++) {
-          batch.push({ action: 'addLayer', preset: layers[i] });
+          await this._sendCommand({ action: 'addLayer', preset: layers[i] });
         }
       }
 
@@ -343,11 +343,11 @@ class PopupController {
       if (scene.filters) {
         for (const f of scene.filters) {
           this.activeFilters.add(f);
-          batch.push({ action: 'setFilter', filter: f, enabled: true });
+          await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
         }
       }
       this.opacity = scene.opacity != null ? scene.opacity : 1.0;
-      batch.push({ action: 'setOpacity', opacity: this.opacity });
+      await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
 
       // Restore locks
       if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
@@ -359,17 +359,12 @@ class PopupController {
       if (this.autoCycleActive) {
         await this._injectAllPresets();
         const allIds = this.presets.map(p => p.id);
-        batch.push({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
+        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
       }
 
       // Start audio if enabled
       if (this.audioEnabled) {
-        batch.push({ action: 'startVideoAudio' });
-      }
-
-      await this._sendBatch(batch);
-
-      if (this.audioEnabled) {
+        await this._sendCommand({ action: 'startVideoAudio' });
         chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('loadScene/tabAudio', e));
       }
 
@@ -778,17 +773,14 @@ class PopupController {
         if (this._busy) return;
         this._busy = true;
         try {
-          await this._sendBatch([
-            { action: 'stopVideoAudio' },
-            { action: 'kill' },
-            { action: 'textAutoStop' },
-            { action: 'textClear' },
-            { action: 'setFadeDuration', duration: DEFAULT_SETTINGS.fadeDuration },
-            { action: 'setZoom', zoom: 1.0 },
-            { action: 'setOsdEnabled', enabled: true },
-            { action: 'setAudioSensitivity', sensitivity: 1.0 },
-          ]);
+          await this._sendCommand({ action: 'stopVideoAudio' });
           chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('reset/tabStop', e));
+          // Full reset (no lock respect — reset everything except scenes)
+          await this._sendCommand({ action: 'kill' });
+
+          // Stop text
+          await this._sendCommand({ action: 'textAutoStop' });
+          await this._sendCommand({ action: 'textClear' });
           this.textState = null;
 
           // Reset all state
@@ -808,6 +800,10 @@ class PopupController {
           // Reset settings to defaults
           this.settings = { ...DEFAULT_SETTINGS };
           await this._saveSettings();
+          await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+          await this._sendCommand({ action: 'setZoom', zoom: 1.0 });
+          await this._sendCommand({ action: 'setOsdEnabled', enabled: true });
+          await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: 1.0 });
 
           // Reset all UI
           const toggle = document.getElementById('toggle');
@@ -858,8 +854,8 @@ class PopupController {
             if (toggle) toggle.checked = true;
             await this._injectCore();
           }
-          // Inject presets first, then batch all commands
-          const batch = [{ action: 'kill', locks: this.locks }];
+          // Kill with locks so engine preserves locked state
+          await this._sendCommand({ action: 'kill', locks: this.locks });
           if (!this.locks.effect) {
             const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
             const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
@@ -868,22 +864,18 @@ class PopupController {
               await this._injectPreset(p.id);
             }
             const first = chosen[0];
-            batch.push({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode });
+            await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode });
             for (let i = 1; i < chosen.length; i++) {
-              batch.push({ action: 'addLayer', preset: chosen[i].id });
+              await this._sendCommand({ action: 'addLayer', preset: chosen[i].id });
             }
             this.activeLayers.clear();
             for (const p of chosen) this.activeLayers.add(p.id);
           }
           if (!this.locks.filter) {
             for (const f of this.activeFilters) {
-              batch.push({ action: 'setFilter', filter: f, enabled: true });
+              await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
             }
           }
-          if (this.audioEnabled) {
-            batch.push({ action: 'startVideoAudio' });
-          }
-          await this._sendBatch(batch);
           document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
             cb.checked = this.activeLayers.has(cb.value);
           });
@@ -899,7 +891,9 @@ class PopupController {
             const afBtn = document.getElementById('auto-filters');
             if (afBtn) afBtn.classList.remove('active');
           }
+          // Start video audio if needed
           if (this.audioEnabled) {
+            await this._sendCommand({ action: 'startVideoAudio' });
             chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('next/tabAudio', e));
           }
           this._saveState();
@@ -1085,30 +1079,32 @@ class PopupController {
       }
 
       const first = layers[0];
-      const batch = [
-        { action: 'start', preset: first, blendMode: this.selectedBlendMode },
-      ];
+      await this._sendCommand({
+        action: 'start',
+        preset: first,
+        blendMode: this.selectedBlendMode,
+      });
+
       for (let i = 1; i < layers.length; i++) {
-        batch.push({ action: 'addLayer', preset: layers[i] });
+        await this._sendCommand({ action: 'addLayer', preset: layers[i] });
       }
+
       for (const f of this.activeFilters) {
-        batch.push({ action: 'setFilter', filter: f, enabled: true });
+        await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
       }
-      if (this.audioEnabled) {
-        batch.push({ action: 'startVideoAudio' });
-      }
-      batch.push({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
-      batch.push({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
-      batch.push({ action: 'setZoom', zoom: this.settings.zoom });
-      batch.push({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
-      batch.push({ action: 'setOpacity', opacity: this.opacity });
 
-      await this._sendBatch(batch);
-
-      // Start tabCapture fallback (separate from content script batch)
+      // Start video audio capture + tabCapture fallback
       if (this.audioEnabled) {
+        await this._sendCommand({ action: 'startVideoAudio' });
         chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('startAll/tabAudio', e));
       }
+
+      // Apply settings to engine
+      await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+      await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
+      await this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
+      await this._sendCommand({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
+      await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
 
       await this._saveState();
     } catch (e) {
@@ -1185,24 +1181,6 @@ class PopupController {
     }
   }
 
-  async _sendBatch(msgs) {
-    if (!this._tabId || !msgs || msgs.length === 0) return;
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: this._tabId },
-        world: 'MAIN',
-        func: (messages) => {
-          if (window._vjamFxEngine) {
-            window._vjamFxEngine.handleBatch(messages);
-          }
-        },
-        args: [msgs],
-      });
-    } catch (e) {
-      logWarn('sendBatch', e);
-      this._showBanner('Effect command failed');
-    }
-  }
 }
 
 export { PopupController, _throttle, logWarn };

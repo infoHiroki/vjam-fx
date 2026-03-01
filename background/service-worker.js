@@ -140,41 +140,53 @@ async function injectAndStart(tabId, state) {
       });
     }
 
-    // Build command batch and send in one executeScript call
+    // Start first layer with config
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      func: (messages) => {
-        if (window._vjamFxEngine) {
-          window._vjamFxEngine.handleBatch(messages);
+      func: (layers, blendMode, filters, autoCyclePresets, opacity, autoBlend, autoFilters, locks, textState) => {
+        if (!window._vjamFxEngine) return;
+        const engine = window._vjamFxEngine;
+
+        // Start first layer
+        engine.handleMessage({
+          action: 'start',
+          preset: layers[0],
+          blendMode: blendMode,
+        });
+
+        // Add remaining layers
+        for (let i = 1; i < layers.length; i++) {
+          engine.handleMessage({ action: 'addLayer', preset: layers[i] });
+        }
+
+        // Restore filters
+        if (filters) {
+          for (const f of filters) {
+            engine.handleMessage({ action: 'setFilter', filter: f, enabled: true });
+          }
+        }
+
+        // Restore opacity
+        if (opacity !== undefined && opacity !== 1) {
+          engine.handleMessage({ action: 'setOpacity', opacity: opacity });
+        }
+
+        // Restart auto-cycle if it was active
+        if (autoCyclePresets && autoCyclePresets.length > 0) {
+          engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: 8000, autoBlend: autoBlend, autoFilters: autoFilters, locks: locks || {} });
+        }
+
+        // Restore text state
+        if (textState && textState.text) {
+          engine.handleMessage({ action: 'textSetParams', params: { effect: textState.effect, font: textState.font } });
+          engine.handleMessage({ action: 'textDisplay', text: textState.text });
+          if (textState.autoText) {
+            engine.handleMessage({ action: 'textAutoStart', text: textState.text });
+          }
         }
       },
-      args: [(() => {
-        const msgs = [];
-        msgs.push({ action: 'start', preset: layers[0], blendMode: state.blendMode || 'screen' });
-        for (let i = 1; i < layers.length; i++) {
-          msgs.push({ action: 'addLayer', preset: layers[i] });
-        }
-        if (state.filters) {
-          for (const f of state.filters) {
-            msgs.push({ action: 'setFilter', filter: f, enabled: true });
-          }
-        }
-        if (state.opacity !== undefined && state.opacity !== 1) {
-          msgs.push({ action: 'setOpacity', opacity: state.opacity });
-        }
-        if (state.autoCyclePresets && state.autoCyclePresets.length > 0) {
-          msgs.push({ action: 'startAutoCycle', presets: state.autoCyclePresets, interval: 8000, autoBlend: !!state.autoBlend, autoFilters: !!state.autoFilters, locks: state.locks || {} });
-        }
-        if (state.textState && state.textState.text) {
-          msgs.push({ action: 'textSetParams', params: { effect: state.textState.effect, font: state.textState.font } });
-          msgs.push({ action: 'textDisplay', text: state.textState.text });
-          if (state.textState.autoText) {
-            msgs.push({ action: 'textAutoStart', text: state.textState.text });
-          }
-        }
-        return msgs;
-      })()],
+      args: [layers, state.blendMode || 'screen', state.filters || [], state.autoCyclePresets || null, state.opacity, !!state.autoBlend, !!state.autoFilters, state.locks || {}, state.textState || null],
     });
 
     return true;

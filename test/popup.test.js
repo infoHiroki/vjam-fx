@@ -129,50 +129,6 @@ describe('PopupController', () => {
     });
   });
 
-  describe('_sendBatch', () => {
-    it('should not send if no tabId', async () => {
-      controller._tabId = null;
-      await controller._sendBatch([{ action: 'start' }]);
-      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
-    });
-
-    it('should not send if empty array', async () => {
-      await controller._sendBatch([]);
-      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
-    });
-
-    it('should send N messages in 1 executeScript call', async () => {
-      await controller._sendBatch([
-        { action: 'start', preset: 'neon-tunnel' },
-        { action: 'addLayer', preset: 'rain' },
-        { action: 'setOpacity', opacity: 0.8 },
-      ]);
-      expect(chrome.scripting.executeScript).toHaveBeenCalledTimes(1);
-    });
-
-    it('should use handleBatch in the injected func', async () => {
-      await controller._sendBatch([{ action: 'start', preset: 'neon-tunnel' }]);
-      const call = chrome.scripting.executeScript.mock.calls[0][0];
-      expect(call.world).toBe('MAIN');
-      // The func should reference handleBatch
-      const funcStr = call.func.toString();
-      expect(funcStr).toContain('handleBatch');
-    });
-  });
-
-  describe('_startAll batching', () => {
-    it('should use fewer executeScript calls with batching', async () => {
-      controller.activeLayers.add('neon-tunnel');
-      controller.activeLayers.add('rain');
-      controller.activeFilters.add('invert');
-      await controller._startAll();
-      // With batching: p5 inject + p5 check + core files (4) + 2 preset injects + 1 batch = 9
-      // Without batching: p5 + check + core(4) + 2 presets + start + addLayer + filter + audio + 5 settings = 17+
-      const callCount = chrome.scripting.executeScript.mock.calls.length;
-      expect(callCount).toBeLessThanOrEqual(10);
-    });
-  });
-
   describe('action buttons', () => {
     it('should track autoCycleActive state', () => {
       expect(controller.autoCycleActive).toBe(false);
