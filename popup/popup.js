@@ -4,228 +4,8 @@
  * Syncs state with Service Worker for navigation persistence
  */
 
-const PRESET_CATEGORIES = [
-  { label: 'Immersive', presets: [
-    { id: 'neon-tunnel', name: 'Neon Tunnel' },
-    { id: 'laser-tunnel', name: 'Laser Tunnel' },
-    { id: 'infinite-zoom', name: 'Infinite Zoom' },
-    { id: 'hypnotic', name: 'Hypnotic' },
-    { id: 'wormhole', name: 'Wormhole' },
-    { id: 'warp-speed', name: 'Warp Speed' },
-    { id: 'tunnel-zoom', name: 'Tunnel Zoom' },
-    { id: 'root-tunnel', name: 'Root Tunnel' },
-    { id: 'helix-tunnel', name: 'Helix Tunnel' },
-    { id: 'deep-dive', name: 'Deep Dive' },
-    { id: 'deep-ocean', name: 'Deep Ocean' },
-    { id: 'portal-ring', name: 'Portal Ring' },
-    { id: 'cyber-corridor', name: 'Cyber Corridor' },
-    { id: 'time-warp', name: 'Time Warp' },
-    { id: 'gravity-well', name: 'Gravity Well' },
-    { id: 'plasma-wave', name: 'Plasma Wave' },
-    { id: 'aurora', name: 'Aurora' },
-    { id: 'northern-lights', name: 'Northern Lights' },
-    { id: 'crystal-cave', name: 'Crystal Cave' },
-    { id: 'chrome-wave', name: 'Chrome Wave' },
-    { id: 'sunset-drive', name: 'Sunset Drive' },
-    { id: 'neon-highway', name: 'Neon Highway' },
-    { id: 'dna-aurora', name: 'DNA Aurora' },
-    { id: 'plasma-ball', name: 'Plasma Ball' },
-    { id: 'hologram', name: 'Hologram' },
-  ]},
-  { label: 'Frames & Film', presets: [
-    { id: 'neon-frame', name: 'Neon Frame' },
-    { id: 'light-leak', name: 'Light Leak' },
-    { id: 'film-burn', name: 'Film Burn' },
-    { id: 'film-scratch', name: 'Film Scratch' },
-    { id: 'scan-line', name: 'Scan Line' },
-    { id: 'vhs-noise', name: 'VHS Noise' },
-    { id: 'vhs-tracking', name: 'VHS Tracking' },
-    { id: 'film-grain', name: 'Film Grain' },
-    { id: 'film-countdown', name: 'Film Countdown' },
-    { id: 'film-reel', name: 'Film Reel' },
-    { id: 'vhs-rewind', name: 'VHS Rewind' },
-    { id: 'polaroid-flash', name: 'Polaroid Flash' },
-    { id: 'tape-distort', name: 'Tape Distort' },
-  ]},
-  { label: 'Patterns', presets: [
-    { id: 'kaleidoscope', name: 'Kaleidoscope' },
-    { id: 'mandala', name: 'Mandala' },
-    { id: 'sacred-geometry', name: 'Sacred Geometry' },
-    { id: 'moire', name: 'Moire' },
-    { id: 'prism', name: 'Prism' },
-    { id: 'barcode', name: 'Barcode' },
-    { id: 'spirograph', name: 'Spirograph' },
-    { id: 'cyber-mandala', name: 'Cyber Mandala' },
-    { id: 'penrose-tile', name: 'Penrose Tile' },
-    { id: 'checker-wave', name: 'Checker Wave' },
-    { id: 'hermann-grid', name: 'Hermann Grid' },
-    { id: 'op-art', name: 'Op Art' },
-    { id: 'stained-glass', name: 'Stained Glass' },
-    { id: 'dot-halftone', name: 'Dot Halftone' },
-    { id: 'wave-rings', name: 'Wave Rings' },
-    { id: 'pendulum-wave', name: 'Pendulum Wave' },
-  ]},
-  { label: 'Organic', presets: [
-    { id: 'cellular', name: 'Cellular' },
-    { id: 'liquid', name: 'Liquid' },
-    { id: 'voronoi', name: 'Voronoi' },
-    { id: 'smoke', name: 'Smoke' },
-    { id: 'oil-spill', name: 'Oil Spill' },
-    { id: 'coral-reef', name: 'Coral Reef' },
-    { id: 'flow-field', name: 'Flow Field' },
-    { id: 'ant-colony', name: 'Ant Colony' },
-    { id: 'bioluminescence', name: 'Bioluminescence' },
-    { id: 'ink-blot', name: 'Ink Blot' },
-    { id: 'ink-wash', name: 'Ink Wash' },
-    { id: 'lava-lamp', name: 'Lava Lamp' },
-    { id: 'lava-rise', name: 'Lava Rise' },
-    { id: 'bubble-float', name: 'Bubble Float' },
-    { id: 'growth-spiral', name: 'Growth Spiral' },
-    { id: 'mycelium', name: 'Mycelium' },
-    { id: 'fungal-web', name: 'Fungal Web' },
-  ]},
-  { label: 'Nature', presets: [
-    { id: 'fractal-tree', name: 'Fractal Tree' },
-    { id: 'flower-bloom', name: 'Flower Bloom' },
-    { id: 'autumn-fall', name: 'Autumn Fall' },
-    { id: 'dandelion-seeds', name: 'Dandelion Seeds' },
-    { id: 'petal-storm', name: 'Petal Storm' },
-    { id: 'meadow-breeze', name: 'Meadow Breeze' },
-    { id: 'leaf-vein', name: 'Leaf Vein' },
-    { id: 'vine-growth', name: 'Vine Growth' },
-    { id: 'neon-vines', name: 'Neon Vines' },
-    { id: 'forest-canopy', name: 'Forest Canopy' },
-    { id: 'northern-forest', name: 'Northern Forest' },
-    { id: 'seed-burst', name: 'Seed Burst' },
-    { id: 'pollen-cloud', name: 'Pollen Cloud' },
-    { id: 'tree-ring', name: 'Tree Ring' },
-    { id: 'moss-carpet', name: 'Moss Carpet' },
-    { id: 'lichen-spread', name: 'Lichen Spread' },
-    { id: 'spore-drift', name: 'Spore Drift' },
-  ]},
-  { label: 'Water', presets: [
-    { id: 'water-surface', name: 'Water Surface' },
-    { id: 'river-stream', name: 'River Stream' },
-    { id: 'waterfall-mist', name: 'Waterfall Mist' },
-    { id: 'tide-wave', name: 'Tide Wave' },
-    { id: 'tide-pool', name: 'Tide Pool' },
-    { id: 'rain-puddles', name: 'Rain Puddles' },
-    { id: 'pond-life', name: 'Pond Life' },
-    { id: 'kelp-forest', name: 'Kelp Forest' },
-    { id: 'ice-formation', name: 'Ice Formation' },
-    { id: 'erosion-line', name: 'Erosion Line' },
-  ]},
-  { label: 'Grid & Tech', presets: [
-    { id: 'glitch-grid', name: 'Glitch Grid' },
-    { id: 'hexgrid-pulse', name: 'Hexgrid Pulse' },
-    { id: 'grid-warp', name: 'Grid Warp' },
-    { id: 'circuit-board', name: 'Circuit Board' },
-    { id: 'crt-monitor', name: 'CRT Monitor' },
-    { id: 'retro-terminal', name: 'Retro Terminal' },
-    { id: 'circuit-trace', name: 'Circuit Trace' },
-    { id: 'cyber-grid', name: 'Cyber Grid' },
-    { id: 'hex-network', name: 'Hex Network' },
-    { id: 'led-matrix', name: 'LED Matrix' },
-    { id: 'dot-matrix', name: 'Dot Matrix' },
-    { id: 'neural-net', name: 'Neural Net' },
-    { id: 'isometric-city', name: 'Isometric City' },
-    { id: 'wireframe-city', name: 'Wireframe City' },
-    { id: 'floating-ui', name: 'Floating UI' },
-    { id: 'data-stream', name: 'Data Stream' },
-    { id: 'data-cascade', name: 'Data Cascade' },
-    { id: 'data-sprites', name: 'Data Sprites' },
-    { id: 'matrix-code', name: 'Matrix Code' },
-    { id: 'matrix-rain', name: 'Matrix Rain' },
-  ]},
-  { label: 'Space', presets: [
-    { id: 'starfield', name: 'Starfield' },
-    { id: 'constellation', name: 'Constellation' },
-    { id: 'bokeh', name: 'Bokeh' },
-    { id: 'terrain', name: 'Terrain' },
-    { id: 'meteor-shower', name: 'Meteor Shower' },
-    { id: 'orbits', name: 'Orbits' },
-    { id: 'cyber-sun', name: 'Cyber Sun' },
-    { id: 'dna-helix', name: 'DNA Helix' },
-    { id: 'crystal-lattice', name: 'Crystal Lattice' },
-    { id: 'radar', name: 'Radar' },
-    { id: 'sand-dunes', name: 'Sand Dunes' },
-  ]},
-  { label: 'Neon & Glow', presets: [
-    { id: 'neon-80s', name: 'Neon 80s' },
-    { id: 'neon-bars', name: 'Neon Bars' },
-    { id: 'neon-dust', name: 'Neon Dust' },
-    { id: 'neon-jellyfish', name: 'Neon Jellyfish' },
-    { id: 'neon-smoke', name: 'Neon Smoke' },
-    { id: 'electric-arc', name: 'Electric Arc' },
-    { id: 'electric-city', name: 'Electric City' },
-    { id: 'electric-fence', name: 'Electric Fence' },
-    { id: 'lightning', name: 'Lightning' },
-    { id: 'light-swarm', name: 'Light Swarm' },
-    { id: 'fireflies', name: 'Fireflies' },
-    { id: 'ember-drift', name: 'Ember Drift' },
-    { id: 'cathode-glow', name: 'Cathode Glow' },
-    { id: 'fire-wall', name: 'Fire Wall' },
-    { id: 'paper-lantern', name: 'Paper Lantern' },
-  ]},
-  { label: 'Glitch & Retro', presets: [
-    { id: 'glitch-8bit', name: 'Glitch 8bit' },
-    { id: 'glitch-wave', name: 'Glitch Wave' },
-    { id: 'cyber-glitch', name: 'Cyber Glitch' },
-    { id: 'digital-noise', name: 'Digital Noise' },
-    { id: 'static-burst', name: 'Static Burst' },
-    { id: 'static-snow', name: 'Static Snow' },
-    { id: 'radio-static', name: 'Radio Static' },
-    { id: 'scramble-channel', name: 'Scramble Channel' },
-    { id: 'flicker-strobe', name: 'Flicker Strobe' },
-    { id: 'old-tv', name: 'Old TV' },
-    { id: 'crt-scan', name: 'CRT Scan' },
-    { id: 'retro-arcade', name: 'Retro Arcade' },
-    { id: 'retro-wave', name: 'Retro Wave' },
-    { id: 'arcade-blocks', name: 'Arcade Blocks' },
-    { id: 'pixel-cascade', name: 'Pixel Cascade' },
-    { id: 'pixel-mosaic', name: 'Pixel Mosaic' },
-    { id: 'pixel-rain', name: 'Pixel Rain' },
-    { id: 'pixel-sort-b', name: 'Pixel Sort' },
-    { id: 'ascii-art', name: 'ASCII Art' },
-  ]},
-  { label: 'Audio Reactive', presets: [
-    { id: 'frequency-rings', name: 'Frequency Rings' },
-    { id: 'equalizer', name: 'Equalizer' },
-    { id: 'sine-waves', name: 'Sine Waves' },
-    { id: 'gradient-sweep', name: 'Gradient Sweep' },
-    { id: 'wireframe-sphere', name: 'Wireframe Sphere' },
-    { id: 'analog-wave', name: 'Analog Wave' },
-    { id: 'audio-mesh', name: 'Audio Mesh' },
-    { id: 'boombox-meter', name: 'Boombox Meter' },
-    { id: 'dial-tone', name: 'Dial Tone' },
-    { id: 'oscilloscope', name: 'Oscilloscope' },
-    { id: 'pulse-ring', name: 'Pulse Ring' },
-    { id: 'radial-burst', name: 'Radial Burst' },
-    { id: 'synth-wave', name: 'Synth Wave' },
-    { id: 'vinyl-groove', name: 'Vinyl Groove' },
-    { id: 'cassette-reel', name: 'Cassette Reel' },
-    { id: 'honeycomb-pulse', name: 'Honeycomb Pulse' },
-  ]},
-  { label: 'Particles', presets: [
-    { id: 'snowfall', name: 'Snowfall' },
-    { id: 'confetti-burst', name: 'Confetti Burst' },
-    { id: 'particle-storm', name: 'Particle Storm' },
-    { id: 'dust-motes', name: 'Dust Motes' },
-    { id: 'bird-murmuration', name: 'Bird Murmuration' },
-    { id: 'smoke-stack', name: 'Smoke Stack' },
-    { id: 'fog-bank', name: 'Fog Bank' },
-    { id: 'wind-ripple', name: 'Wind Ripple' },
-  ]},
-  { label: 'Weather', presets: [
-    { id: 'rain', name: 'Rain' },
-    { id: 'neon-rain', name: 'Neon Rain' },
-    { id: 'cyber-rain-heavy', name: 'Cyber Rain' },
-    { id: 'ceiling-drip', name: 'Ceiling Drip' },
-  ]},
-];
+import { PRESET_CATEGORIES, ALL_PRESETS } from './preset-catalog.js';
 
-// Flat list for compatibility
-const ALL_PRESETS = PRESET_CATEGORIES.flatMap(c => c.presets);
 
 const FILTER_NAMES = ['invert', 'hue-rotate', 'grayscale', 'saturate', 'brightness', 'contrast', 'sepia', 'blur'];
 const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
@@ -239,6 +19,28 @@ const DEFAULT_SETTINGS = {
 };
 
 const SENSITIVITY_MAP = { lo: 0.5, mid: 1.0, hi: 2.0 };
+
+function logWarn(context, e) {
+  console.warn('VJam FX [' + context + ']:', e && e.message ? e.message : e);
+}
+
+function _throttle(fn, ms) {
+  let last = 0;
+  let timer = null;
+  return function(...args) {
+    const now = Date.now();
+    if (now - last >= ms) {
+      last = now;
+      fn.apply(this, args);
+    } else {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        last = Date.now();
+        fn.apply(this, args);
+      }, ms - (now - last));
+    }
+  };
+}
 
 class PopupController {
   constructor() {
@@ -293,7 +95,7 @@ class PopupController {
     if (popup) {
       popup.textContent = '';
       const div = document.createElement('div');
-      div.style.cssText = 'padding:20px;text-align:center;color:#888';
+      div.style.cssText = 'padding:20px;text-align:center;color:#bbb';
       div.textContent = msg;
       popup.appendChild(div);
     }
@@ -346,7 +148,7 @@ class PopupController {
         },
       });
       liveState = result;
-    } catch (e) { /* scripting failed */ }
+    } catch (e) { logWarn('syncState/scripting', e); }
 
     let state = null;
     if (liveState && liveState.active) {
@@ -360,7 +162,7 @@ class PopupController {
         if (response && response.state && response.state.active) {
           state = response.state;
         }
-      } catch (e) { /* SW not available */ }
+      } catch (e) { logWarn('SW', e); }
     }
 
     if (!state) return;
@@ -459,14 +261,14 @@ class PopupController {
       if (result.vjamfx_settings) {
         this.settings = { ...DEFAULT_SETTINGS, ...result.vjamfx_settings };
       }
-    } catch (e) { /* storage not available */ }
+    } catch (e) { logWarn('storage', e); }
     this._updateSettingsUI();
   }
 
   async _saveSettings() {
     try {
       await chrome.storage.local.set({ vjamfx_settings: this.settings });
-    } catch (e) { /* storage not available */ }
+    } catch (e) { logWarn('storage', e); }
   }
 
   async _loadScenes() {
@@ -475,14 +277,14 @@ class PopupController {
       if (result.vjamfx_scenes && Array.isArray(result.vjamfx_scenes)) {
         this.scenes = result.vjamfx_scenes;
       }
-    } catch (e) { /* storage not available */ }
+    } catch (e) { logWarn('storage', e); }
     this._updateSceneButtons();
   }
 
   async _saveScenes() {
     try {
       await chrome.storage.local.set({ vjamfx_scenes: this.scenes });
-    } catch (e) { /* storage not available */ }
+    } catch (e) { logWarn('storage', e); }
     this._updateSceneButtons();
   }
 
@@ -514,66 +316,72 @@ class PopupController {
     const scene = this.scenes[slot];
     if (!scene || this._busy) return;
     this._busy = true;
-
-    // Ensure engine is running
-    if (!this.isActive) {
-      this.isActive = true;
-      const toggle = document.getElementById('toggle');
-      if (toggle) toggle.checked = true;
-      await this._injectCore();
-    }
-
-    // Kill current state
-    await this._sendCommand({ action: 'kill' });
-
-    // Restore layers
-    this.activeLayers.clear();
-    for (const id of scene.layers) {
-      this.activeLayers.add(id);
-      await this._injectPreset(id);
-    }
-    const layers = [...this.activeLayers];
-    if (layers.length > 0) {
-      await this._sendCommand({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
-      for (let i = 1; i < layers.length; i++) {
-        await this._sendCommand({ action: 'addLayer', preset: layers[i] });
+    try {
+      // Ensure engine is running
+      if (!this.isActive) {
+        this.isActive = true;
+        const toggle = document.getElementById('toggle');
+        if (toggle) toggle.checked = true;
+        await this._injectCore();
       }
-    }
 
-    // Restore blend, filters, opacity
-    this.selectedBlendMode = scene.blendMode || 'screen';
-    this.activeFilters.clear();
-    if (scene.filters) {
-      for (const f of scene.filters) {
-        this.activeFilters.add(f);
-        await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+      // Inject preset files first (separate executeScript calls per file)
+      this.activeLayers.clear();
+      for (const id of scene.layers) {
+        this.activeLayers.add(id);
+        await this._injectPreset(id);
       }
+
+      // Build batch: kill + restore layers + filters + opacity + audio
+      const sceneBatch = [{ action: 'kill' }];
+      const layers = [...this.activeLayers];
+      if (layers.length > 0) {
+        sceneBatch.push({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
+        for (let i = 1; i < layers.length; i++) {
+          sceneBatch.push({ action: 'addLayer', preset: layers[i] });
+        }
+      }
+
+      // Restore blend, filters, opacity
+      this.selectedBlendMode = scene.blendMode || 'screen';
+      this.activeFilters.clear();
+      if (scene.filters) {
+        for (const f of scene.filters) {
+          this.activeFilters.add(f);
+          sceneBatch.push({ action: 'setFilter', filter: f, enabled: true });
+        }
+      }
+      this.opacity = scene.opacity != null ? scene.opacity : 1.0;
+      sceneBatch.push({ action: 'setOpacity', opacity: this.opacity });
+
+      // Restore locks
+      if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
+
+      // Restore Auto state
+      this.autoCycleActive = !!scene.autoCycleActive;
+      this.autoBlend = !!scene.autoBlend;
+      this.autoFilters = !!scene.autoFilters;
+      if (this.autoCycleActive) {
+        await this._injectAllPresets();
+        const allIds = this.presets.map(p => p.id);
+        sceneBatch.push({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
+      }
+
+      // Start audio if enabled
+      if (this.audioEnabled) {
+        sceneBatch.push({ action: 'startVideoAudio' });
+      }
+
+      await this._dispatch(sceneBatch);
+
+      if (this.audioEnabled) {
+        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('loadScene/tabAudio', e));
+      }
+
+      this._updateUI();
+    } finally {
+      this._busy = false;
     }
-    this.opacity = scene.opacity != null ? scene.opacity : 1.0;
-    await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
-
-    // Restore locks
-    if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
-
-    // Restore Auto state
-    this.autoCycleActive = !!scene.autoCycleActive;
-    this.autoBlend = !!scene.autoBlend;
-    this.autoFilters = !!scene.autoFilters;
-    if (this.autoCycleActive) {
-      await this._injectAllPresets();
-      const allIds = this.presets.map(p => p.id);
-      await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
-    }
-
-    // Start audio if enabled
-    if (this.audioEnabled) {
-      await this._sendCommand({ action: 'startVideoAudio' });
-      chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
-    }
-
-    this._updateUI();
-    await this._saveState();
-    this._busy = false;
   }
 
   _clearScene(slot) {
@@ -619,7 +427,7 @@ class PopupController {
           textState: this.textState,
         },
       });
-    } catch (e) { /* SW not available */ }
+    } catch (e) { logWarn('SW', e); }
   }
 
   _bindEvents() {
@@ -672,7 +480,7 @@ class PopupController {
         this.settings.fadeDuration = parseFloat(fadeEl.value);
         this._saveSettings();
         if (this.isActive) {
-          this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+          this._dispatch({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
         }
       });
     }
@@ -686,7 +494,7 @@ class PopupController {
         // Re-send auto-cycle with updated bars if active
         if (this.autoCycleActive) {
           const allIds = this.presets.map(p => p.id);
-          this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+          this._dispatch({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
         }
       });
     }
@@ -698,7 +506,7 @@ class PopupController {
         this.settings.sensitivity = sensEl.value;
         this._saveSettings();
         if (this.isActive) {
-          this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
+          this._dispatch({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
         }
       });
     }
@@ -707,14 +515,18 @@ class PopupController {
     const zoomEl = document.getElementById('setting-zoom');
     const zoomVal = document.getElementById('zoom-value');
     if (zoomEl) {
-      zoomEl.addEventListener('input', () => {
-        this.settings.zoom = parseInt(zoomEl.value, 10) / 100;
+      const throttledZoom = _throttle((value) => {
+        this.settings.zoom = value / 100;
         if (zoomVal) zoomVal.textContent = this.settings.zoom + 'x';
         if (this.isActive) {
-          this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
+          this._dispatch({ action: 'setZoom', zoom: this.settings.zoom });
         }
+      }, 50);
+      zoomEl.addEventListener('input', () => {
+        throttledZoom(parseInt(zoomEl.value, 10));
       });
       zoomEl.addEventListener('change', () => {
+        this.settings.zoom = parseInt(zoomEl.value, 10) / 100;
         this._saveSettings();
       });
     }
@@ -728,7 +540,7 @@ class PopupController {
         osdBtn.classList.toggle('on', this.settings.osdEnabled);
         this._saveSettings();
         if (this.isActive) {
-          this._sendCommand({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
+          this._dispatch({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
         }
       });
     }
@@ -794,6 +606,15 @@ class PopupController {
 
         }
       });
+      btn.addEventListener('keydown', (e) => {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          const slot = parseInt(btn.dataset.slot, 10);
+          if (this.scenes[slot] != null) {
+            this._clearScene(slot);
+          }
+        }
+      });
     }
 
     // Scene delete buttons
@@ -810,20 +631,24 @@ class PopupController {
     const btnTextOn = document.getElementById('btn-text-on');
     if (btnTextOn) {
       btnTextOn.addEventListener('click', async () => {
+        if (this._busy) return;
         const textInput = document.getElementById('text-input');
         const text = textInput ? textInput.value.trim() : '';
         if (!text) return;
-        if (!this.isActive) {
-          this.isActive = true;
-          const toggle = document.getElementById('toggle');
-          if (toggle) toggle.checked = true;
-          await this._injectCore();
+        this._busy = true;
+        try {
+          if (!this.isActive) {
+            this.isActive = true;
+            const toggle = document.getElementById('toggle');
+            if (toggle) toggle.checked = true;
+            await this._injectCore();
+          }
+          await this._dispatch({ action: 'textAutoStart', text: text });
+          btnTextOn.classList.add('active');
+          this.textState = { text, autoText: true };
+        } finally {
+          this._busy = false;
         }
-        await this._sendCommand({ action: 'textAutoStart', text: text });
-        btnTextOn.classList.add('active');
-        this.textState = { text, autoText: true };
-
-        this._saveState();
       });
     }
 
@@ -831,13 +656,16 @@ class PopupController {
     const btnTextOff = document.getElementById('btn-text-off');
     if (btnTextOff) {
       btnTextOff.addEventListener('click', async () => {
-        await this._sendCommand({ action: 'textClear' });
-        await this._sendCommand({ action: 'textAutoStop' });
-        const btnOn = document.getElementById('btn-text-on');
-        if (btnOn) btnOn.classList.remove('active');
-        this.textState = null;
-
-        this._saveState();
+        if (this._busy) return;
+        this._busy = true;
+        try {
+          await this._dispatch([{ action: 'textClear' }, { action: 'textAutoStop' }]);
+          const btnOn = document.getElementById('btn-text-on');
+          if (btnOn) btnOn.classList.remove('active');
+          this.textState = null;
+        } finally {
+          this._busy = false;
+        }
       });
     }
 
@@ -870,10 +698,9 @@ class PopupController {
           this.autoCycleActive = false;
           const autoBtn = document.getElementById('btn-auto-cycle');
           if (autoBtn) autoBtn.classList.remove('active');
-          this._sendCommand({ action: 'stopAutoCycle' });
+          this._dispatch({ action: 'stopAutoCycle' });
         }
         this._updateLayerCount();
-        this._saveState();
       });
     }
 
@@ -892,21 +719,26 @@ class PopupController {
           btn.classList.add('active');
         }
         if (this.isActive) {
-          this._sendCommand({ action: 'setBlendMode', blendMode: this.selectedBlendMode });
+          this._dispatch({ action: 'setBlendMode', blendMode: this.selectedBlendMode });
         }
-        this._saveState();
       });
     }
 
-    // Opacity slider
+    // Opacity slider (throttled input, save on change)
     const opacitySlider = document.getElementById('opacity-slider');
     if (opacitySlider) {
-      opacitySlider.addEventListener('input', (e) => {
-        this.opacity = parseInt(e.target.value, 10) / 100;
+      const throttledOpacity = _throttle((value) => {
+        this.opacity = value / 100;
         if (this.isActive) {
-          this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
+          this._dispatch({ action: 'setOpacity', opacity: this.opacity });
         }
-        this._saveState();
+      }, 50);
+      opacitySlider.addEventListener('input', (e) => {
+        throttledOpacity(parseInt(e.target.value, 10));
+      });
+      opacitySlider.addEventListener('change', () => {
+        this.opacity = parseInt(opacitySlider.value, 10) / 100;
+        this._dispatch({ action: 'setOpacity', opacity: this.opacity });
       });
     }
 
@@ -914,24 +746,27 @@ class PopupController {
     const audioBtn = document.getElementById('audio-toggle');
     if (audioBtn) {
       audioBtn.addEventListener('click', async () => {
-        this.audioEnabled = !this.audioEnabled;
-        audioBtn.textContent = this.audioEnabled ? 'ON' : 'OFF';
-        audioBtn.classList.toggle('on', this.audioEnabled);
+        if (this._busy) return;
+        this._busy = true;
+        try {
+          this.audioEnabled = !this.audioEnabled;
+          audioBtn.textContent = this.audioEnabled ? 'ON' : 'OFF';
+          audioBtn.classList.toggle('on', this.audioEnabled);
 
-        if (this.audioEnabled) {
-          await this._sendCommand({ action: 'startVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
-          if (this.isActive) {
-            this._sendCommand({ action: 'setAudioEnabled', enabled: true });
+          if (this.audioEnabled) {
+            const audioBatch = [{ action: 'startVideoAudio' }];
+            if (this.isActive) audioBatch.push({ action: 'setAudioEnabled', enabled: true });
+            await this._dispatch(audioBatch);
+            chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('audio/startTab', e));
+          } else {
+            const audioBatch = [{ action: 'stopVideoAudio' }];
+            if (this.isActive) audioBatch.push({ action: 'setAudioEnabled', enabled: false });
+            await this._dispatch(audioBatch);
+            chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('audio/stopTab', e));
           }
-        } else {
-          await this._sendCommand({ action: 'stopVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
-          if (this.isActive) {
-            this._sendCommand({ action: 'setAudioEnabled', enabled: false });
-          }
+        } finally {
+          this._busy = false;
         }
-        this._saveState();
       });
     }
 
@@ -939,14 +774,22 @@ class PopupController {
     const btnReset = document.getElementById('btn-reset');
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
-        await this._sendCommand({ action: 'stopVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
-        // Full reset (no lock respect — reset everything except scenes)
-        await this._sendCommand({ action: 'kill' });
-
-        // Stop text
-        await this._sendCommand({ action: 'textAutoStop' });
-        await this._sendCommand({ action: 'textClear' });
+        if (this._busy) return;
+        this._busy = true;
+        try {
+        // Dispatch all reset commands through SW
+        await this._dispatch([
+          { action: 'stopVideoAudio' },
+          { action: 'kill' },
+          { action: 'textAutoStop' },
+          { action: 'textClear' },
+          { action: 'setFadeDuration', duration: DEFAULT_SETTINGS.fadeDuration },
+          { action: 'setZoom', zoom: 1.0 },
+          { action: 'setOsdEnabled', enabled: true },
+          { action: 'setAudioSensitivity', sensitivity: 1.0 },
+          { action: 'stop' },
+        ]);
+        chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('reset/tabAudio', e));
         this.textState = null;
 
         // Reset all state
@@ -966,10 +809,6 @@ class PopupController {
         // Reset settings to defaults
         this.settings = { ...DEFAULT_SETTINGS };
         await this._saveSettings();
-        await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
-        await this._sendCommand({ action: 'setZoom', zoom: 1.0 });
-        await this._sendCommand({ action: 'setOsdEnabled', enabled: true });
-        await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: 1.0 });
 
         // Reset all UI
         const toggle = document.getElementById('toggle');
@@ -1000,8 +839,10 @@ class PopupController {
         // Reset settings UI
         this._updateSettingsUI();
         this._updateLayerCount();
-        this._saveState();
 
+        } finally {
+          this._busy = false;
+        }
       });
     }
 
@@ -1009,57 +850,62 @@ class PopupController {
     const btnNext = document.getElementById('btn-next');
     if (btnNext) {
       btnNext.addEventListener('click', async () => {
-        if (!this.isActive) {
-          this.isActive = true;
-          const toggle = document.getElementById('toggle');
-          if (toggle) toggle.checked = true;
-          await this._injectCore();
-        }
-        // Kill with locks so engine preserves locked state
-        await this._sendCommand({ action: 'kill', locks: this.locks });
-        if (!this.locks.effect) {
-          const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
-          const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
-          const chosen = shuffled.slice(0, count);
-          // Only inject chosen presets (not all 204)
-          for (const p of chosen) {
-            await this._injectPreset(p.id);
+        if (this._busy) return;
+        this._busy = true;
+        try {
+          if (!this.isActive) {
+            this.isActive = true;
+            const toggle = document.getElementById('toggle');
+            if (toggle) toggle.checked = true;
+            await this._injectCore();
           }
-          const first = chosen[0];
-          await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode });
-          for (let i = 1; i < chosen.length; i++) {
-            await this._sendCommand({ action: 'addLayer', preset: chosen[i].id });
+          // Build batch: kill + new layers + filters + audio
+          const nextBatch = [{ action: 'kill', locks: this.locks }];
+          if (!this.locks.effect) {
+            const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
+            const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
+            const chosen = shuffled.slice(0, count);
+            // Only inject chosen presets (not all 204)
+            for (const p of chosen) {
+              await this._injectPreset(p.id);
+            }
+            nextBatch.push({ action: 'start', preset: chosen[0].id, blendMode: this.selectedBlendMode });
+            for (let i = 1; i < chosen.length; i++) {
+              nextBatch.push({ action: 'addLayer', preset: chosen[i].id });
+            }
+            this.activeLayers.clear();
+            for (const p of chosen) this.activeLayers.add(p.id);
           }
-          this.activeLayers.clear();
-          for (const p of chosen) this.activeLayers.add(p.id);
-        }
-        if (!this.locks.filter) {
-          for (const f of this.activeFilters) {
-            await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+          if (!this.locks.filter) {
+            for (const f of this.activeFilters) {
+              nextBatch.push({ action: 'setFilter', filter: f, enabled: true });
+            }
           }
+          if (this.audioEnabled) {
+            nextBatch.push({ action: 'startVideoAudio' });
+          }
+          await this._dispatch(nextBatch);
+          if (this.audioEnabled) {
+            chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('next/tabAudio', e));
+          }
+          document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
+            cb.checked = this.activeLayers.has(cb.value);
+          });
+          this._updateLayerCount();
+          if (this.autoCycleActive) {
+            this.autoCycleActive = false;
+            this.autoBlend = false;
+            this.autoFilters = false;
+            const autoBtn = document.getElementById('btn-auto-cycle');
+            if (autoBtn) autoBtn.classList.remove('active');
+            const abBtn = document.getElementById('auto-blend');
+            if (abBtn) abBtn.classList.remove('active');
+            const afBtn = document.getElementById('auto-filters');
+            if (afBtn) afBtn.classList.remove('active');
+          }
+        } finally {
+          this._busy = false;
         }
-        document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
-          cb.checked = this.activeLayers.has(cb.value);
-        });
-        this._updateLayerCount();
-        if (this.autoCycleActive) {
-          this.autoCycleActive = false;
-          this.autoBlend = false;
-          this.autoFilters = false;
-          const autoBtn = document.getElementById('btn-auto-cycle');
-          if (autoBtn) autoBtn.classList.remove('active');
-          const abBtn = document.getElementById('auto-blend');
-          if (abBtn) abBtn.classList.remove('active');
-          const afBtn = document.getElementById('auto-filters');
-          if (afBtn) afBtn.classList.remove('active');
-        }
-        // Start video audio if needed
-        if (this.audioEnabled) {
-          await this._sendCommand({ action: 'startVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
-        }
-        this._saveState();
-
       });
     }
 
@@ -1067,6 +913,9 @@ class PopupController {
     const btnAutoCycle = document.getElementById('btn-auto-cycle');
     if (btnAutoCycle) {
       btnAutoCycle.addEventListener('click', async () => {
+        if (this._busy) return;
+        this._busy = true;
+        try {
         this.autoCycleActive = !this.autoCycleActive;
         btnAutoCycle.classList.toggle('active', this.autoCycleActive);
         if (this.autoCycleActive) {
@@ -1078,7 +927,7 @@ class PopupController {
           const autoFiltersBtn = document.getElementById('auto-filters');
           if (autoFiltersBtn) autoFiltersBtn.classList.add('active');
           // Stop standalone autoFX (auto-cycle handles blend/filter)
-          await this._sendCommand({ action: 'stopAutoFX' });
+          await this._dispatch({ action: 'stopAutoFX' });
           if (!this.isActive) {
             const toggle = document.getElementById('toggle');
             if (toggle) toggle.checked = true;
@@ -1086,15 +935,17 @@ class PopupController {
           }
           await this._injectAllPresets();
           const allIds = this.presets.map(p => p.id);
-          await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+          await this._dispatch({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
         } else {
-          await this._sendCommand({ action: 'stopAutoCycle' });
+          await this._dispatch({ action: 'stopAutoCycle' });
           // If blend/filter still on, start standalone autoFX
           if (this.autoBlend || this.autoFilters) {
-            await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+            await this._dispatch({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
           }
         }
-        this._saveState();
+        } finally {
+          this._busy = false;
+        }
       });
     }
 
@@ -1110,9 +961,8 @@ class PopupController {
           this.activeFilters.add(filter);
         }
         if (this.isActive) {
-          this._sendCommand({ action: 'toggleFilter', filter: filter });
+          this._dispatch({ action: 'toggleFilter', filter: filter });
         }
-        this._saveState();
       });
     }
 
@@ -1123,13 +973,12 @@ class PopupController {
         this.autoBlend = !this.autoBlend;
         autoBlendBtn.classList.toggle('active', this.autoBlend);
         if (this.autoCycleActive) {
-          await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
+          await this._dispatch({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         } else if (this.autoBlend || this.autoFilters) {
-          await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+          await this._dispatch({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
         } else {
-          await this._sendCommand({ action: 'stopAutoFX' });
+          await this._dispatch({ action: 'stopAutoFX' });
         }
-        this._saveState();
       });
     }
 
@@ -1140,13 +989,12 @@ class PopupController {
         this.autoFilters = !this.autoFilters;
         autoFiltersBtn.classList.toggle('active', this.autoFilters);
         if (this.autoCycleActive) {
-          await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
+          await this._dispatch({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         } else if (this.autoBlend || this.autoFilters) {
-          await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+          await this._dispatch({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
         } else {
-          await this._sendCommand({ action: 'stopAutoFX' });
+          await this._dispatch({ action: 'stopAutoFX' });
         }
-        this._saveState();
       });
     }
   }
@@ -1232,35 +1080,30 @@ class PopupController {
         await this._injectPreset(presetId);
       }
 
+      // Build batch of all startup commands
+      const batch = [];
       const first = layers[0];
-      await this._sendCommand({
-        action: 'start',
-        preset: first,
-        blendMode: this.selectedBlendMode,
-      });
-
+      batch.push({ action: 'start', preset: first, blendMode: this.selectedBlendMode });
       for (let i = 1; i < layers.length; i++) {
-        await this._sendCommand({ action: 'addLayer', preset: layers[i] });
+        batch.push({ action: 'addLayer', preset: layers[i] });
       }
-
       for (const f of this.activeFilters) {
-        await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+        batch.push({ action: 'setFilter', filter: f, enabled: true });
       }
-
-      // Start video audio capture + tabCapture fallback
       if (this.audioEnabled) {
-        await this._sendCommand({ action: 'startVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+        batch.push({ action: 'startVideoAudio' });
       }
+      batch.push({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+      batch.push({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
+      batch.push({ action: 'setZoom', zoom: this.settings.zoom });
+      batch.push({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
+      batch.push({ action: 'setOpacity', opacity: this.opacity });
+      await this._dispatch(batch);
 
-      // Apply settings to engine
-      await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
-      await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
-      await this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
-      await this._sendCommand({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
-      await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
-
-      await this._saveState();
+      // Start tabCapture fallback (separate from dispatch — goes to SW directly)
+      if (this.audioEnabled) {
+        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => logWarn('startAll/tabAudio', e));
+      }
     } catch (e) {
       this.isActive = false;
       this._coreInjected = false;
@@ -1276,13 +1119,11 @@ class PopupController {
     if (this._busy) return;
     this._busy = true;
     try {
-      await this._sendCommand({ action: 'stopVideoAudio' });
-      chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
-      await this._sendCommand({ action: 'stop' });
+      await this._dispatch([{ action: 'stopVideoAudio' }, { action: 'stop' }]);
+      chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => logWarn('stopAll/tabAudio', e));
       this.isActive = false;
       this._coreInjected = false;
       this._injectedPresets.clear();
-      await this._saveState();
     } finally {
       this._busy = false;
     }
@@ -1292,16 +1133,52 @@ class PopupController {
     try {
       await this._injectCore();
       await this._injectPreset(presetId);
-      await this._sendCommand({ action: 'addLayer', preset: presetId });
-      await this._saveState();
+      await this._dispatch({ action: 'addLayer', preset: presetId });
     } catch (e) {
       console.warn('VJam FX: Failed to add layer', e);
     }
   }
 
   async _removeLayer(presetId) {
-    await this._sendCommand({ action: 'removeLayer', preset: presetId });
-    await this._saveState();
+    await this._dispatch({ action: 'removeLayer', preset: presetId });
+  }
+
+  _showBanner(text, type = 'error') {
+    const popup = document.querySelector('.popup');
+    if (!popup) return;
+    // Remove existing banner
+    const old = popup.querySelector('.vjam-banner');
+    if (old) old.remove();
+    const banner = document.createElement('div');
+    banner.className = 'vjam-banner';
+    banner.style.cssText = 'padding:6px 10px;margin-bottom:8px;border-radius:4px;font-size:11px;text-align:center;' +
+      (type === 'error' ? 'background:#441111;color:#ff6666;border:1px solid #663333;' : 'background:#114411;color:#66ff66;border:1px solid #336633;');
+    banner.textContent = text;
+    banner.setAttribute('role', 'alert');
+    popup.insertBefore(banner, popup.firstChild);
+    setTimeout(() => { if (banner.parentNode) banner.remove(); }, 3000);
+  }
+
+  /**
+   * Dispatch actions through SW (single source of truth).
+   * SW updates state, forwards to content, returns updated state.
+   */
+  async _dispatch(actions) {
+    if (!this._tabId) return null;
+    const arr = Array.isArray(actions) ? actions : [actions];
+    if (arr.length === 0) return null;
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'command',
+        tabId: this._tabId,
+        actions: arr,
+      });
+      return response && response.state ? response.state : null;
+    } catch (e) {
+      logWarn('dispatch', e);
+      this._showBanner('Effect command failed');
+      return null;
+    }
   }
 
   async _sendCommand(msg) {
@@ -1318,12 +1195,32 @@ class PopupController {
         args: [msg],
       });
     } catch (e) {
-      console.warn('VJam FX: Failed to send command', e);
+      logWarn('sendCommand', e);
+      this._showBanner('Effect command failed');
+    }
+  }
+
+  async _sendBatch(msgs) {
+    if (!this._tabId || !msgs || msgs.length === 0) return;
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        func: (messages) => {
+          if (window._vjamFxEngine) {
+            window._vjamFxEngine.handleBatch(messages);
+          }
+        },
+        args: [msgs],
+      });
+    } catch (e) {
+      logWarn('sendBatch', e);
+      this._showBanner('Effect command failed');
     }
   }
 }
 
-export { PopupController };
+export { PopupController, _throttle, logWarn };
 
 // Auto-init in popup context
 if (typeof document !== 'undefined' && document.getElementById) {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PopupController } from '../popup/popup.js';
+import { PopupController, _throttle, logWarn } from '../popup/popup.js';
+import { PRESET_CATEGORIES, ALL_PRESETS } from '../popup/preset-catalog.js';
 
 describe('PopupController', () => {
   let controller;
@@ -87,7 +88,8 @@ describe('PopupController', () => {
     it('should send stop command on toggle OFF', async () => {
       controller.isActive = true;
       await controller._stopAll();
-      expect(chrome.scripting.executeScript).toHaveBeenCalled();
+      // _stopAll uses _dispatch which goes through SW (sendMessage), not executeScript
+      expect(chrome.runtime.sendMessage).toHaveBeenCalled();
       expect(controller.isActive).toBe(false);
     });
   });
@@ -176,6 +178,232 @@ describe('PopupController', () => {
       expect(controller.audioEnabled).toBe(false);
       controller.audioEnabled = true;
       expect(controller.audioEnabled).toBe(true);
+    });
+  });
+
+  describe('_busy guard', () => {
+    it('should block _startAll when busy', async () => {
+      controller._busy = true;
+      await controller._startAll();
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+    });
+
+    it('should block _stopAll when busy', async () => {
+      controller._busy = true;
+      controller.isActive = true;
+      await controller._stopAll();
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+      expect(controller.isActive).toBe(true);
+    });
+
+    it('should release _busy after _startAll completes', async () => {
+      controller.activeLayers.add('neon-tunnel');
+      await controller._startAll();
+      expect(controller._busy).toBe(false);
+    });
+
+    it('should release _busy after _startAll fails', async () => {
+      controller.activeLayers.add('neon-tunnel');
+      chrome.scripting.executeScript.mockRejectedValueOnce(new Error('inject fail'));
+      await controller._startAll();
+      expect(controller._busy).toBe(false);
+    });
+
+    it('should release _busy after _loadScene even on error', async () => {
+      controller.scenes[0] = { layers: ['neon-tunnel'], blendMode: 'screen', filters: [] };
+      // Make the _sendCommand calls fail (but core inject succeeds)
+      let callCount = 0;
+      chrome.scripting.executeScript.mockImplementation(() => {
+        callCount++;
+        // Let first few calls succeed (core inject), then fail
+        if (callCount > 5) return Promise.reject(new Error('fail'));
+        return Promise.resolve([{ result: true }]);
+      });
+      try {
+        await controller._loadScene(0);
+      } catch (e) {
+        // Expected — _injectPreset rejection propagates
+      }
+      expect(controller._busy).toBe(false);
+    });
+
+    it('should not load scene when busy', async () => {
+      controller._busy = true;
+      controller.scenes[0] = { layers: ['neon-tunnel'], blendMode: 'screen', filters: [] };
+      await controller._loadScene(0);
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('_throttle', () => {
+    it('should call function immediately on first call', () => {
+      const fn = vi.fn();
+      const throttled = _throttle(fn, 50);
+      throttled('a');
+      expect(fn).toHaveBeenCalledWith('a');
+    });
+
+    it('should throttle subsequent calls within interval', () => {
+      vi.useFakeTimers();
+      const fn = vi.fn();
+      const throttled = _throttle(fn, 50);
+      throttled('a');
+      throttled('b');
+      expect(fn).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(50);
+      expect(fn).toHaveBeenCalledTimes(2);
+      expect(fn).toHaveBeenLastCalledWith('b');
+      vi.useRealTimers();
+    });
+  });
+
+  describe('logWarn', () => {
+    it('should call console.warn with context', () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      logWarn('test', new Error('oops'));
+      expect(spy).toHaveBeenCalledWith('VJam FX [test]:', 'oops');
+      spy.mockRestore();
+    });
+
+    it('should handle string errors', () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      logWarn('ctx', 'string error');
+      expect(spy).toHaveBeenCalledWith('VJam FX [ctx]:', 'string error');
+      spy.mockRestore();
+    });
+  });
+
+  describe('_sendBatch', () => {
+    it('should send batch in single executeScript call', async () => {
+      chrome.scripting.executeScript.mockClear();
+      await controller._sendBatch([
+        { action: 'setBlendMode', blendMode: 'difference' },
+        { action: 'setOpacity', opacity: 0.5 },
+      ]);
+      expect(chrome.scripting.executeScript).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not send if no tabId', async () => {
+      controller._tabId = null;
+      chrome.scripting.executeScript.mockClear();
+      await controller._sendBatch([{ action: 'stop' }]);
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+    });
+
+    it('should not send empty batch', async () => {
+      chrome.scripting.executeScript.mockClear();
+      await controller._sendBatch([]);
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('_dispatch', () => {
+    it('should send command type message to SW', async () => {
+      chrome.runtime.sendMessage.mockClear();
+      await controller._dispatch([{ action: 'setOpacity', opacity: 0.5 }]);
+      const calls = chrome.runtime.sendMessage.mock.calls.map(c => c[0]);
+      const cmdCalls = calls.filter(c => c && c.type === 'command');
+      expect(cmdCalls.length).toBe(1);
+      expect(cmdCalls[0].tabId).toBe(1);
+      expect(cmdCalls[0].actions).toEqual([{ action: 'setOpacity', opacity: 0.5 }]);
+    });
+
+    it('should not send if no tabId', async () => {
+      controller._tabId = null;
+      chrome.runtime.sendMessage.mockClear();
+      const result = await controller._dispatch({ action: 'stop' });
+      expect(result).toBeNull();
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('should wrap single action in array', async () => {
+      chrome.runtime.sendMessage.mockClear();
+      await controller._dispatch({ action: 'setBlendMode', blendMode: 'difference' });
+      const call = chrome.runtime.sendMessage.mock.calls[0][0];
+      expect(call.type).toBe('command');
+      expect(call.actions).toEqual([{ action: 'setBlendMode', blendMode: 'difference' }]);
+    });
+
+    it('should return state from SW response', async () => {
+      chrome.runtime.sendMessage.mockResolvedValueOnce({ ok: true, state: { active: true, layers: ['rain'] } });
+      const state = await controller._dispatch({ action: 'start', preset: 'rain' });
+      expect(state).toEqual({ active: true, layers: ['rain'] });
+    });
+  });
+
+  describe('_showBanner', () => {
+    it('should create error banner in popup', () => {
+      controller._showBanner('Test error', 'error');
+      const banner = document.querySelector('.vjam-banner');
+      expect(banner).not.toBeNull();
+      expect(banner.textContent).toBe('Test error');
+      expect(banner.getAttribute('role')).toBe('alert');
+    });
+
+    it('should auto-remove banner after timeout', () => {
+      vi.useFakeTimers();
+      controller._showBanner('Temp error');
+      expect(document.querySelector('.vjam-banner')).not.toBeNull();
+      vi.advanceTimersByTime(3000);
+      expect(document.querySelector('.vjam-banner')).toBeNull();
+      vi.useRealTimers();
+    });
+
+    it('should replace existing banner', () => {
+      controller._showBanner('First');
+      controller._showBanner('Second');
+      const banners = document.querySelectorAll('.vjam-banner');
+      expect(banners.length).toBe(1);
+      expect(banners[0].textContent).toBe('Second');
+    });
+  });
+
+  describe('scene keyboard navigation', () => {
+    it('should not throw on Delete key for empty scene slot', () => {
+      const btn = document.createElement('button');
+      btn.className = 'scene-btn';
+      btn.dataset.slot = '0';
+      container.querySelector('.popup').appendChild(btn);
+      controller._bindEvents();
+      const event = new KeyboardEvent('keydown', { key: 'Delete' });
+      expect(() => btn.dispatchEvent(event)).not.toThrow();
+    });
+  });
+
+  describe('accessibility', () => {
+    it('should have aria-label on all interactive buttons', () => {
+      const fs = require('fs');
+      const html = fs.readFileSync(require('path').resolve(__dirname, '../popup/popup.html'), 'utf-8');
+      expect(html).toContain('aria-label="Settings"');
+      expect(html).toContain('aria-label="Reset all effects"');
+      expect(html).toContain('aria-label="Toggle audio"');
+    });
+  });
+
+  describe('preset catalog', () => {
+    it('should have correct number of categories', () => {
+      expect(PRESET_CATEGORIES.length).toBeGreaterThanOrEqual(13);
+    });
+
+    it('should have 191 total presets', () => {
+      expect(ALL_PRESETS.length).toBe(191);
+    });
+
+    it('should match controller.presets', () => {
+      expect(controller.presets.length).toBe(ALL_PRESETS.length);
+    });
+
+    it('should have unique preset IDs', () => {
+      const ids = ALL_PRESETS.map(p => p.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+  });
+
+  describe('text input maxlength', () => {
+    it('should have maxlength attribute in HTML', () => {
+      const fs = require('fs');
+      const html = fs.readFileSync(require('path').resolve(__dirname, '../popup/popup.html'), 'utf-8');
+      expect(html).toContain('maxlength="200"');
     });
   });
 

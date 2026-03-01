@@ -91,7 +91,7 @@ body {
 .settings-btn {
   background: none;
   border: none;
-  color: #888;
+  color: #aaa;
   font-size: 16px;
   cursor: pointer;
   padding: 0 2px;
@@ -340,7 +340,7 @@ body {
 }
 
 .auto-toggle.disabled {
-  opacity: 0.3;
+  opacity: 0.5;
   pointer-events: none;
 }
 

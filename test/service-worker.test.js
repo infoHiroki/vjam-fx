@@ -323,4 +323,202 @@ describe('Service Worker', () => {
       });
     });
   });
+
+  describe('command handler (Phase 5)', () => {
+    it('should handle command message and update state', async () => {
+      const sendResponse = vi.fn();
+      const result = messageListeners[0](
+        { type: 'command', tabId: 10, actions: [{ action: 'start', preset: 'rain', blendMode: 'screen' }] },
+        {},
+        sendResponse,
+      );
+      expect(result).toBe(true); // async
+      await new Promise(r => setTimeout(r, 100));
+      expect(sendResponse).toHaveBeenCalled();
+      const resp = sendResponse.mock.calls[0][0];
+      expect(resp.ok).toBe(true);
+      expect(resp.state.active).toBe(true);
+      expect(resp.state.layers).toContain('rain');
+    });
+
+    it('should forward actions to content via executeScript', async () => {
+      chrome.scripting.executeScript.mockClear();
+      const sendResponse = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 10, actions: [{ action: 'setOpacity', opacity: 0.5 }] },
+        {},
+        sendResponse,
+      );
+      await new Promise(r => setTimeout(r, 100));
+      // Should have called executeScript to forward to content
+      const funcCalls = chrome.scripting.executeScript.mock.calls.filter(
+        c => c[0].world === 'MAIN' && typeof c[0].func === 'function'
+      );
+      expect(funcCalls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should persist state after command', async () => {
+      const sendResponse1 = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 20, actions: [
+          { action: 'start', preset: 'neon-tunnel', blendMode: 'difference' },
+          { action: 'addLayer', preset: 'rain' },
+        ]},
+        {},
+        sendResponse1,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Verify state was persisted via getState
+      const sendResponse2 = vi.fn();
+      messageListeners[0](
+        { type: 'getState', tabId: 20 },
+        {},
+        sendResponse2,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      const state = sendResponse2.mock.calls[0][0].state;
+      expect(state.active).toBe(true);
+      expect(state.layers).toEqual(['neon-tunnel', 'rain']);
+      expect(state.blendMode).toBe('difference');
+    });
+
+    it('should apply multiple actions sequentially', async () => {
+      const sendResponse = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 30, actions: [
+          { action: 'start', preset: 'mandala', blendMode: 'screen' },
+          { action: 'setFilter', filter: 'invert', enabled: true },
+          { action: 'setFilter', filter: 'blur', enabled: true },
+          { action: 'setOpacity', opacity: 0.7 },
+        ]},
+        {},
+        sendResponse,
+      );
+      await new Promise(r => setTimeout(r, 100));
+      const state = sendResponse.mock.calls[0][0].state;
+      expect(state.layers).toEqual(['mandala']);
+      expect(state.filters).toEqual(['invert', 'blur']);
+      expect(state.opacity).toBe(0.7);
+    });
+
+    it('should reject command without tabId', () => {
+      const sendResponse = vi.fn();
+      const result = messageListeners[0](
+        { type: 'command', actions: [{ action: 'stop' }] },
+        {},
+        sendResponse,
+      );
+      expect(result).toBe(false);
+      expect(sendResponse).toHaveBeenCalledWith({ ok: false });
+    });
+
+    it('should handle stop action', async () => {
+      // First start
+      const sr1 = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 40, actions: [{ action: 'start', preset: 'rain', blendMode: 'screen' }] },
+        {},
+        sr1,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      expect(sr1.mock.calls[0][0].state.active).toBe(true);
+
+      // Then stop
+      const sr2 = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 40, actions: [{ action: 'stop' }] },
+        {},
+        sr2,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      expect(sr2.mock.calls[0][0].state.active).toBe(false);
+    });
+
+    it('should handle kill action', async () => {
+      const sr1 = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 50, actions: [
+          { action: 'start', preset: 'rain', blendMode: 'screen' },
+          { action: 'setFilter', filter: 'invert', enabled: true },
+        ]},
+        {},
+        sr1,
+      );
+      await new Promise(r => setTimeout(r, 50));
+
+      const sr2 = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 50, actions: [{ action: 'kill' }] },
+        {},
+        sr2,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      const state = sr2.mock.calls[0][0].state;
+      expect(state.layers).toEqual([]);
+      expect(state.filters).toEqual([]);
+    });
+
+    it('should handle autoCycle actions', async () => {
+      const sr = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 60, actions: [
+          { action: 'startAutoCycle', presets: ['a', 'b', 'c'], autoBlend: true, autoFilters: false },
+        ]},
+        {},
+        sr,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      const state = sr.mock.calls[0][0].state;
+      expect(state.autoCyclePresets).toEqual(['a', 'b', 'c']);
+      expect(state.autoBlend).toBe(true);
+      expect(state.autoFilters).toBe(false);
+    });
+
+    it('should handle text actions', async () => {
+      const sr = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 70, actions: [
+          { action: 'textAutoStart', text: 'Hello' },
+        ]},
+        {},
+        sr,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      expect(sr.mock.calls[0][0].state.textState).toEqual({ text: 'Hello', autoText: true });
+
+      const sr2 = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 70, actions: [{ action: 'textClear' }] },
+        {},
+        sr2,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      expect(sr2.mock.calls[0][0].state.textState).toBeNull();
+    });
+
+    it('should handle toggleFilter action', async () => {
+      const sr = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 80, actions: [
+          { action: 'toggleFilter', filter: 'blur' },
+          { action: 'toggleFilter', filter: 'invert' },
+        ]},
+        {},
+        sr,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      expect(sr.mock.calls[0][0].state.filters).toEqual(['blur', 'invert']);
+
+      // Toggle blur off
+      const sr2 = vi.fn();
+      messageListeners[0](
+        { type: 'command', tabId: 80, actions: [{ action: 'toggleFilter', filter: 'blur' }] },
+        {},
+        sr2,
+      );
+      await new Promise(r => setTimeout(r, 50));
+      expect(sr2.mock.calls[0][0].state.filters).toEqual(['invert']);
+    });
+  });
 });
