@@ -147,18 +147,6 @@ body {
   border-color: #00cc66;
 }
 
-.zoom-slider {
-  width: 80px;
-  accent-color: #00cc66;
-  cursor: pointer;
-}
-
-.zoom-value {
-  font-size: 10px;
-  color: #aaa;
-  min-width: 24px;
-  text-align: right;
-}
 
 
 /* Hero Button (Auto) */

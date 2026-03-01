@@ -77,7 +77,6 @@
       // Settings
       this._fadeDuration = 1.5; // seconds for layer fade in/out
       this._audioSensitivity = 1.0; // multiplier for audio levels
-      this._zoom = 1.0; // overlay scale
 
       this._onBridgeMessage = null;
       this._onFullscreenChange = null;
@@ -411,13 +410,6 @@
       this.opacity = Math.max(0, Math.min(1, value));
       if (this.overlay) {
         this.overlay.style.opacity = this.opacity;
-      }
-    }
-
-    setZoom(value) {
-      this._zoom = Math.max(0.5, Math.min(3, value));
-      if (this.overlay) {
-        this.overlay.style.transform = this._zoom === 1 ? '' : 'scale(' + this._zoom + ')';
       }
     }
 
@@ -919,9 +911,6 @@
           break;
         case 'setAudioSensitivity':
           this._audioSensitivity = msg.sensitivity != null ? msg.sensitivity : 1.0;
-          break;
-        case 'setZoom':
-          this.setZoom(msg.zoom != null ? msg.zoom : 1.0);
           break;
         case 'startAutoCycle':
           this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks, skipFirstTick: msg.skipFirstTick });

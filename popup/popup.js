@@ -234,7 +234,6 @@ const DEFAULT_SETTINGS = {
   fadeDuration: 1.5,
   barsPerCycle: 4,
   sensitivity: 'mid',
-  zoom: 1.0,
 };
 
 const SENSITIVITY_MAP = { lo: 0.5, mid: 1.0, hi: 2.0 };
@@ -587,10 +586,6 @@ class PopupController {
     if (cycleEl) cycleEl.value = String(this.settings.barsPerCycle);
     const sensEl = document.getElementById('setting-sensitivity');
     if (sensEl) sensEl.value = this.settings.sensitivity;
-    const zoomEl = document.getElementById('setting-zoom');
-    if (zoomEl) zoomEl.value = Math.round(this.settings.zoom * 100);
-    const zoomVal = document.getElementById('zoom-value');
-    if (zoomVal) zoomVal.textContent = this.settings.zoom + 'x';
   }
 
   async _saveState() {
@@ -694,22 +689,6 @@ class PopupController {
         if (this.isActive) {
           this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
         }
-      });
-    }
-
-    // Settings: Zoom
-    const zoomEl = document.getElementById('setting-zoom');
-    const zoomVal = document.getElementById('zoom-value');
-    if (zoomEl) {
-      zoomEl.addEventListener('input', () => {
-        this.settings.zoom = parseInt(zoomEl.value, 10) / 100;
-        if (zoomVal) zoomVal.textContent = this.settings.zoom + 'x';
-        if (this.isActive) {
-          this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
-        }
-      });
-      zoomEl.addEventListener('change', () => {
-        this._saveSettings();
       });
     }
 
@@ -947,7 +926,6 @@ class PopupController {
         this.settings = { ...DEFAULT_SETTINGS };
         await this._saveSettings();
         await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
-        await this._sendCommand({ action: 'setZoom', zoom: 1.0 });
         await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: 1.0 });
 
         // Reset all UI
@@ -1238,7 +1216,6 @@ class PopupController {
       // Apply settings to engine
       await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
       await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
-      await this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
       await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
 
       await this._saveState();
