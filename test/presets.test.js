@@ -25,8 +25,10 @@ for (const { file } of PRESET_FILES) {
 }
 
 // Import popup preset list for consistency check
-import { ALL_PRESETS } from '../popup/preset-catalog.js';
-const popupPresetIds = ALL_PRESETS.map(p => p.id);
+import { readFileSync as readSync } from 'fs';
+const popupCode = readSync(resolve(__dirname, '../popup/popup.js'), 'utf-8');
+const popupIdMatches = [...popupCode.matchAll(/id:\s*'([^']+)'/g)].map(m => m[1]);
+const popupPresetIds = [...new Set(popupIdMatches)];
 
 describe('Presets', () => {
   it(`should have all ${PRESET_FILES.length} presets loaded`, () => {
