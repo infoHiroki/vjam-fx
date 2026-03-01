@@ -5,7 +5,6 @@ import { resolve } from 'path';
 // Load IIFE scripts in order (same as Chrome injection)
 const baseCode = readFileSync(resolve(__dirname, '../content/base-preset.js'), 'utf-8');
 const analyzerCode = readFileSync(resolve(__dirname, '../content/audio-analyzer.js'), 'utf-8');
-const videoAudioCode = readFileSync(resolve(__dirname, '../content/video-audio.js'), 'utf-8');
 const engineCode = readFileSync(resolve(__dirname, '../content/content.js'), 'utf-8');
 
 // Load a preset for testing
@@ -20,7 +19,6 @@ describe('VJamFXEngine', () => {
     window.VJamFX = { presets: {} };
     eval(baseCode);
     eval(analyzerCode);
-    eval(videoAudioCode);
     eval(neonCode);
     // Clear any previous engine
     delete window._vjamFxEngine;
@@ -690,79 +688,35 @@ describe('VJamFXEngine', () => {
 
   describe('createMediaElementSource guard', () => {
     it('should skip reconnection to same media element', () => {
-      const va = engine._videoAudio;
       const media = document.createElement('video');
       // Simulate already connected
-      va._media = media;
-      va._ctx = { state: 'running', close: vi.fn().mockResolvedValue(undefined) };
-      const origCtx = va._ctx;
-      va._connectMediaElement(media);
+      engine._videoAudioMedia = media;
+      engine._videoAudioCtx = { state: 'running', close: vi.fn().mockResolvedValue(undefined) };
+      const origCtx = engine._videoAudioCtx;
+      engine._connectMediaElement(media);
       // Should not create new AudioContext
-      expect(va._ctx).toBe(origCtx);
+      expect(engine._videoAudioCtx).toBe(origCtx);
     });
 
-    it('should clear _media on destroy', () => {
-      const va = engine._videoAudio;
-      va._media = document.createElement('video');
+    it('should clear _videoAudioMedia on destroy', () => {
+      engine._videoAudioMedia = document.createElement('video');
       engine._destroyVideoAudio();
-      expect(va._media).toBeNull();
+      expect(engine._videoAudioMedia).toBeNull();
     });
   });
 
   describe('silence check timer cleanup', () => {
     it('should clear silence timer on _stopVideoAudio', () => {
-      const va = engine._videoAudio;
-      va._silenceCheckTimer = setInterval(() => {}, 1000);
+      engine._silenceCheckTimer = setInterval(() => {}, 1000);
+      const timerId = engine._silenceCheckTimer;
       engine._stopVideoAudio();
-      expect(va._silenceCheckTimer).toBeNull();
+      expect(engine._silenceCheckTimer).toBeNull();
     });
 
     it('should clear silence timer on _destroyVideoAudio', () => {
-      const va = engine._videoAudio;
-      va._silenceCheckTimer = setInterval(() => {}, 1000);
+      engine._silenceCheckTimer = setInterval(() => {}, 1000);
       engine._destroyVideoAudio();
-      expect(va._silenceCheckTimer).toBeNull();
-    });
-  });
-
-  describe('VideoAudioCapture', () => {
-    it('should be instantiated on engine', () => {
-      expect(engine._videoAudio).not.toBeNull();
-      expect(engine._videoAudio.constructor.name).toBe('VideoAudioCapture');
-    });
-
-    it('should have hasAnalyser return false initially', () => {
-      expect(engine._videoAudio.hasAnalyser()).toBe(false);
-    });
-
-    it('should have getTempo return 120 initially', () => {
-      expect(engine._videoAudio.getTempo()).toBe(120);
-    });
-
-    it('should return null from readData when no analyser', () => {
-      expect(engine._videoAudio.readData(1.0)).toBeNull();
-    });
-
-    it('should not throw on stop when not started', () => {
-      expect(() => engine._videoAudio.stop()).not.toThrow();
-    });
-
-    it('should not throw on destroy when not started', () => {
-      expect(() => engine._videoAudio.destroy()).not.toThrow();
-    });
-
-    it('should start MutationObserver when no media element exists', () => {
-      engine._videoAudio.start();
-      expect(engine._videoAudio._mediaObserver).not.toBeNull();
-      engine._videoAudio.stop();
-      expect(engine._videoAudio._mediaObserver).toBeNull();
-    });
-
-    it('should disconnect observer on destroy', () => {
-      engine._videoAudio.start();
-      engine._videoAudio.destroy();
-      expect(engine._videoAudio._mediaObserver).toBeNull();
-      expect(engine._videoAudio._ctx).toBeNull();
+      expect(engine._silenceCheckTimer).toBeNull();
     });
   });
 

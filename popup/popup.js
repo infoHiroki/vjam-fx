@@ -860,6 +860,7 @@ class PopupController {
             const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
             const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
             const chosen = shuffled.slice(0, count);
+            // Only inject chosen presets (not all 204)
             for (const p of chosen) {
               await this._injectPreset(p.id);
             }
@@ -1026,8 +1027,8 @@ class PopupController {
       });
     }
 
-    // Inject base-preset, video-audio, and engine
-    for (const file of ['content/base-preset.js', 'content/video-audio.js', 'content/text-overlay.js', 'content/content.js']) {
+    // Inject base-preset and engine
+    for (const file of ['content/base-preset.js', 'content/text-overlay.js', 'content/content.js']) {
       await chrome.scripting.executeScript({
         target: { tabId: this._tabId },
         world: 'MAIN',
@@ -1180,7 +1181,6 @@ class PopupController {
       this._showBanner('Effect command failed');
     }
   }
-
 }
 
 export { PopupController, _throttle, logWarn };
