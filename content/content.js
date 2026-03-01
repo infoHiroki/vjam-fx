@@ -51,8 +51,6 @@
       // Multi-layer support
       this.activeLayers = new Map(); // name → { preset, container }
       this.activeFilters = new Set();
-      this._osdEl = null;
-      this._osdTimer = null;
 
       // Video audio capture
       this._videoAudioMedia = null;
@@ -80,7 +78,6 @@
       this._fadeDuration = 1.5; // seconds for layer fade in/out
       this._audioSensitivity = 1.0; // multiplier for audio levels
       this._zoom = 1.0; // overlay scale
-      this._osdEnabled = true;
 
       this._onBridgeMessage = null;
       this._onFullscreenChange = null;
@@ -467,7 +464,6 @@
       // Fade in on next frame
       requestAnimationFrame(() => { layerDiv.style.opacity = '1'; });
 
-      this.showOSD('+ ' + presetName);
     }
 
     _removeLayer(presetName) {
@@ -475,7 +471,6 @@
       if (!layer) return;
 
       this.activeLayers.delete(presetName);
-      this.showOSD('- ' + presetName);
 
       // Fade out then remove
       const container = layer.container;
@@ -673,7 +668,6 @@
       this.setOpacity(1.0);
       this._stopAutoCycle();
       this._stopAutoFX();
-      this.showOSD('RESET');
     }
 
     /**
@@ -698,8 +692,6 @@
       }
       this._applyFilters();
 
-      const filterList = [...this.activeFilters].join(', ') || 'none';
-      this.showOSD(this.blendMode + ' | ' + filterList);
     }
 
     // --- Auto-Cycle ---
@@ -803,7 +795,6 @@
 
       // OSD shows active layers
       const names = chosen.join(' + ');
-      this.showOSD('Auto: ' + names);
     }
 
     _stopAutoCycle() {
@@ -864,29 +855,6 @@
         clearTimeout(this._autoFXTimer);
         this._autoFXTimer = null;
       }
-    }
-
-    // --- OSD Feedback ---
-
-    showOSD(text) {
-      if (!this.overlay || !this._osdEnabled) return;
-      if (!this._osdEl) {
-        this._osdEl = document.createElement('div');
-        this._osdEl.style.cssText = [
-          'position:absolute', 'bottom:20px', 'left:50%', 'transform:translateX(-50%)',
-          'background:rgba(0,0,0,0.7)', 'color:#fff', 'padding:6px 16px',
-          'border-radius:4px', 'font:13px/1.4 -apple-system,sans-serif',
-          'white-space:nowrap', 'pointer-events:none', 'z-index:1',
-          'transition:opacity 0.3s', 'opacity:0',
-        ].join(';');
-        this.overlay.appendChild(this._osdEl);
-      }
-      this._osdEl.textContent = text;
-      this._osdEl.style.opacity = '1';
-      clearTimeout(this._osdTimer);
-      this._osdTimer = setTimeout(() => {
-        if (this._osdEl) this._osdEl.style.opacity = '0';
-      }, 2000);
     }
 
     getActiveLayerNames() {
@@ -954,9 +922,6 @@
           break;
         case 'setZoom':
           this.setZoom(msg.zoom != null ? msg.zoom : 1.0);
-          break;
-        case 'setOsdEnabled':
-          this._osdEnabled = msg.enabled !== false;
           break;
         case 'startAutoCycle':
           this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks, skipFirstTick: msg.skipFirstTick });

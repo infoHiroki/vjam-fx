@@ -235,7 +235,6 @@ const DEFAULT_SETTINGS = {
   barsPerCycle: 4,
   sensitivity: 'mid',
   zoom: 1.0,
-  osdEnabled: true,
 };
 
 const SENSITIVITY_MAP = { lo: 0.5, mid: 1.0, hi: 2.0 };
@@ -592,11 +591,6 @@ class PopupController {
     if (zoomEl) zoomEl.value = Math.round(this.settings.zoom * 100);
     const zoomVal = document.getElementById('zoom-value');
     if (zoomVal) zoomVal.textContent = this.settings.zoom + 'x';
-    const osdBtn = document.getElementById('setting-osd');
-    if (osdBtn) {
-      osdBtn.textContent = this.settings.osdEnabled ? 'ON' : 'OFF';
-      osdBtn.classList.toggle('on', this.settings.osdEnabled);
-    }
   }
 
   async _saveState() {
@@ -716,20 +710,6 @@ class PopupController {
       });
       zoomEl.addEventListener('change', () => {
         this._saveSettings();
-      });
-    }
-
-    // Settings: OSD toggle
-    const osdBtn = document.getElementById('setting-osd');
-    if (osdBtn) {
-      osdBtn.addEventListener('click', () => {
-        this.settings.osdEnabled = !this.settings.osdEnabled;
-        osdBtn.textContent = this.settings.osdEnabled ? 'ON' : 'OFF';
-        osdBtn.classList.toggle('on', this.settings.osdEnabled);
-        this._saveSettings();
-        if (this.isActive) {
-          this._sendCommand({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
-        }
       });
     }
 
@@ -968,7 +948,6 @@ class PopupController {
         await this._saveSettings();
         await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
         await this._sendCommand({ action: 'setZoom', zoom: 1.0 });
-        await this._sendCommand({ action: 'setOsdEnabled', enabled: true });
         await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: 1.0 });
 
         // Reset all UI
@@ -1260,7 +1239,6 @@ class PopupController {
       await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
       await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
       await this._sendCommand({ action: 'setZoom', zoom: this.settings.zoom });
-      await this._sendCommand({ action: 'setOsdEnabled', enabled: this.settings.osdEnabled });
       await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
 
       await this._saveState();

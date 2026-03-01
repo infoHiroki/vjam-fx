@@ -160,22 +160,6 @@ body {
   text-align: right;
 }
 
-.osd-btn {
-  background: #333;
-  color: #e0e0e0;
-  border: 1px solid #555;
-  border-radius: 3px;
-  padding: 1px 8px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.osd-btn.on {
-  background: #00cc66;
-  color: #000;
-  border-color: #00cc66;
-}
 
 /* Hero Button (Auto) */
 .action-hero {

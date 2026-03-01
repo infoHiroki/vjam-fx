@@ -492,26 +492,6 @@ describe('VJamFXEngine', () => {
     });
   });
 
-  describe('OSD feedback', () => {
-    it('should show OSD text on overlay', () => {
-      engine.createOverlay();
-      engine.showOSD('test message');
-      expect(engine._osdEl).not.toBeNull();
-      expect(engine._osdEl.textContent).toBe('test message');
-    });
-
-    it('should not show OSD without overlay', () => {
-      engine.showOSD('test');
-      expect(engine._osdEl).toBeNull();
-    });
-
-    it('should show OSD on addLayer', () => {
-      engine.createOverlay();
-      engine._addLayer('neon-tunnel');
-      expect(engine._osdEl.textContent).toContain('neon-tunnel');
-    });
-  });
-
   describe('tab audio capture', () => {
     it('should have null _externalAudioData initially', () => {
       expect(engine._externalAudioData).toBeNull();
