@@ -232,7 +232,7 @@ const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'colo
 
 const DEFAULT_SETTINGS = {
   fadeDuration: 1.5,
-  barsPerCycle: 4,
+  barsPerCycle: 8,
   sensitivity: 'mid',
 };
 
