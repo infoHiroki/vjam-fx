@@ -817,7 +817,13 @@ class PopupController {
         const presetId = e.target.value;
         if (e.target.checked) {
           this.activeLayers.add(presetId);
-          if (this.isActive) this._addLayer(presetId);
+          if (!this.isActive) {
+            const toggle = document.getElementById('toggle');
+            if (toggle) toggle.checked = true;
+            this._startAll();
+          } else {
+            this._addLayer(presetId);
+          }
         } else {
           this.activeLayers.delete(presetId);
           if (this.isActive) this._removeLayer(presetId);

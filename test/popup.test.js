@@ -90,6 +90,45 @@ describe('PopupController', () => {
       expect(chrome.scripting.executeScript).toHaveBeenCalled();
       expect(controller.isActive).toBe(false);
     });
+
+    it('should auto-start when checkbox checked while inactive', async () => {
+      controller._bindEvents();
+      const list = document.getElementById('preset-list');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = 'neon-tunnel';
+      list.appendChild(cb);
+
+      expect(controller.isActive).toBe(false);
+      cb.checked = true;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Wait for async _startAll
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(controller.isActive).toBe(true);
+      expect(controller.activeLayers.has('neon-tunnel')).toBe(true);
+      const toggle = document.getElementById('toggle');
+      expect(toggle.checked).toBe(true);
+    });
+
+    it('should add layer normally when checkbox checked while active', async () => {
+      controller._bindEvents();
+      controller.isActive = true;
+      const spy = vi.spyOn(controller, '_addLayer');
+
+      const list = document.getElementById('preset-list');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = 'rain';
+      list.appendChild(cb);
+
+      cb.checked = true;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(controller.activeLayers.has('rain')).toBe(true);
+      expect(spy).toHaveBeenCalledWith('rain');
+    });
   });
 
   describe('blend mode', () => {

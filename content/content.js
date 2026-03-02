@@ -438,7 +438,7 @@
       const layerDiv = document.createElement('div');
       layerDiv.setAttribute('data-vjam-layer', presetName);
       const fadeSec = this._fadeDuration > 0 ? this._fadeDuration + 's' : '0s';
-      layerDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity ' + fadeSec + ' ease-in;';
+      layerDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity ' + fadeSec + ' linear;';
       this.overlay.appendChild(layerDiv);
 
       const PresetClass = window.VJamFX.presets[presetName];
@@ -472,7 +472,7 @@
         container.remove();
         return;
       }
-      container.style.transition = 'opacity ' + fadeSec + 's ease-out';
+      container.style.transition = 'opacity ' + fadeSec + 's linear';
       container.style.opacity = '0';
       let cleaned = false;
       const onEnd = () => {
