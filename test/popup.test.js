@@ -180,7 +180,7 @@ describe('PopupController', () => {
   });
 
   describe('scenes', () => {
-    it('should save Auto state in scene', () => {
+    it('should save scene without Auto/Rnd state (only layers, blend, filters, opacity, locks)', () => {
       controller.activeLayers.add('neon-tunnel');
       controller.selectedBlendMode = 'lighten';
       controller.autoCycleActive = true;
@@ -188,20 +188,20 @@ describe('PopupController', () => {
       controller.autoFilters = false;
       controller._saveScene(0);
       const scene = controller.scenes[0];
-      expect(scene.autoCycleActive).toBe(true);
-      expect(scene.autoBlend).toBe(true);
-      expect(scene.autoFilters).toBe(false);
+      expect(scene.autoCycleActive).toBeUndefined();
+      expect(scene.autoBlend).toBeUndefined();
+      expect(scene.autoFilters).toBeUndefined();
       expect(scene.layers).toContain('neon-tunnel');
+      expect(scene.blendMode).toBe('lighten');
     });
 
-    it('should save scene without Auto state', () => {
+    it('should save scene with layers and defaults', () => {
       controller.activeLayers.add('kaleidoscope');
       controller.autoCycleActive = false;
       controller._saveScene(1);
       const scene = controller.scenes[1];
-      expect(scene.autoCycleActive).toBe(false);
-      expect(scene.autoBlend).toBe(false);
-      expect(scene.autoFilters).toBe(false);
+      expect(scene.autoCycleActive).toBeUndefined();
+      expect(scene.layers).toContain('kaleidoscope');
     });
 
     it('should clear scene slot', () => {

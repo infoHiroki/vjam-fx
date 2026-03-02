@@ -498,9 +498,6 @@ class PopupController {
       filters: [...this.activeFilters],
       opacity: this.opacity,
       locks: { ...this.locks },
-      autoCycleActive: this.autoCycleActive,
-      autoBlend: this.autoBlend,
-      autoFilters: this.autoFilters,
     };
     this._saveScenes();
   }
@@ -550,14 +547,13 @@ class PopupController {
     // Restore locks
     if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
 
-    // Restore Auto state
-    this.autoCycleActive = !!scene.autoCycleActive;
-    this.autoBlend = !!scene.autoBlend;
-    this.autoFilters = !!scene.autoFilters;
+    // Re-apply current Auto/Rnd state (don't restore from scene — keep current popup state)
     if (this.autoCycleActive) {
       await this._injectAllPresets();
       const allIds = this.presets.map(p => p.id);
       await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
+    } else if (this.autoBlend || this.autoFilters) {
+      await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
     }
 
     // Start audio if enabled
@@ -1005,6 +1001,10 @@ class PopupController {
           const autoBtn = document.getElementById('btn-auto-cycle');
           if (autoBtn) autoBtn.classList.remove('active');
         }
+        // Re-start standalone Rnd if active (kill stops engine-side timers)
+        if (this.autoBlend || this.autoFilters) {
+          await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+        }
         // Start video audio if needed
         if (this.audioEnabled) {
           await this._sendCommand({ action: 'startVideoAudio' });
@@ -1223,6 +1223,15 @@ class PopupController {
       await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
       await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
       await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
+
+      // Re-start Auto/Rnd if active
+      if (this.autoCycleActive) {
+        await this._injectAllPresets();
+        const allIds = this.presets.map(p => p.id);
+        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+      } else if (this.autoBlend || this.autoFilters) {
+        await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+      }
 
       await this._saveState();
     } catch (e) {
