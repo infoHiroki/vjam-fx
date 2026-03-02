@@ -244,7 +244,7 @@ class PopupController {
     this.activeLayers = new Set();  // preset IDs currently active
     this.activeFilters = new Set();
     this.selectedBlendMode = 'screen';
-    this.opacity = 0.9;
+    this.opacity = 0.8;
     this.isActive = false;
     this.audioEnabled = true;
     this.autoCycleActive = false;
@@ -918,7 +918,7 @@ class PopupController {
         this.autoBlend = false;
         this.autoFilters = false;
         this.selectedBlendMode = 'screen';
-        this.opacity = 0.9;
+        this.opacity = 0.8;
         this.audioEnabled = true;
         this.isActive = false;
         this._coreInjected = false;
@@ -938,7 +938,7 @@ class PopupController {
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         document.querySelectorAll('.blend-btn').forEach(btn => btn.classList.remove('active'));
         const opacitySlider = document.getElementById('opacity-slider');
-        if (opacitySlider) opacitySlider.value = 90;
+        if (opacitySlider) opacitySlider.value = 80;
         const audioBtn = document.getElementById('audio-toggle');
         if (audioBtn) { audioBtn.textContent = 'ON'; audioBtn.classList.add('on'); }
         const autoBtn = document.getElementById('btn-auto-cycle');
