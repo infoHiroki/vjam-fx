@@ -1029,6 +1029,9 @@ class PopupController {
           if (autoBlendBtn) autoBlendBtn.classList.add('active');
           const autoFiltersBtn = document.getElementById('auto-filters');
           if (autoFiltersBtn) autoFiltersBtn.classList.add('active');
+          // Rnd ON → ブレンド/フィルターボタンのactive解除（ランダムに委ねる）
+          document.querySelectorAll('.blend-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
           // Stop standalone autoFX (auto-cycle handles blend/filter)
           await this._sendCommand({ action: 'stopAutoFX' });
           if (!this.isActive) {
@@ -1077,6 +1080,10 @@ class PopupController {
       autoBlendBtn.addEventListener('click', async () => {
         this.autoBlend = !this.autoBlend;
         autoBlendBtn.classList.toggle('active', this.autoBlend);
+        // Rnd ON → ブレンドボタンのactive解除（ランダムに委ねる）
+        if (this.autoBlend) {
+          document.querySelectorAll('.blend-btn').forEach(b => b.classList.remove('active'));
+        }
         if (this.autoCycleActive) {
           await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         } else if (this.autoBlend || this.autoFilters) {
@@ -1094,6 +1101,10 @@ class PopupController {
       autoFiltersBtn.addEventListener('click', async () => {
         this.autoFilters = !this.autoFilters;
         autoFiltersBtn.classList.toggle('active', this.autoFilters);
+        // Rnd ON → フィルターボタンのactive解除（ランダムに委ねる）
+        if (this.autoFilters) {
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        }
         if (this.autoCycleActive) {
           await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         } else if (this.autoBlend || this.autoFilters) {
