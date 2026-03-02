@@ -14,7 +14,6 @@ os.makedirs(OUT, exist_ok=True)
 CORE_SCRIPTS = [
     'lib/p5.min.js',
     'content/base-preset.js',
-    'content/audio-analyzer.js',
 ]
 ENGINE_SCRIPT = 'content/content.js'
 
@@ -73,36 +72,35 @@ def capture_popup(ctx, ext_id):
           <h1>VJam FX</h1>
           <div class="header-right">
             <span id="layer-count" class="layer-count">3 layers</span>
+            <button class="settings-btn" title="Settings">&#9881;</button>
             <label class="toggle-switch">
               <input type="checkbox" id="toggle" checked>
               <span class="slider"></span>
             </label>
           </div>
         </header>
+        <div class="action-hero">
+          <button class="hero-btn active">&#9646;&#9646; Auto</button>
+        </div>
         <div class="action-bar">
           <button class="action-btn reset">Reset</button>
           <button class="action-btn">Next</button>
-          <button class="action-btn active">Auto</button>
         </div>
+        <div class="section-label"><span>Effect</span><button class="auto-toggle lock-toggle">Lock</button></div>
         <input type="text" class="preset-search" placeholder="Search presets...">
-        <div class="preset-list" id="preset-list" style="max-height:340px">
+        <div class="preset-list" id="preset-list" style="max-height:240px">
           <div class="category-header">Immersive</div>
           <label class="preset-item"><input type="checkbox" checked><span style="color:#00cc66;font-weight:600">Wormhole</span></label>
           <label class="preset-item"><input type="checkbox"><span>Warp Speed</span></label>
           <label class="preset-item"><input type="checkbox" checked><span style="color:#00cc66;font-weight:600">Portal Ring</span></label>
           <label class="preset-item"><input type="checkbox"><span>Aurora</span></label>
           <label class="preset-item"><input type="checkbox"><span>Crystal Cave</span></label>
-          <label class="preset-item"><input type="checkbox"><span>Northern Lights</span></label>
           <div class="category-header">Frames & Film</div>
           <label class="preset-item"><input type="checkbox" checked><span style="color:#00cc66;font-weight:600">Neon Frame</span></label>
           <label class="preset-item"><input type="checkbox"><span>Film Burn</span></label>
           <label class="preset-item"><input type="checkbox"><span>VHS Noise</span></label>
-          <label class="preset-item"><input type="checkbox"><span>Scan Line</span></label>
-          <div class="category-header">Patterns</div>
-          <label class="preset-item"><input type="checkbox"><span>Kaleidoscope</span></label>
-          <label class="preset-item"><input type="checkbox"><span>Mandala</span></label>
         </div>
-        <div class="section-label">Filters</div>
+        <div class="section-label"><span>Filters</span><button class="auto-toggle lock-toggle">Lock</button><button class="auto-toggle active">Auto</button></div>
         <div class="filter-grid" id="filter-grid">
           <button class="filter-btn active">Invert</button>
           <button class="filter-btn">Hue Rot</button>
@@ -113,18 +111,25 @@ def capture_popup(ctx, ext_id):
           <button class="filter-btn">Sepia</button>
           <button class="filter-btn">Blur</button>
         </div>
+        <div class="section-label"><span>Blend</span><button class="auto-toggle lock-toggle">Lock</button><button class="auto-toggle">Auto</button></div>
+        <div class="blend-grid" id="blend-grid">
+          <button class="blend-btn active">Lighten</button>
+          <button class="blend-btn">Diff</button>
+          <button class="blend-btn">Exclusion</button>
+          <button class="blend-btn">Dodge</button>
+        </div>
         <div class="controls">
           <div class="control-row">
-            <label>Blend</label>
-            <select><option selected>Screen</option></select>
+            <label>Opacity</label>
+            <input type="range" min="0" max="100" value="90" class="opacity-slider">
           </div>
           <div class="control-row">
-            <label>Mic</label>
-            <button class="mic-btn on">ON</button>
+            <label>Audio</label>
+            <button class="audio-btn on">ON</button>
           </div>
         </div>
         <footer class="footer">
-          <a href="#">VJam Full — 190+ Presets →</a>
+          <a href="#">Want more? Try VJam Full &rarr;</a>
         </footer>`;
     }''')
     time.sleep(0.3)
@@ -160,24 +165,24 @@ with sync_playwright() as pw:
     # 1. Popup UI screenshot
     capture_popup(ctx, ext_id)
 
-    # 2. Wikipedia with neon-tunnel + neon-frame
+    # 2. Wikipedia with neon-tunnel + difference (dark overlay on white page)
     page.goto('https://en.wikipedia.org/wiki/VJing')
     time.sleep(3)
-    inject_and_start(page, ['neon-tunnel', 'neon-frame'], 'screen')
+    inject_and_start(page, ['neon-tunnel', 'neon-frame'], 'difference')
     page.screenshot(path=os.path.join(OUT, '02-wikipedia-fx.png'))
     print('OK: 02-wikipedia-fx.png')
 
-    # 3. Google with wormhole + starfield
-    page.goto('https://www.google.com')
+    # 3. YouTube with wormhole + starfield
+    page.goto('https://www.youtube.com')
     time.sleep(3)
-    inject_and_start(page, ['wormhole', 'starfield'], 'screen')
-    page.screenshot(path=os.path.join(OUT, '03-google-fx.png'))
-    print('OK: 03-google-fx.png')
+    inject_and_start(page, ['wormhole', 'starfield'], 'lighten')
+    page.screenshot(path=os.path.join(OUT, '03-youtube-fx.png'))
+    print('OK: 03-youtube-fx.png')
 
-    # 4. GitHub with aurora + constellation
+    # 4. GitHub with wormhole + difference
     page.goto('https://github.com/explore')
     time.sleep(3)
-    inject_and_start(page, ['aurora', 'constellation'], 'lighten')
+    inject_and_start(page, ['wormhole', 'constellation'], 'difference')
     page.screenshot(path=os.path.join(OUT, '04-github-fx.png'))
     print('OK: 04-github-fx.png')
 
