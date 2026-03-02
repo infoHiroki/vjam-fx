@@ -342,11 +342,6 @@ body {
   font-weight: 600;
 }
 
-.auto-toggle.disabled {
-  opacity: 0.3;
-  pointer-events: none;
-}
-
 /* Blend Grid */
 .blend-grid {
   display: grid;

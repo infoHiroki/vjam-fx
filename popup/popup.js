@@ -414,15 +414,9 @@ class PopupController {
     if (autoBtn) autoBtn.classList.toggle('active', this.autoCycleActive);
 
     const autoBlendBtn = document.getElementById('auto-blend');
-    if (autoBlendBtn) {
-      autoBlendBtn.classList.toggle('active', this.autoBlend);
-      autoBlendBtn.classList.toggle('disabled', !this.autoCycleActive);
-    }
+    if (autoBlendBtn) autoBlendBtn.classList.toggle('active', this.autoBlend);
     const autoFiltersBtn = document.getElementById('auto-filters');
-    if (autoFiltersBtn) {
-      autoFiltersBtn.classList.toggle('active', this.autoFilters);
-      autoFiltersBtn.classList.toggle('disabled', !this.autoCycleActive);
-    }
+    if (autoFiltersBtn) autoFiltersBtn.classList.toggle('active', this.autoFilters);
 
     // Lock buttons
     for (const key of ['effect', 'blend', 'filter']) {
@@ -1008,14 +1002,8 @@ class PopupController {
         this._updateLayerCount();
         if (this.autoCycleActive) {
           this.autoCycleActive = false;
-          this.autoBlend = false;
-          this.autoFilters = false;
           const autoBtn = document.getElementById('btn-auto-cycle');
           if (autoBtn) autoBtn.classList.remove('active');
-          const abBtn = document.getElementById('auto-blend');
-          if (abBtn) abBtn.classList.remove('active');
-          const afBtn = document.getElementById('auto-filters');
-          if (afBtn) afBtn.classList.remove('active');
         }
         // Start video audio if needed
         if (this.audioEnabled) {
@@ -1056,7 +1044,7 @@ class PopupController {
           this._updateLayerCount();
         } else {
           await this._sendCommand({ action: 'stopAutoCycle' });
-          // If blend/filter still on, start standalone autoFX
+          // Blend Random / Filter Random が残っていれば独立動作を継続
           if (this.autoBlend || this.autoFilters) {
             await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
           }
