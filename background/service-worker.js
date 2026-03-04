@@ -236,6 +236,8 @@ async function startTabAudio(tabId) {
 }
 
 async function stopTabAudio(tabId) {
+  // Only stop if the given tabId matches active capture (or no tabId specified)
+  if (tabId && activeTabAudioTabId !== null && activeTabAudioTabId !== tabId) return false;
   try {
     await chrome.runtime.sendMessage({ type: 'stopCapture' });
     await removeOffscreen();
@@ -243,6 +245,7 @@ async function stopTabAudio(tabId) {
     return true;
   } catch (e) {
     console.warn('VJam FX: stopTabAudio failed', e);
+    activeTabAudioTabId = null; // Clear state even on failure
     return false;
   }
 }
@@ -311,6 +314,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       data: msg.data,
     }).catch(() => {}); // ignore if tab is gone
     sendResponse({ ok: true });
+  } else {
+    // Unknown message type — return false (no async response needed)
+    return false;
   }
   return false;
 });
@@ -350,5 +356,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   clearState(tabId);
   if (activeTabAudioTabId === tabId) {
     stopTabAudio(tabId).catch(() => {});
+  }
+  if (pausedTabAudioTabId === tabId) {
+    pausedTabAudioTabId = null;
   }
 });

@@ -25,24 +25,28 @@ describe('Audio Bridge', () => {
   it('should relay audioData to window.postMessage', () => {
     const postMessageSpy = vi.spyOn(window, 'postMessage');
     const audioData = { beat: true, bpm: 120, strength: 0.8 };
+    const sendResponse = vi.fn();
 
-    messageListeners[0]({ type: 'audioData', data: audioData });
+    messageListeners[0]({ type: 'audioData', data: audioData }, {}, sendResponse);
 
     expect(postMessageSpy).toHaveBeenCalledWith({
       source: 'vjam-fx-bridge',
       type: 'audioData',
       data: audioData,
     }, '*');
+    expect(sendResponse).toHaveBeenCalledWith({ ok: true });
 
     postMessageSpy.mockRestore();
   });
 
   it('should not relay non-audioData messages', () => {
     const postMessageSpy = vi.spyOn(window, 'postMessage');
+    const sendResponse = vi.fn();
 
-    messageListeners[0]({ type: 'other', data: {} });
+    messageListeners[0]({ type: 'other', data: {} }, {}, sendResponse);
 
     expect(postMessageSpy).not.toHaveBeenCalled();
+    expect(sendResponse).not.toHaveBeenCalled();
     postMessageSpy.mockRestore();
   });
 });

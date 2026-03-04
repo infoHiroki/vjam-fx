@@ -8,13 +8,14 @@
   'use strict';
 
   // Relay audio data from SW → MAIN world
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'audioData') {
       window.postMessage({
         source: 'vjam-fx-bridge',
         type: 'audioData',
         data: msg.data,
       }, '*');
+      sendResponse({ ok: true });
     }
   });
 

@@ -149,6 +149,13 @@
       this._stopMediaObserver();
       // Skip if already connected to this element
       if (this._videoAudioMedia === media && this._videoAudioCtx) return;
+      // Close old AudioContext if switching to a different element
+      if (this._videoAudioCtx && this._videoAudioCtx.state !== 'closed') {
+        if (this._videoAudioAnalyser) { this._videoAudioAnalyser.disconnect(); this._videoAudioAnalyser = null; }
+        if (this._videoAudioSource) { this._videoAudioSource.disconnect(); this._videoAudioSource = null; }
+        this._videoAudioCtx.close().catch(function() {});
+        this._videoAudioCtx = null;
+      }
       this._videoAudioMedia = media;
       try {
         var ctx = new AudioContext();
@@ -442,8 +449,15 @@
       this.overlay.appendChild(layerDiv);
 
       const PresetClass = window.VJamFX.presets[presetName];
-      const preset = new PresetClass();
-      preset.setup(layerDiv);
+      let preset;
+      try {
+        preset = new PresetClass();
+        preset.setup(layerDiv);
+      } catch (e) {
+        console.warn('VJam FX: preset setup failed', presetName, e);
+        layerDiv.remove();
+        return;
+      }
 
       // Apply blend mode to new canvas
       const canvas = layerDiv.querySelector('canvas');
@@ -567,10 +581,10 @@
         this._rafId = null;
       }
 
-      // Destroy all layers
+      // Destroy all layers (continue even if one fails)
       for (const [, layer] of this.activeLayers) {
-        layer.preset.destroy();
-        layer.container.remove();
+        try { layer.preset.destroy(); } catch (e) { console.warn('VJam FX: layer destroy error', e); }
+        try { layer.container.remove(); } catch (e) { /* ignore */ }
       }
       this.activeLayers.clear();
 
@@ -601,6 +615,9 @@
 
       this._externalAudioData = null;
       this.activeFilters.clear();
+
+      // Allow re-injection by clearing singleton reference
+      window._vjamFxEngine = null;
     }
 
     // --- CSS Filters ---
@@ -644,8 +661,8 @@
       // Immediately destroy all layers (no fade) unless effect locked
       if (!locks.effect) {
         for (const [, layer] of this.activeLayers) {
-          layer.preset.destroy();
-          layer.container.remove();
+          try { layer.preset.destroy(); } catch (e) { console.warn('VJam FX: kill destroy error', e); }
+          try { layer.container.remove(); } catch (e) { /* ignore */ }
         }
         this.activeLayers.clear();
         this.currentPreset = null;
@@ -714,10 +731,13 @@
           interval = (60 / bpm) * (self._barsPerCycle || 4) * 1000; // beats in ms
           interval = Math.max(4000, Math.min(15000, interval)); // Clamp 4-15 seconds
         }
-        self._autoCycleTimer = setTimeout(() => {
+        var timerId = setTimeout(() => {
+          // Guard: don't tick if cycle was stopped between schedule and fire
+          if (self._autoCycleTimer !== timerId) return;
           self._autoCycleTick();
           scheduleNext();
         }, interval);
+        self._autoCycleTimer = timerId;
       };
 
       // Skip first tick when only updating options (e.g. toggling Auto Blend/Filter)
@@ -817,10 +837,12 @@
           interval = (60 / bpm) * 4 * 1000;
           interval = Math.max(4000, Math.min(15000, interval));
         }
-        self._autoFXTimer = setTimeout(() => {
+        var fxTimerId = setTimeout(() => {
+          if (self._autoFXTimer !== fxTimerId) return;
           self._autoFXTick();
           scheduleNext();
         }, interval);
+        self._autoFXTimer = fxTimerId;
       };
       scheduleNext();
     }
@@ -906,12 +928,16 @@
         case 'randomizeFX':
           this.randomizeFX({ skipBlend: !!msg.skipBlend });
           break;
-        case 'setFadeDuration':
-          this._fadeDuration = msg.duration != null ? msg.duration : 1.5;
+        case 'setFadeDuration': {
+          var fd = msg.duration != null ? msg.duration : 1.5;
+          this._fadeDuration = (isFinite(fd) && fd >= 0) ? fd : 1.5;
           break;
-        case 'setAudioSensitivity':
-          this._audioSensitivity = msg.sensitivity != null ? msg.sensitivity : 1.0;
+        }
+        case 'setAudioSensitivity': {
+          var as = msg.sensitivity != null ? msg.sensitivity : 1.0;
+          this._audioSensitivity = (isFinite(as) && as > 0) ? as : 1.0;
           break;
+        }
         case 'startAutoCycle':
           this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks, skipFirstTick: msg.skipFirstTick });
           break;

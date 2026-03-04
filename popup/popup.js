@@ -505,66 +505,76 @@ class PopupController {
   async _loadScene(slot) {
     const scene = this.scenes[slot];
     if (!scene || this._busy) return;
+    // Validate scene has layers array
+    if (!Array.isArray(scene.layers)) return;
     this._busy = true;
 
-    // Ensure engine is running
-    if (!this.isActive) {
-      this.isActive = true;
-      const toggle = document.getElementById('toggle');
-      if (toggle) toggle.checked = true;
-      await this._injectCore();
-    }
-
-    // Kill current state
-    await this._sendCommand({ action: 'kill' });
-
-    // Restore layers
-    this.activeLayers.clear();
-    for (const id of scene.layers) {
-      this.activeLayers.add(id);
-      await this._injectPreset(id);
-    }
-    const layers = [...this.activeLayers];
-    if (layers.length > 0) {
-      await this._sendCommand({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
-      for (let i = 1; i < layers.length; i++) {
-        await this._sendCommand({ action: 'addLayer', preset: layers[i] });
+    try {
+      // Ensure engine is running
+      if (!this.isActive) {
+        this.isActive = true;
+        const toggle = document.getElementById('toggle');
+        if (toggle) toggle.checked = true;
+        await this._injectCore();
       }
-    }
 
-    // Restore blend, filters, opacity
-    this.selectedBlendMode = scene.blendMode || 'screen';
-    this.activeFilters.clear();
-    if (scene.filters) {
-      for (const f of scene.filters) {
-        this.activeFilters.add(f);
-        await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+      // Kill current state
+      await this._sendCommand({ action: 'kill' });
+
+      // Restore layers
+      this.activeLayers.clear();
+      for (const id of scene.layers) {
+        this.activeLayers.add(id);
+        await this._injectPreset(id);
       }
+      const layers = [...this.activeLayers];
+      if (layers.length > 0) {
+        await this._sendCommand({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
+        for (let i = 1; i < layers.length; i++) {
+          await this._sendCommand({ action: 'addLayer', preset: layers[i] });
+        }
+      } else {
+        // Empty scene — deactivate
+        this.isActive = false;
+        const toggle = document.getElementById('toggle');
+        if (toggle) toggle.checked = false;
+      }
+
+      // Restore blend, filters, opacity
+      this.selectedBlendMode = scene.blendMode || 'screen';
+      this.activeFilters.clear();
+      if (scene.filters) {
+        for (const f of scene.filters) {
+          this.activeFilters.add(f);
+          await this._sendCommand({ action: 'setFilter', filter: f, enabled: true });
+        }
+      }
+      this.opacity = scene.opacity != null ? scene.opacity : 1.0;
+      await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
+
+      // Restore locks
+      if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
+
+      // Re-apply current Auto/Rnd state (don't restore from scene — keep current popup state)
+      if (this.autoCycleActive) {
+        await this._injectAllPresets();
+        const allIds = this.presets.map(p => p.id);
+        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
+      } else if (this.autoBlend || this.autoFilters) {
+        await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+      }
+
+      // Start audio if enabled
+      if (this.audioEnabled) {
+        await this._sendCommand({ action: 'startVideoAudio' });
+        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+      }
+
+      this._updateUI();
+      await this._saveState();
+    } finally {
+      this._busy = false;
     }
-    this.opacity = scene.opacity != null ? scene.opacity : 1.0;
-    await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
-
-    // Restore locks
-    if (scene.locks) this.locks = { ...this.locks, ...scene.locks };
-
-    // Re-apply current Auto/Rnd state (don't restore from scene — keep current popup state)
-    if (this.autoCycleActive) {
-      await this._injectAllPresets();
-      const allIds = this.presets.map(p => p.id);
-      await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
-    } else if (this.autoBlend || this.autoFilters) {
-      await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
-    }
-
-    // Start audio if enabled
-    if (this.audioEnabled) {
-      await this._sendCommand({ action: 'startVideoAudio' });
-      chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
-    }
-
-    this._updateUI();
-    await this._saveState();
-    this._busy = false;
   }
 
   _clearScene(slot) {
@@ -651,7 +661,8 @@ class PopupController {
     const fadeEl = document.getElementById('setting-fade');
     if (fadeEl) {
       fadeEl.addEventListener('change', () => {
-        this.settings.fadeDuration = parseFloat(fadeEl.value);
+        const val = parseFloat(fadeEl.value);
+        this.settings.fadeDuration = isNaN(val) ? 1.5 : Math.max(0, val);
         this._saveSettings();
         if (this.isActive) {
           this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
@@ -663,7 +674,8 @@ class PopupController {
     const cycleEl = document.getElementById('setting-cycle');
     if (cycleEl) {
       cycleEl.addEventListener('change', () => {
-        this.settings.barsPerCycle = parseInt(cycleEl.value, 10);
+        const val = parseInt(cycleEl.value, 10);
+        this.settings.barsPerCycle = isNaN(val) || val < 1 ? 8 : val;
         this._saveSettings();
         // Re-send auto-cycle with updated bars if active
         if (this.autoCycleActive) {
@@ -860,15 +872,20 @@ class PopupController {
       });
     }
 
-    // Opacity slider
+    // Opacity slider (throttled to avoid flooding executeScript)
     const opacitySlider = document.getElementById('opacity-slider');
     if (opacitySlider) {
+      let opacityThrottleTimer = null;
       opacitySlider.addEventListener('input', (e) => {
         this.opacity = parseInt(e.target.value, 10) / 100;
-        if (this.isActive) {
-          this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
-        }
-        this._saveState();
+        if (opacityThrottleTimer) return;
+        opacityThrottleTimer = setTimeout(() => {
+          opacityThrottleTimer = null;
+          if (this.isActive) {
+            this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
+          }
+          this._saveState();
+        }, 50);
       });
     }
 
@@ -901,6 +918,7 @@ class PopupController {
     const btnReset = document.getElementById('btn-reset');
     if (btnReset) {
       btnReset.addEventListener('click', async () => {
+        if (this._busy) return;
         await this._sendCommand({ action: 'stopVideoAudio' });
         chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
         // Full reset (no lock respect — reset everything except scenes)
@@ -969,6 +987,9 @@ class PopupController {
     const btnNext = document.getElementById('btn-next');
     if (btnNext) {
       btnNext.addEventListener('click', async () => {
+        if (this._busy) return;
+        this._busy = true;
+        try {
         if (!this.isActive) {
           this.isActive = true;
           const toggle = document.getElementById('toggle');
@@ -1018,6 +1039,7 @@ class PopupController {
         }
         this._saveState();
 
+        } finally { this._busy = false; }
       });
     }
 
@@ -1025,6 +1047,7 @@ class PopupController {
     const btnAutoCycle = document.getElementById('btn-auto-cycle');
     if (btnAutoCycle) {
       btnAutoCycle.addEventListener('click', async () => {
+        if (this._busy) return;
         this.autoCycleActive = !this.autoCycleActive;
         btnAutoCycle.classList.toggle('active', this.autoCycleActive);
         if (this.autoCycleActive) {
@@ -1067,12 +1090,12 @@ class PopupController {
     for (const btn of filterBtns) {
       btn.addEventListener('click', () => {
         const filter = btn.dataset.filter;
-        btn.classList.toggle('active');
         if (this.activeFilters.has(filter)) {
           this.activeFilters.delete(filter);
         } else {
           this.activeFilters.add(filter);
         }
+        btn.classList.toggle('active', this.activeFilters.has(filter));
         if (this.isActive) {
           this._sendCommand({ action: 'toggleFilter', filter: filter });
         }
@@ -1248,11 +1271,15 @@ class PopupController {
       console.warn('VJam FX: Failed to inject', e);
     } finally {
       this._busy = false;
+      if (this._pendingStop) {
+        this._pendingStop = false;
+        this._stopAll();
+      }
     }
   }
 
   async _stopAll() {
-    if (this._busy) return;
+    if (this._busy) { this._pendingStop = true; return; }
     this._busy = true;
     try {
       await this._sendCommand({ action: 'stopVideoAudio' });

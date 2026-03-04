@@ -732,4 +732,227 @@ describe('VJamFXEngine', () => {
       expect(window.VJamFXEngine).toBeDefined();
     });
   });
+
+  describe('stop() try-catch on layer destruction', () => {
+    it('should continue cleaning up other layers when one destroy throws', () => {
+      engine.createOverlay();
+      engine._addLayer('neon-tunnel');
+
+      // Create a fake second layer that throws on destroy
+      const badDiv = document.createElement('div');
+      badDiv.setAttribute('data-vjam-layer', 'bad-layer');
+      engine.overlay.appendChild(badDiv);
+      engine.activeLayers.set('bad-layer', {
+        preset: { destroy: () => { throw new Error('boom'); } },
+        container: badDiv,
+      });
+
+      expect(() => engine.stop()).not.toThrow();
+      expect(engine.activeLayers.size).toBe(0);
+    });
+
+    it('should clear all layers even when multiple destroys throw', () => {
+      engine.createOverlay();
+      const div1 = document.createElement('div');
+      const div2 = document.createElement('div');
+      engine.overlay.appendChild(div1);
+      engine.overlay.appendChild(div2);
+      engine.activeLayers.set('err1', { preset: { destroy: () => { throw new Error('e1'); } }, container: div1 });
+      engine.activeLayers.set('err2', { preset: { destroy: () => { throw new Error('e2'); } }, container: div2 });
+
+      expect(() => engine.stop()).not.toThrow();
+      expect(engine.activeLayers.size).toBe(0);
+    });
+  });
+
+  describe('kill() try-catch on layer destruction', () => {
+    it('should continue cleaning up other layers when one destroy throws', () => {
+      engine.createOverlay();
+      engine._addLayer('neon-tunnel');
+
+      const badDiv = document.createElement('div');
+      badDiv.setAttribute('data-vjam-layer', 'bad-layer');
+      engine.overlay.appendChild(badDiv);
+      engine.activeLayers.set('bad-layer', {
+        preset: { destroy: () => { throw new Error('boom'); } },
+        container: badDiv,
+      });
+
+      expect(() => engine.kill({})).not.toThrow();
+      expect(engine.activeLayers.size).toBe(0);
+    });
+
+    it('should reset blend and filters even when layer destroy throws', () => {
+      engine.createOverlay();
+      engine.setBlendMode('difference');
+      engine.setFilter('invert', true);
+
+      const badDiv = document.createElement('div');
+      engine.overlay.appendChild(badDiv);
+      engine.activeLayers.set('err', { preset: { destroy: () => { throw new Error('boom'); } }, container: badDiv });
+
+      engine.kill({});
+      expect(engine.blendMode).toBe('screen');
+      expect(engine.activeFilters.size).toBe(0);
+    });
+  });
+
+  describe('_addLayer try-catch', () => {
+    it('should remove layerDiv and not create activeLayers entry when preset constructor throws', () => {
+      engine.createOverlay();
+      // Register a preset that throws on construction
+      window.VJamFX.presets['throw-preset'] = class {
+        constructor() { throw new Error('constructor boom'); }
+      };
+
+      expect(() => engine._addLayer('throw-preset')).not.toThrow();
+      expect(engine.activeLayers.has('throw-preset')).toBe(false);
+      expect(document.querySelector('[data-vjam-layer="throw-preset"]')).toBeNull();
+
+      delete window.VJamFX.presets['throw-preset'];
+    });
+
+    it('should remove layerDiv when preset setup throws', () => {
+      engine.createOverlay();
+      window.VJamFX.presets['setup-fail'] = class {
+        setup() { throw new Error('setup boom'); }
+      };
+
+      engine._addLayer('setup-fail');
+      expect(engine.activeLayers.has('setup-fail')).toBe(false);
+      expect(document.querySelector('[data-vjam-layer="setup-fail"]')).toBeNull();
+
+      delete window.VJamFX.presets['setup-fail'];
+    });
+  });
+
+  describe('AudioContext leak fix', () => {
+    it('should close old AudioContext when _connectMediaElement is called with a different element', () => {
+      const media1 = document.createElement('video');
+      const closeFn = vi.fn().mockResolvedValue(undefined);
+      engine._videoAudioMedia = media1;
+      engine._videoAudioCtx = { state: 'running', close: closeFn };
+      engine._videoAudioAnalyser = { disconnect: vi.fn() };
+      engine._videoAudioSource = { disconnect: vi.fn() };
+
+      const media2 = document.createElement('video');
+      // _connectMediaElement will try new AudioContext which may throw in jsdom, but close should be called first
+      try { engine._connectMediaElement(media2); } catch (e) { /* AudioContext not available in jsdom */ }
+
+      expect(closeFn).toHaveBeenCalled();
+    });
+
+    it('should not close AudioContext when called with the same element', () => {
+      const media = document.createElement('video');
+      const closeFn = vi.fn().mockResolvedValue(undefined);
+      engine._videoAudioMedia = media;
+      engine._videoAudioCtx = { state: 'running', close: closeFn };
+
+      engine._connectMediaElement(media);
+      expect(closeFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('fadeDuration validation', () => {
+    it('should reject negative fadeDuration', () => {
+      engine.handleMessage({ action: 'setFadeDuration', duration: -1 });
+      expect(engine._fadeDuration).toBe(1.5);
+    });
+
+    it('should reject NaN fadeDuration', () => {
+      engine.handleMessage({ action: 'setFadeDuration', duration: NaN });
+      expect(engine._fadeDuration).toBe(1.5);
+    });
+
+    it('should reject Infinity fadeDuration', () => {
+      engine.handleMessage({ action: 'setFadeDuration', duration: Infinity });
+      expect(engine._fadeDuration).toBe(1.5);
+    });
+
+    it('should accept zero fadeDuration', () => {
+      engine.handleMessage({ action: 'setFadeDuration', duration: 0 });
+      expect(engine._fadeDuration).toBe(0);
+    });
+
+    it('should accept valid positive fadeDuration', () => {
+      engine.handleMessage({ action: 'setFadeDuration', duration: 2.5 });
+      expect(engine._fadeDuration).toBe(2.5);
+    });
+  });
+
+  describe('audioSensitivity validation', () => {
+    it('should reject zero audioSensitivity', () => {
+      engine.handleMessage({ action: 'setAudioSensitivity', sensitivity: 0 });
+      expect(engine._audioSensitivity).toBe(1.0);
+    });
+
+    it('should reject negative audioSensitivity', () => {
+      engine.handleMessage({ action: 'setAudioSensitivity', sensitivity: -0.5 });
+      expect(engine._audioSensitivity).toBe(1.0);
+    });
+
+    it('should reject NaN audioSensitivity', () => {
+      engine.handleMessage({ action: 'setAudioSensitivity', sensitivity: NaN });
+      expect(engine._audioSensitivity).toBe(1.0);
+    });
+
+    it('should accept valid positive audioSensitivity', () => {
+      engine.handleMessage({ action: 'setAudioSensitivity', sensitivity: 2.0 });
+      expect(engine._audioSensitivity).toBe(2.0);
+    });
+  });
+
+  describe('destroy() nulls window._vjamFxEngine', () => {
+    it('should set window._vjamFxEngine to null after destroy', () => {
+      const e = new VJamFXEngine();
+      window._vjamFxEngine = e;
+      e.destroy();
+      expect(window._vjamFxEngine).toBeNull();
+    });
+  });
+
+  describe('Auto cycle timer race guard', () => {
+    it('should not tick after _stopAutoCycle clears timer', () => {
+      vi.useFakeTimers();
+      engine.createOverlay();
+      engine.active = true;
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 5000 });
+      expect(engine._autoCycleTimer).not.toBeNull();
+
+      // First tick runs immediately, so layers may exist — record current count
+      const layersAfterFirstTick = engine.activeLayers.size;
+
+      engine._stopAutoCycle();
+      expect(engine._autoCycleTimer).toBeNull();
+
+      // Advance time past what would have been the next tick
+      vi.advanceTimersByTime(10000);
+
+      // No NEW layers should be added after stop
+      expect(engine.activeLayers.size).toBe(layersAfterFirstTick);
+      vi.useRealTimers();
+    });
+
+    it('should clear timer and not add layers after stopAutoCycle', () => {
+      vi.useFakeTimers();
+      engine.createOverlay();
+      engine.active = true;
+
+      // Start auto-cycle, first tick adds layers immediately
+      engine.handleMessage({ action: 'startAutoCycle', presets: ['neon-tunnel'], interval: 3000 });
+      // Kill layers added by first tick
+      for (const [, layer] of engine.activeLayers) {
+        try { layer.preset.destroy(); } catch (e) { /* ignore */ }
+        try { layer.container.remove(); } catch (e) { /* ignore */ }
+      }
+      engine.activeLayers.clear();
+
+      engine._stopAutoCycle();
+
+      // Advance timers — no new layers should appear
+      vi.advanceTimersByTime(20000);
+      expect(engine.activeLayers.size).toBe(0);
+      vi.useRealTimers();
+    });
+  });
 });

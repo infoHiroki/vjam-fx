@@ -257,4 +257,280 @@ describe('PopupController', () => {
       }
     });
   });
+
+  describe('bug fix: _busy guard on Next/Reset/Auto', () => {
+    it('should block Next when _busy is true', async () => {
+      // Add Next button to DOM
+      const btn = document.createElement('button');
+      btn.id = 'btn-next';
+      container.querySelector('.popup').appendChild(btn);
+
+      controller._bindEvents();
+      controller._busy = true;
+      controller.isActive = true;
+
+      const callsBefore = chrome.scripting.executeScript.mock.calls.length;
+      btn.click();
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(chrome.scripting.executeScript.mock.calls.length).toBe(callsBefore);
+    });
+
+    it('should block Reset when _busy is true', async () => {
+      const btn = document.createElement('button');
+      btn.id = 'btn-reset';
+      container.querySelector('.popup').appendChild(btn);
+
+      controller._bindEvents();
+      controller._busy = true;
+
+      const callsBefore = chrome.scripting.executeScript.mock.calls.length;
+      btn.click();
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(chrome.scripting.executeScript.mock.calls.length).toBe(callsBefore);
+    });
+
+    it('should block Auto when _busy is true', async () => {
+      const btn = document.createElement('button');
+      btn.id = 'btn-auto-cycle';
+      container.querySelector('.popup').appendChild(btn);
+
+      controller._bindEvents();
+      controller._busy = true;
+      controller.autoCycleActive = false;
+
+      btn.click();
+      await new Promise(r => setTimeout(r, 50));
+
+      // autoCycleActive should not have toggled
+      expect(controller.autoCycleActive).toBe(false);
+    });
+  });
+
+  describe('bug fix: _stopAll pendingStop', () => {
+    it('should set _pendingStop when _stopAll called while _busy', async () => {
+      controller._busy = true;
+      controller._pendingStop = false;
+
+      await controller._stopAll();
+
+      expect(controller._pendingStop).toBe(true);
+      // isActive should NOT have changed (stopAll was deferred)
+    });
+
+    it('should execute pending stop after _startAll finishes', async () => {
+      controller.activeLayers.add('neon-tunnel');
+      // Start _startAll which sets _busy
+      const startPromise = controller._startAll();
+      // While busy, call _stopAll which should defer
+      controller._stopAll();
+      expect(controller._pendingStop).toBe(true);
+
+      await startPromise;
+      // After _startAll finishes, _pendingStop triggers _stopAll
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(controller._pendingStop).toBe(false);
+      expect(controller.isActive).toBe(false);
+    });
+  });
+
+  describe('bug fix: opacity slider throttle', () => {
+    it('should throttle rapid opacity changes', async () => {
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.id = 'opacity-slider';
+      slider.value = '80';
+      container.querySelector('.popup').appendChild(slider);
+
+      controller.isActive = true;
+      controller._bindEvents();
+      vi.clearAllMocks();
+
+      // Fire multiple rapid input events
+      for (let i = 50; i <= 90; i += 10) {
+        slider.value = String(i);
+        slider.dispatchEvent(new Event('input'));
+      }
+
+      // Immediately after rapid fires, only the first should schedule a send
+      // The rest are throttled (opacityThrottleTimer is still pending)
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+
+      // Wait for throttle timer (50ms)
+      await new Promise(r => setTimeout(r, 100));
+
+      // Should have sent exactly one command (the throttled batch)
+      const opacityCalls = chrome.scripting.executeScript.mock.calls.filter(call => {
+        const args = call[0];
+        if (args && args.func) {
+          return true; // executeScript was called
+        }
+        return false;
+      });
+      // Only 1 throttled send, not 5 separate sends
+      expect(opacityCalls.length).toBeLessThanOrEqual(2); // setOpacity + saveState at most
+    });
+  });
+
+  describe('bug fix: filter CSS/Set sync', () => {
+    it('should sync classList active with activeFilters Set state', () => {
+      controller._bindEvents();
+      const btn = document.querySelector('.filter-btn[data-filter="invert"]');
+
+      // Click to add filter
+      btn.click();
+      expect(controller.activeFilters.has('invert')).toBe(true);
+      expect(btn.classList.contains('active')).toBe(true);
+
+      // Click again to remove filter
+      btn.click();
+      expect(controller.activeFilters.has('invert')).toBe(false);
+      expect(btn.classList.contains('active')).toBe(false);
+    });
+
+    it('should drive classList from Set state via _updateUI', () => {
+      const btn = document.querySelector('.filter-btn[data-filter="invert"]');
+
+      // Manually set filter in Set without clicking
+      controller.activeFilters.add('invert');
+      controller._updateUI();
+      expect(btn.classList.contains('active')).toBe(true);
+
+      // Remove from Set and update UI
+      controller.activeFilters.delete('invert');
+      controller._updateUI();
+      expect(btn.classList.contains('active')).toBe(false);
+    });
+
+    it('should not have active class if filter not in Set after _updateUI', () => {
+      const btn = document.querySelector('.filter-btn[data-filter="hue-rotate"]');
+
+      // Manually add active class without updating Set
+      btn.classList.add('active');
+      expect(btn.classList.contains('active')).toBe(true);
+
+      // _updateUI should remove it since Set doesn't have it
+      controller._updateUI();
+      expect(btn.classList.contains('active')).toBe(false);
+    });
+  });
+
+  describe('bug fix: settings validation', () => {
+    it('should reject NaN fadeDuration and use default 1.5', () => {
+      const fadeEl = document.createElement('input');
+      fadeEl.id = 'setting-fade';
+      container.querySelector('.popup').appendChild(fadeEl);
+
+      controller._bindEvents();
+
+      fadeEl.value = 'abc';
+      fadeEl.dispatchEvent(new Event('change'));
+
+      expect(controller.settings.fadeDuration).toBe(1.5);
+    });
+
+    it('should reject NaN barsPerCycle and use default 8', () => {
+      const cycleEl = document.createElement('input');
+      cycleEl.id = 'setting-cycle';
+      container.querySelector('.popup').appendChild(cycleEl);
+
+      controller._bindEvents();
+
+      cycleEl.value = 'not-a-number';
+      cycleEl.dispatchEvent(new Event('change'));
+
+      expect(controller.settings.barsPerCycle).toBe(8);
+    });
+
+    it('should reject barsPerCycle < 1 and use default 8', () => {
+      const cycleEl = document.createElement('input');
+      cycleEl.id = 'setting-cycle';
+      container.querySelector('.popup').appendChild(cycleEl);
+
+      controller._bindEvents();
+
+      cycleEl.value = '0';
+      cycleEl.dispatchEvent(new Event('change'));
+
+      expect(controller.settings.barsPerCycle).toBe(8);
+    });
+
+    it('should clamp fadeDuration to minimum 0', () => {
+      const fadeEl = document.createElement('input');
+      fadeEl.id = 'setting-fade';
+      container.querySelector('.popup').appendChild(fadeEl);
+
+      controller._bindEvents();
+
+      fadeEl.value = '-5';
+      fadeEl.dispatchEvent(new Event('change'));
+
+      expect(controller.settings.fadeDuration).toBe(0);
+    });
+  });
+
+  describe('bug fix: scene load with empty layers', () => {
+    it('should deactivate when scene has empty layers array', async () => {
+      controller.isActive = true;
+      controller.scenes[0] = { layers: [], blendMode: 'screen', filters: [], opacity: 1.0 };
+
+      await controller._loadScene(0);
+
+      expect(controller.isActive).toBe(false);
+      const toggle = document.getElementById('toggle');
+      expect(toggle.checked).toBe(false);
+    });
+
+    it('should skip scene with no layers array', async () => {
+      controller.isActive = true;
+      controller.scenes[0] = { blendMode: 'screen' }; // no layers property
+
+      const activeBefore = controller.isActive;
+      await controller._loadScene(0);
+
+      // _loadScene returns early if !Array.isArray(scene.layers)
+      expect(controller.isActive).toBe(activeBefore);
+    });
+  });
+
+  describe('bug fix: _loadScene try/finally resets _busy', () => {
+    it('should reset _busy even if error occurs during scene load', async () => {
+      controller.scenes[0] = { layers: ['nonexistent-preset'], blendMode: 'screen' };
+
+      // Force _sendCommand to throw
+      const origSendCommand = controller._sendCommand.bind(controller);
+      controller._sendCommand = vi.fn().mockRejectedValueOnce(new Error('inject fail'));
+
+      controller._busy = false;
+      try {
+        await controller._loadScene(0);
+      } catch (e) {
+        // Error may or may not propagate depending on implementation
+      }
+
+      // _busy must be false after _loadScene completes (try/finally)
+      expect(controller._busy).toBe(false);
+    });
+
+    it('should not stay busy after successful scene load', async () => {
+      controller.scenes[0] = { layers: ['neon-tunnel'], blendMode: 'screen', filters: [], opacity: 0.8 };
+
+      await controller._loadScene(0);
+
+      expect(controller._busy).toBe(false);
+    });
+
+    it('should block concurrent _loadScene when _busy', async () => {
+      controller.scenes[0] = { layers: ['neon-tunnel'], blendMode: 'screen', filters: [] };
+      controller._busy = true;
+
+      const activeBefore = controller.isActive;
+      await controller._loadScene(0);
+
+      // Should return early without changing state
+      expect(controller.isActive).toBe(activeBefore);
+    });
+  });
 });

@@ -323,4 +323,136 @@ describe('Service Worker', () => {
       });
     });
   });
+
+  describe('stopTabAudio validates tabId', () => {
+    it('should only stop if tabId matches activeTabAudioTabId', async () => {
+      // Start tab audio on tab 1
+      const sendResponse1 = vi.fn();
+      messageListeners[0](
+        { type: 'startTabAudio', tabId: 1 },
+        {},
+        sendResponse1,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Try to stop with a different tabId (tab 99)
+      const sendResponse2 = vi.fn();
+      chrome.runtime.getContexts = vi.fn().mockResolvedValue([{ contextType: 'OFFSCREEN_DOCUMENT' }]);
+      messageListeners[0](
+        { type: 'stopTabAudio', tabId: 99 },
+        {},
+        sendResponse2,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Should return false (not stopped) because tabId doesn't match
+      expect(sendResponse2).toHaveBeenCalledWith({ ok: false });
+      // offscreen document should NOT have been closed
+      expect(chrome.offscreen.closeDocument).not.toHaveBeenCalled();
+    });
+
+    it('should stop when tabId matches activeTabAudioTabId', async () => {
+      // Start tab audio on tab 1
+      const sendResponse1 = vi.fn();
+      messageListeners[0](
+        { type: 'startTabAudio', tabId: 1 },
+        {},
+        sendResponse1,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Stop with matching tabId
+      const sendResponse2 = vi.fn();
+      chrome.runtime.getContexts = vi.fn().mockResolvedValue([{ contextType: 'OFFSCREEN_DOCUMENT' }]);
+      messageListeners[0](
+        { type: 'stopTabAudio', tabId: 1 },
+        {},
+        sendResponse2,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Should succeed
+      expect(sendResponse2).toHaveBeenCalledWith({ ok: true });
+      expect(chrome.offscreen.closeDocument).toHaveBeenCalled();
+    });
+  });
+
+  describe('pausedTabAudioTabId cleanup on tab close', () => {
+    it('should clear pausedTabAudioTabId when paused tab is closed', async () => {
+      // Start tab audio on tab 10
+      const sendResponse1 = vi.fn();
+      messageListeners[0](
+        { type: 'startTabAudio', tabId: 10 },
+        {},
+        sendResponse1,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Pause tab audio (fullscreen pause sets pausedTabAudioTabId)
+      const sendResponse2 = vi.fn();
+      chrome.runtime.getContexts = vi.fn().mockResolvedValue([{ contextType: 'OFFSCREEN_DOCUMENT' }]);
+      messageListeners[0](
+        { type: 'pauseTabAudio' },
+        {},
+        sendResponse2,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Close the tab that had paused audio
+      tabRemoveListeners[0](10);
+      await new Promise(r => setTimeout(r, 50));
+
+      // Now resume should NOT restart audio (pausedTabAudioTabId was cleared)
+      const sendResponse3 = vi.fn();
+      chrome.tabCapture.getMediaStreamId.mockClear();
+      messageListeners[0](
+        { type: 'resumeTabAudio' },
+        {},
+        sendResponse3,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // tabCapture should NOT be called since pausedTabAudioTabId was cleared
+      expect(chrome.tabCapture.getMediaStreamId).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('stopTabAudio clears state even on failure', () => {
+    it('should clear activeTabAudioTabId even when sendMessage fails', async () => {
+      // Start tab audio on tab 5
+      const sendResponse1 = vi.fn();
+      messageListeners[0](
+        { type: 'startTabAudio', tabId: 5 },
+        {},
+        sendResponse1,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // Make runtime.sendMessage reject (simulating offscreen stop failure)
+      chrome.runtime.sendMessage = vi.fn().mockRejectedValue(new Error('send failed'));
+      chrome.runtime.getContexts = vi.fn().mockResolvedValue([{ contextType: 'OFFSCREEN_DOCUMENT' }]);
+      chrome.offscreen.closeDocument = vi.fn().mockRejectedValue(new Error('close failed'));
+
+      // Stop tab audio (should fail internally but still clear state)
+      const sendResponse2 = vi.fn();
+      messageListeners[0](
+        { type: 'stopTabAudio', tabId: 5 },
+        {},
+        sendResponse2,
+      );
+      await new Promise(r => setTimeout(r, 100));
+
+      // After failure, audioData should NOT be relayed (activeTabAudioTabId cleared)
+      chrome.tabs.sendMessage.mockClear();
+      const sendResponse3 = vi.fn();
+      messageListeners[0](
+        { type: 'audioData', data: { beat: true, bpm: 140 } },
+        {},
+        sendResponse3,
+      );
+
+      // tabs.sendMessage should NOT be called because activeTabAudioTabId was cleared
+      expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
+    });
+  });
 });
