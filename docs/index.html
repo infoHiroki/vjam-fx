@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VJam FX — VJ Effects for Any Website</title>
+<meta name="description" content="Overlay 194 music-reactive VJ visuals on any webpage. Beat detection, auto-cycle, multi-layer, filters, blend modes, scenes. Free Chrome Extension.">
+<meta property="og:title" content="VJam FX — VJ Effects for Any Website">
+<meta property="og:description" content="Turn any website into a VJ stage. 194 music-reactive presets, beat detection, auto-cycle. Free Chrome Extension.">
+<meta property="og:type" content="website">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --text:#f0f0f0;--dim:#888;--accent:#00cc66;
+  --g1:#FF1493;--g2:#8B5CF6;
+}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#030303;color:var(--text);line-height:1.6;overflow-x:hidden}
+
+/* ═══ Slides ═══ */
+.slide{position:relative;min-height:100vh;overflow:hidden;isolation:isolate}
+.slide-bg{position:absolute;inset:0;z-index:0;background:#000}
+.slide-bg canvas{display:block!important;width:100%!important;height:100%!important}
+.slide-fg{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 2rem 1.5rem;text-align:center}
+
+/* Staggered reveal */
+.slide-fg>*{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+.slide.in .slide-fg>*{opacity:1;transform:translateY(0)}
+.slide.in .slide-fg>*:nth-child(2){transition-delay:.08s}
+.slide.in .slide-fg>*:nth-child(3){transition-delay:.16s}
+.slide.in .slide-fg>*:nth-child(4){transition-delay:.24s}
+.slide.in .slide-fg>*:nth-child(5){transition-delay:.32s}
+.slide.in .slide-fg>*:nth-child(6){transition-delay:.40s}
+.slide.in .slide-fg>*:nth-child(7){transition-delay:.48s}
+
+/* ═══ Hero ═══ */
+.hero-title{
+  font-size:clamp(5rem,15vw,12rem);font-weight:900;line-height:.9;letter-spacing:-.04em;
+  background:linear-gradient(135deg,var(--g1),var(--g2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 80px rgba(255,20,147,.35));
+  animation:pulse 4s ease-in-out infinite alternate;
+}
+@keyframes pulse{
+  from{filter:drop-shadow(0 0 60px rgba(255,20,147,.3))}
+  to{filter:drop-shadow(0 0 100px rgba(139,92,246,.5))}
+}
+.hero-tag{font-size:clamp(1rem,2.5vw,1.5rem);font-weight:300;letter-spacing:.06em;margin:1rem 0 .4rem;text-shadow:0 2px 40px #000}
+.hero-sub{color:var(--dim);font-size:.95rem;margin-bottom:2.5rem;text-shadow:0 2px 20px #000}
+
+/* CTA */
+.cta{
+  display:inline-block;padding:1rem 3rem;background:var(--accent);color:#000;
+  font-size:1.1rem;font-weight:700;text-decoration:none;border-radius:50px;
+  box-shadow:0 0 50px rgba(0,204,102,.3);transition:all .3s;letter-spacing:.02em;
+}
+.cta:hover{background:#00e676;transform:translateY(-3px) scale(1.03);box-shadow:0 0 70px rgba(0,204,102,.5)}
+
+/* Stats row */
+.stats{display:flex;gap:3rem;margin-top:3rem;flex-wrap:wrap;justify-content:center}
+.stat-n{font-size:2.2rem;font-weight:800;background:linear-gradient(135deg,var(--g1),var(--g2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.stat-l{font-size:.7rem;color:var(--dim);text-transform:uppercase;letter-spacing:.12em}
+
+/* Scroll arrow */
+.arrow{position:absolute;bottom:1.5rem;left:50%;color:rgba(255,255,255,.25);font-size:1.5rem;animation:bob 2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(10px)}}
+
+/* ═══ Section headings ═══ */
+.sec-h{font-size:clamp(1.8rem,4.5vw,3rem);font-weight:800;background:linear-gradient(135deg,var(--g1),var(--g2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sec-sub{color:var(--dim);font-size:.9rem;margin-bottom:1.5rem;text-shadow:0 2px 20px #000}
+
+/* ═══ Glass ═══ */
+.g{background:rgba(0,0,0,.28);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.09);border-radius:18px;transition:all .4s}
+.g:hover{border-color:rgba(139,92,246,.25);box-shadow:0 0 24px rgba(139,92,246,.08);transform:translateY(-3px)}
+
+/* ═══ Feature grid ═══ */
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.9rem;max-width:880px;width:100%}
+.feat{padding:1.4rem 1.2rem;text-align:center}
+.feat h3{font-size:.95rem;margin-bottom:.3rem;text-shadow:0 2px 12px #000}
+.feat p{color:var(--dim);font-size:.78rem;text-shadow:0 2px 12px #000;line-height:1.4}
+.feat-ico{width:44px;height:44px;margin:0 auto .7rem}
+.feat-ico svg{width:100%;height:100%;fill:none;stroke:url(#ig);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 10px rgba(255,20,147,.3))}
+
+/* ═══ Gallery ═══ */
+#s-gallery{background:#030303;padding:3rem 0;position:relative;z-index:10;isolation:isolate}
+#s-gallery .sec-h,#s-gallery .sec-sub{padding:0 2rem}
+.gal-track{display:flex;gap:1.2rem;overflow-x:auto;scroll-snap-type:x mandatory;padding:1rem max(2rem,calc((100vw - 520px)/2)) 1.5rem;scrollbar-width:none}
+.gal-track::-webkit-scrollbar{display:none}
+.gal-item{flex:0 0 min(80vw,520px);scroll-snap-align:center;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.07);box-shadow:0 6px 30px rgba(0,0,0,.5);position:relative}
+.gal-item img{width:100%;display:block}
+.gal-cap{position:absolute;bottom:0;left:0;right:0;padding:.8rem 1rem;background:linear-gradient(transparent,rgba(0,0,0,.85));font-size:.8rem;color:var(--dim)}
+.gal-nav{display:flex;justify-content:center;gap:.4rem;margin-top:.8rem}
+.gal-dot{width:7px;height:7px;border-radius:50%;background:var(--dim);opacity:.25;cursor:pointer;border:none;transition:all .3s}
+.gal-dot.on{opacity:1;background:var(--accent);width:22px;border-radius:4px}
+
+/* ═══ Categories ═══ */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:.6rem;max-width:880px;width:100%;margin-top:1rem}
+.cat{background:rgba(0,0,0,.32);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:.7rem .4rem;text-align:center;transition:all .3s}
+.cat:hover{border-color:rgba(0,204,102,.3);box-shadow:0 0 16px rgba(0,204,102,.1);transform:translateY(-2px)}
+.cat .cn{font-weight:600;font-size:.8rem;margin-bottom:.15rem}.cat .cc{color:var(--dim);font-size:.65rem}
+
+/* ═══ Privacy row ═══ */
+.priv-row{display:flex;gap:2rem;margin:1.5rem 0;flex-wrap:wrap;justify-content:center}
+.priv{text-align:center;max-width:180px}
+.priv h4{font-size:.85rem;margin-bottom:.2rem;text-shadow:0 2px 12px #000}
+.priv p{color:var(--dim);font-size:.75rem;text-shadow:0 2px 12px #000}
+.priv-ico{width:40px;height:40px;margin:0 auto .5rem}
+.priv-ico svg{width:100%;height:100%;fill:none;stroke:url(#ig);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 8px rgba(139,92,246,.3))}
+
+/* ═══ Footer ═══ */
+.foot-link{margin-top:1.5rem}.foot-link a{color:var(--dim);text-decoration:none;font-size:.9rem;transition:color .3s}.foot-link a:hover{color:var(--accent)}
+.copy{color:#333;font-size:.7rem;margin-top:1rem}
+
+/* ═══ Lang ═══ */
+.lang{position:fixed;top:1rem;right:1rem;z-index:200;background:rgba(0,0,0,.5);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08);color:var(--dim);padding:.3rem .7rem;border-radius:16px;cursor:pointer;font-size:.8rem;transition:all .3s}
+.lang:hover{color:var(--text)}
+
+/* ═══ FX tag ═══ */
+.fxtag{position:fixed;bottom:1rem;left:1rem;z-index:200;background:rgba(0,0,0,.4);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.05);color:#444;padding:.2rem .6rem;border-radius:10px;font-size:.65rem;font-family:'SF Mono',monospace;letter-spacing:.05em;transition:all .6s}
+
+/* ═══ Canvas FX boost ═══ */
+#canvas-hero canvas{filter:saturate(1.2)}
+
+/* ═══ Responsive ═══ */
+@media(max-width:768px){
+  .slide-fg{padding:1.5rem 1.2rem 1rem}
+  .feat-grid{grid-template-columns:repeat(2,1fr);gap:.6rem}
+  .feat{padding:.9rem .7rem}
+  .feat-ico{width:32px;height:32px;margin-bottom:.5rem}
+  .feat h3{font-size:.85rem}.feat p{font-size:.72rem}
+  .cat-grid{grid-template-columns:repeat(4,1fr);gap:.4rem}
+  .cat{padding:.5rem .3rem}.cat .cn{font-size:.7rem}.cat .cc{font-size:.55rem}
+  .priv-row{gap:.8rem}
+  .priv h4{font-size:.75rem}.priv p{font-size:.65rem}
+  .priv-ico{width:32px;height:32px;margin-bottom:.3rem}
+  .stats{gap:1.5rem}
+  .sec-h{font-size:1.5rem}.sec-sub{font-size:.8rem;margin-bottom:.8rem}
+  .hero-tag{font-size:1rem;margin:.6rem 0 .3rem}.hero-sub{font-size:.8rem;margin-bottom:1.5rem}
+  .stat-n{font-size:1.6rem}
+}
+@media(max-width:480px){
+  .feat-grid{grid-template-columns:repeat(2,1fr)}
+  .cat-grid{grid-template-columns:repeat(3,1fr)}
+  .hero-title{font-size:3.5rem}
+}
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
+<linearGradient id="ig" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FF1493"/><stop offset="100%" stop-color="#8B5CF6"/></linearGradient>
+</defs>
+<symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4c3.1 0 5.6-2.5 5.6-5.6C23 5.8 18.1 2 12 2z"/><circle cx="6.5" cy="11.5" r="1.5" fill="#FF1493" stroke="none"/><circle cx="9.5" cy="7.5" r="1.5" fill="#8B5CF6" stroke="none"/><circle cx="14.5" cy="7.5" r="1.5" fill="#00cc66" stroke="none"/><circle cx="17.5" cy="11.5" r="1.5" fill="#FFB800" stroke="none"/></symbol>
+<symbol id="i-beat" viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></symbol>
+<symbol id="i-auto" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+<symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></symbol>
+<symbol id="i-save" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v6h8V3"/><path d="M17 21v-8H7v8"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+<symbol id="i-micoff" viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.34 2.18"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></symbol>
+</svg>
+
+<button class="lang" id="langBtn" onclick="toggleLang()">JA</button>
+<div class="fxtag" id="fxtag"></div>
+
+<!-- ════════════════════════ HERO ════════════════════════ -->
+<section class="slide" id="s-hero">
+  <div class="slide-bg" id="canvas-hero"></div>
+  <div class="slide-fg">
+    <h1 class="hero-title">VJam FX</h1>
+    <p class="hero-tag"><span data-lang="en">Turn any website into a VJ stage</span><span data-lang="ja" hidden>あらゆるWebサイトをVJステージに</span></p>
+    <p class="hero-sub"><span data-lang="en">194 music-reactive presets. Beat detection. Auto-cycle. Free.</span><span data-lang="ja" hidden>194の音楽連動プリセット。ビート検出。オートサイクル。無料。</span></p>
+    <a href="#store" class="cta"><span data-lang="en">Add to Chrome — Free</span><span data-lang="ja" hidden>Chromeに追加 — 無料</span></a>
+    <div class="stats">
+      <div><div class="stat-n">194</div><div class="stat-l"><span data-lang="en">Presets</span><span data-lang="ja" hidden>プリセット</span></div></div>
+      <div><div class="stat-n">14</div><div class="stat-l"><span data-lang="en">Categories</span><span data-lang="ja" hidden>カテゴリ</span></div></div>
+      <div><div class="stat-n">3</div><div class="stat-l"><span data-lang="en">Layers</span><span data-lang="ja" hidden>レイヤー</span></div></div>
+      <div><div class="stat-n">12</div><div class="stat-l"><span data-lang="en">Scenes</span><span data-lang="ja" hidden>シーン</span></div></div>
+    </div>
+  </div>
+  <div class="arrow">&#x25BC;</div>
+</section>
+
+<!-- ════════════════════════ FEATURES ════════════════════════ -->
+<section class="slide" id="s-feat">
+  <div class="slide-bg" id="canvas-feat"></div>
+  <div class="slide-fg">
+    <h2 class="sec-h"><span data-lang="en">Everything you need</span><span data-lang="ja" hidden>必要な全てが揃っている</span></h2>
+    <p class="sec-sub"><span data-lang="en">A complete VJ toolkit in your browser.</span><span data-lang="ja" hidden>ブラウザで完結するVJツールキット。</span></p>
+    <div class="feat-grid">
+      <div class="feat g"><div class="feat-ico"><svg><use href="#i-palette"/></svg></div><h3><span data-lang="en">194 Presets</span><span data-lang="ja" hidden>194プリセット</span></h3><p><span data-lang="en">Neon tunnels, kaleidoscopes, particles, aurora, glitch, plasma — 14 categories.</span><span data-lang="ja" hidden>ネオントンネル、万華鏡、パーティクル、オーロラ、グリッチ、プラズマ — 14カテゴリ。</span></p></div>
+      <div class="feat g"><div class="feat-ico"><svg><use href="#i-beat"/></svg></div><h3><span data-lang="en">Beat Reactive</span><span data-lang="ja" hidden>ビート連動</span></h3><p><span data-lang="en">Bass → intensity. Mids → color. Treble → detail. No mic needed.</span><span data-lang="ja" hidden>Bass→強度、Mid→色、Treble→ディテール。マイク不要。</span></p></div>
+      <div class="feat g"><div class="feat-ico"><svg><use href="#i-auto"/></svg></div><h3><span data-lang="en">Auto Mode</span><span data-lang="ja" hidden>オートモード</span></h3><p><span data-lang="en">BPM-synced auto-cycle. Random blend & filters. One click.</span><span data-lang="ja" hidden>BPM連動オートサイクル。ランダムブレンド＆フィルター。ワンクリック。</span></p></div>
+      <div class="feat g"><div class="feat-ico"><svg><use href="#i-layers"/></svg></div><h3><span data-lang="en">Multi-Layer</span><span data-lang="ja" hidden>マルチレイヤー</span></h3><p><span data-lang="en">Stack up to 3 presets. Combine for unique visuals.</span><span data-lang="ja" hidden>最大3プリセットを同時レイヤー。</span></p></div>
+      <div class="feat g"><div class="feat-ico"><svg><use href="#i-sparkle"/></svg></div><h3><span data-lang="en">Filters & Blend</span><span data-lang="ja" hidden>フィルター&ブレンド</span></h3><p><span data-lang="en">8 CSS filters + 4 blend modes. Infinite variety.</span><span data-lang="ja" hidden>8 CSSフィルター + 4ブレンドモード。</span></p></div>
+      <div class="feat g"><div class="feat-ico"><svg><use href="#i-save"/></svg></div><h3><span data-lang="en">12 Scenes</span><span data-lang="ja" hidden>12シーン</span></h3><p><span data-lang="en">Save complete setups. Recall instantly.</span><span data-lang="ja" hidden>セットアップを保存＆即時呼び出し。</span></p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════ GALLERY ════════════════════════ -->
+<div id="s-gallery">
+  <h2 class="sec-h" style="text-align:center;padding:0 2rem"><span data-lang="en">See it in action</span><span data-lang="ja" hidden>実際の動作を見る</span></h2>
+  <p class="sec-sub" style="text-align:center;padding:0 2rem"><span data-lang="en">Works on any website — YouTube, Wikipedia, GitHub, anywhere.</span><span data-lang="ja" hidden>YouTube、Wikipedia、GitHub、どこでも動作。</span></p>
+  <div class="gal-track" id="galTrack">
+    <div class="gal-item"><img src="images/04-youtube-fx.jpg" alt="VJam FX on YouTube" loading="lazy"><div class="gal-cap"><span data-lang="en">Multi-layer effects on YouTube</span><span data-lang="ja" hidden>YouTube上のマルチレイヤーエフェクト</span></div></div>
+    <div class="gal-item"><img src="images/03-youtube-popup.jpg" alt="Popup on YouTube" loading="lazy"><div class="gal-cap"><span data-lang="en">Control panel with 194 presets</span><span data-lang="ja" hidden>194プリセットのコントロールパネル</span></div></div>
+    <div class="gal-item"><img src="images/05-github-fx.jpg" alt="VJam FX on GitHub" loading="lazy"><div class="gal-cap"><span data-lang="en">Effects overlaid on GitHub</span><span data-lang="ja" hidden>GitHub上のエフェクト</span></div></div>
+    <div class="gal-item"><img src="images/02-wikipedia-fx.jpg" alt="VJam FX on Wikipedia" loading="lazy"><div class="gal-cap"><span data-lang="en">Visuals on Wikipedia</span><span data-lang="ja" hidden>Wikipedia上のビジュアル</span></div></div>
+    <div class="gal-item"><img src="images/01-popup.jpg" alt="Popup UI" loading="lazy"><div class="gal-cap"><span data-lang="en">Clean, intuitive interface</span><span data-lang="ja" hidden>直感的なインターフェース</span></div></div>
+  </div>
+  <div class="gal-nav" id="galNav"></div>
+</div>
+
+<!-- ════════════════════════ CATEGORIES ════════════════════════ -->
+<section class="slide" id="s-cat">
+  <div class="slide-bg" id="canvas-cat"></div>
+  <div class="slide-fg">
+    <h2 class="sec-h"><span data-lang="en">194 Presets</span><span data-lang="ja" hidden>194プリセット</span></h2>
+    <p class="sec-sub"><span data-lang="en">From subtle ambience to full-on psychedelia.</span><span data-lang="ja" hidden>微かなアンビエンスから本格サイケデリアまで。</span></p>
+    <div class="cat-grid">
+      <div class="cat"><div class="cn">Immersive</div><div class="cc">20</div></div>
+      <div class="cat"><div class="cn">Frames & Film</div><div class="cc">18</div></div>
+      <div class="cat"><div class="cn">Patterns</div><div class="cc">18</div></div>
+      <div class="cat"><div class="cn">Organic</div><div class="cc">17</div></div>
+      <div class="cat"><div class="cn">Nature</div><div class="cc">16</div></div>
+      <div class="cat"><div class="cn">Water</div><div class="cc">14</div></div>
+      <div class="cat"><div class="cn">Grid & Tech</div><div class="cc">14</div></div>
+      <div class="cat"><div class="cn">Space</div><div class="cc">14</div></div>
+      <div class="cat"><div class="cn">Neon & Glow</div><div class="cc">13</div></div>
+      <div class="cat"><div class="cn">Glitch & Retro</div><div class="cc">13</div></div>
+      <div class="cat"><div class="cn">Audio Reactive</div><div class="cc">13</div></div>
+      <div class="cat"><div class="cn">Particles</div><div class="cc">11</div></div>
+      <div class="cat"><div class="cn">Weather</div><div class="cc">9</div></div>
+      <div class="cat"><div class="cn">Minimal</div><div class="cc">4</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════ CTA ════════════════════════ -->
+<section class="slide" id="s-cta">
+  <div class="slide-bg" id="canvas-cta"></div>
+  <div class="slide-fg">
+    <h2 class="sec-h" style="margin-bottom:.6rem"><span data-lang="en">Your browser. Your stage.</span><span data-lang="ja" hidden>あなたのブラウザが、ステージになる。</span></h2>
+    <p class="sec-sub"><span data-lang="en">Free. Private. No sign-up.</span><span data-lang="ja" hidden>無料。プライベート。登録不要。</span></p>
+    <a href="#store" class="cta"><span data-lang="en">Add to Chrome — Free</span><span data-lang="ja" hidden>Chromeに追加 — 無料</span></a>
+    <div class="priv-row">
+      <div class="priv"><div class="priv-ico"><svg><use href="#i-lock"/></svg></div><h4><span data-lang="en">No Data Collection</span><span data-lang="ja" hidden>データ収集なし</span></h4><p><span data-lang="en">Zero tracking. Zero telemetry.</span><span data-lang="ja" hidden>トラッキング・テレメトリ一切なし。</span></p></div>
+      <div class="priv"><div class="priv-ico"><svg><use href="#i-monitor"/></svg></div><h4><span data-lang="en">100% Local</span><span data-lang="ja" hidden>100%ローカル</span></h4><p><span data-lang="en">Everything runs in your browser.</span><span data-lang="ja" hidden>全てブラウザ内で完結。</span></p></div>
+      <div class="priv"><div class="priv-ico"><svg><use href="#i-micoff"/></svg></div><h4><span data-lang="en">No Microphone</span><span data-lang="ja" hidden>マイク不要</span></h4><p><span data-lang="en">Beat detection from page audio only.</span><span data-lang="ja" hidden>ビート検出はページ音声のみ。</span></p></div>
+    </div>
+    <div class="foot-link"><a href="https://vjam.vercel.app" target="_blank" rel="noopener"><span data-lang="en">Want more? Try VJam Full →</span><span data-lang="ja" hidden>もっと本格的に？ VJam Full →</span></a></div>
+    <div class="copy">© 2025 VJam</div>
+  </div>
+</section>
+
+<script src="p5.min.js"></script>
+<script>
+// ═══ Language ═══
+let lang = navigator.language.startsWith('ja') ? 'ja' : 'en';
+function applyLang() {
+  document.querySelectorAll('[data-lang]').forEach(el => { el.hidden = el.dataset.lang !== lang; });
+  document.getElementById('langBtn').textContent = lang === 'en' ? 'JA' : 'EN';
+  document.documentElement.lang = lang;
+}
+function toggleLang() { lang = lang === 'en' ? 'ja' : 'en'; applyLang(); }
+applyLang();
+
+// ═══ Gallery ═══
+(function() {
+  const track = document.getElementById('galTrack'), nav = document.getElementById('galNav');
+  const items = track.querySelectorAll('.gal-item');
+  items.forEach((_, i) => {
+    const d = document.createElement('button');
+    d.className = 'gal-dot' + (i === 0 ? ' on' : '');
+    d.onclick = () => items[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    nav.appendChild(d);
+  });
+  const dots = nav.querySelectorAll('.gal-dot');
+  items.forEach(it => new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { const idx = [...items].indexOf(e.target); dots.forEach((d, i) => d.classList.toggle('on', i === idx)); }
+  }), { root: track, threshold: 0.6 }).observe(it));
+})();
+
+// ═══ Slide Reveal ═══
+const slideObs = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) e.target.classList.add('in');
+}), { threshold: 0.15 });
+document.querySelectorAll('.slide').forEach(s => slideObs.observe(s));
+
+// ═══ Simulated Audio ═══
+const au = { bass: 0, mid: 0, treble: 0, rms: 0, beat: 0 };
+let lastBt = 0;
+function tickAudio(t) {
+  au.bass = .3 + .3 * Math.sin(t * 1.1) + .2 * Math.sin(t * .4);
+  au.mid = .25 + .25 * Math.sin(t * 1.7 + 1) + .15 * Math.sin(t * .6);
+  au.treble = .2 + .2 * Math.sin(t * 2.3 + 2) + .1 * Math.sin(t * .8);
+  au.rms = (au.bass + au.mid + au.treble) / 3;
+  if (t - lastBt > 60 / 128) { lastBt = t; au.beat = .6 + Math.random() * .4; }
+  au.beat *= .92;
+}
+
+// ═══ Effect Definitions ═══
+
+// --- HERO: Neon Tunnel + Particle Embers ---
+function heroEffect(p, container) {
+  let rings = [], hueOff = 0, shX = 0, shY = 0, embers = [];
+
+  p.setup = () => {
+    p.createCanvas(container.clientWidth, container.clientHeight);
+    p.pixelDensity(1);
+    p.colorMode(p.HSB, 360, 100, 100, 100);
+    for (let i = 0; i < 28; i++) rings.push({ z: i / 28, hue: (i * 13) % 360, sides: 4 + (i % 4), rot: Math.random() * p.TWO_PI });
+  };
+
+  p.draw = () => {
+    const t = p.millis() / 1000;
+    tickAudio(t);
+    p.background(0, 0, 2);
+    const cx = p.width / 2, cy = p.height / 2, mx = Math.max(p.width, p.height) * .88;
+    const spd = 1.2 * (.5 + au.rms * 1.5);
+    hueOff += .3 + au.mid * 2;
+    if (au.beat > .3) { shX += (Math.random() - .5) * au.beat * 14; shY += (Math.random() - .5) * au.beat * 14; }
+    shX *= .85; shY *= .85;
+
+    p.push(); p.translate(cx + shX, cy + shY);
+    rings.sort((a, b) => b.z - a.z);
+    for (const r of rings) {
+      r.z -= .005 * spd; r.rot += .005 + au.treble * .03;
+      if (r.z <= 0) { r.z = 1; r.hue = (hueOff + Math.random() * 60) % 360; r.sides = 4 + Math.floor(Math.random() * 4); continue; }
+      const sz = mx * (1 - r.z), al = p.map(r.z, 0, 1, 85, 8), wt = p.map(r.z, 0, 1, 5, .6);
+      p.noFill();
+      p.stroke(r.hue, 55, 100, al * .3); p.strokeWeight(wt * 3.5); poly(p, 0, 0, sz / 2, r.sides, r.rot);
+      p.stroke(r.hue, 80, 100, al); p.strokeWeight(wt); poly(p, 0, 0, sz / 2, r.sides, r.rot);
+    }
+    p.pop();
+
+    if (p.frameCount % 3 === 0) embers.push({ x: Math.random() * p.width, y: p.height + 5, vx: (Math.random() - .5) * .8, vy: -(1 + Math.random() * 2), life: 1, hue: (hueOff + Math.random() * 40) % 360, sz: 2 + Math.random() * 4 });
+    if (embers.length > 120) embers.splice(0, 20);
+    let w = 0;
+    for (let i = 0; i < embers.length; i++) {
+      const e = embers[i];
+      e.x += e.vx + Math.sin(t * 2 + e.x * .01) * .3; e.y += e.vy; e.life -= .005;
+      if (e.life <= 0 || e.y < -10) continue;
+      embers[w++] = e;
+      p.noStroke(); p.fill(e.hue, 70, 100, e.life * 50);
+      p.circle(e.x, e.y, e.sz * e.life);
+    }
+    embers.length = w;
+  };
+  p.windowResized = () => p.resizeCanvas(container.clientWidth, container.clientHeight);
+}
+
+// --- FEATURES: Kaleidoscope ---
+function featEffect(p, container) {
+  let shapes = [], spT = 0;
+
+  p.setup = () => {
+    p.createCanvas(container.clientWidth, container.clientHeight);
+    p.pixelDensity(1);
+    p.colorMode(p.HSB, 360, 100, 100, 100);
+    p.background(0);
+  };
+
+  p.draw = () => {
+    const t = p.millis() / 1000;
+    // Opaque background to prevent bleed-through
+    p.background(0, 0, 3);
+    const cx = p.width / 2, cy = p.height / 2, seg = 8, as = p.TWO_PI / seg;
+
+    if (au.beat > .3) { for (let i = 0; i < Math.floor(3 + au.beat * 8); i++) addS(); }
+    if (++spT >= 5) { spT = 0; addS(); }
+
+    p.push(); p.translate(cx, cy);
+    let w = 0;
+    for (let i = 0; i < shapes.length; i++) {
+      const s = shapes[i];
+      s.d += s.sp * (1 + au.bass * 2); s.a += .01 + au.treble * .02; s.life -= .006;
+      if (s.life <= 0 || s.d > Math.max(p.width, p.height) * .7) continue;
+      shapes[w++] = s;
+      const al = s.life * 60, sz = s.sz * (.6 + au.mid * .4);
+      for (let j = 0; j < seg; j++) {
+        const ba = j * as + t * .4;
+        for (const m of [1, -1]) {
+          const ang = ba + s.a * m, x = Math.cos(ang) * s.d, y = Math.sin(ang) * s.d;
+          p.noStroke();
+          p.fill(s.hue, 45, 95, al * .25); p.circle(x, y, sz * 2);
+          p.fill(s.hue, 70, 100, al);
+          if (s.tp === 0) p.circle(x, y, sz);
+          else if (s.tp === 1) { p.push(); p.translate(x, y); p.rotate(ang); p.rectMode(p.CENTER); p.rect(0, 0, sz, sz); p.pop(); }
+          else { const h = sz / 2; p.triangle(x, y - h, x - h, y + h, x + h, y + h); }
+        }
+      }
+    }
+    shapes.length = w;
+    p.pop();
+
+    function addS() {
+      if (shapes.length > 220) return;
+      shapes.push({ a: Math.random() * p.TWO_PI, d: 5 + Math.random() * 20, sp: 1 + Math.random() * 2.5, sz: 6 + Math.random() * 24, hue: (p.frameCount * .5 + Math.random() * 60) % 360, life: 1, tp: Math.floor(Math.random() * 3) });
+    }
+  };
+  p.windowResized = () => { p.resizeCanvas(container.clientWidth, container.clientHeight); p.background(0); };
+}
+
+// --- CATEGORIES: Matrix Rain ---
+function catEffect(p, container) {
+  let cols = [], flash = 0;
+  const CW = 16;
+  const kat = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+  const rch = () => Math.random() < .7 ? kat[Math.floor(Math.random() * kat.length)] : String.fromCharCode(48 + Math.floor(Math.random() * 10));
+  const rchs = n => Array.from({ length: n }, rch);
+
+  p.setup = () => {
+    p.createCanvas(container.clientWidth, container.clientHeight);
+    p.pixelDensity(1);
+    p.colorMode(p.HSB, 360, 100, 100, 100);
+    p.background(0);
+    initCols();
+  };
+
+  function initCols() {
+    cols = [];
+    for (let x = 0; x < p.width; x += CW)
+      cols.push({ x, y: -Math.random() * p.height, sp: .5 + Math.random() * 1.5, len: 8 + Math.floor(Math.random() * 20), ch: rchs(28) });
+  }
+
+  p.draw = () => {
+    // Semi-opaque overlay for trail effect (on top of black slide-bg)
+    p.fill(0, 0, 0, 22); p.noStroke(); p.rect(0, 0, p.width, p.height);
+    const spd = 3 * (1 + au.bass);
+    flash *= .88;
+    if (au.beat > .5) flash = au.beat * 12;
+    p.textFont('monospace'); p.textSize(CW - 2); p.textAlign(p.CENTER, p.TOP);
+
+    for (const c of cols) {
+      c.y += spd * c.sp;
+      if (c.y - c.len * CW > p.height) { c.y = -Math.random() * p.height * .5; c.sp = .5 + Math.random() * 1.5; c.len = 8 + Math.floor(Math.random() * 20); c.ch = rchs(c.len); }
+      if (Math.random() < .05 + au.treble * .1) c.ch[Math.floor(Math.random() * c.ch.length)] = rch();
+      for (let i = 0; i < c.len; i++) {
+        const cy = c.y - i * CW;
+        if (cy < -CW || cy > p.height + CW) continue;
+        const r = i / c.len;
+        if (i === 0) p.fill(120, 20, 100, 90);
+        else p.fill((120 + au.mid * 40) % 360, 70, p.lerp(80, 20, r), (1 - r) * 80);
+        p.text(c.ch[i] || '*', c.x + CW / 2, cy);
+      }
+    }
+    if (flash > 1) { p.fill(120, 80, 100, flash); p.rect(0, 0, p.width, p.height); }
+  };
+  p.windowResized = () => { p.resizeCanvas(container.clientWidth, container.clientHeight); p.background(0); initCols(); };
+}
+
+// --- CTA: Aurora ---
+function ctaEffect(p, container) {
+  p.setup = () => {
+    p.createCanvas(container.clientWidth, container.clientHeight);
+    p.pixelDensity(1);
+    p.colorMode(p.HSB, 360, 100, 100, 100);
+    p.noStroke();
+  };
+
+  p.draw = () => {
+    const t = p.millis() / 1000;
+    p.background(240, 30, 4, 100);
+
+    for (let l = 0; l < 5; l++) {
+      const baseY = p.height * (.18 + l * .13);
+      const hue = (120 + l * 28 + au.mid * 40 + p.frameCount * .2) % 360;
+      const amp = 60 + au.bass * 80 + au.beat * 40;
+      const spd = t * (.8 + l * .3);
+      const strips = 80;
+      for (let i = 0; i <= strips; i++) {
+        const x = (i / strips) * p.width, nx = i * .05 + l * 3;
+        const w1 = p.noise(nx, spd) * amp, w2 = Math.sin(i * .08 + spd * 2 + l) * amp * .5;
+        const y = baseY - w1 - w2;
+        const cH = 80 + p.noise(nx + 100, spd) * 150 + au.rms * 80 + au.beat * 60;
+        for (let s = 0; s < 8; s++) {
+          const r = s / 8;
+          p.fill(hue, 50 + r * 30, 70 + (1 - r) * 30, (1 - r) * (15 + au.rms * 10));
+          p.rect(x, y + r * cH, p.width / strips + 1, cH / 8);
+        }
+      }
+    }
+    if (p.frameCount % 2 === 0) {
+      p.fill(0, 0, 100, 35 + Math.random() * 45);
+      for (let i = 0; i < 3; i++) p.circle(Math.random() * p.width, Math.random() * p.height * .4, 1 + Math.random() * 2);
+    }
+  };
+  p.windowResized = () => p.resizeCanvas(container.clientWidth, container.clientHeight);
+}
+
+// Helper
+function poly(p, x, y, r, sides, rot) {
+  p.beginShape();
+  for (let i = 0; i <= sides; i++) {
+    const a = p.TWO_PI / sides * i - p.HALF_PI + rot;
+    p.vertex(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  p.endShape();
+}
+
+// ═══ Create p5 Instances ═══
+const sketches = [
+  { id: 'canvas-hero', fn: heroEffect, inst: null },
+  { id: 'canvas-feat', fn: featEffect, inst: null },
+  { id: 'canvas-cat',  fn: catEffect,  inst: null },
+  { id: 'canvas-cta',  fn: ctaEffect,  inst: null },
+];
+
+const fxtag = document.getElementById('fxtag');
+const fxNames = ['Neon Tunnel + Embers', 'Kaleidoscope', 'Matrix Rain', 'Aurora'];
+
+sketches.forEach((s, i) => {
+  const el = document.getElementById(s.id);
+  s.inst = new p5(function(p) { s.fn(p, el); }, el);
+  if (i > 0) s.inst.noLoop();
+
+  new IntersectionObserver(([e]) => {
+    if (e.isIntersecting) {
+      s.inst.loop();
+      fxtag.textContent = fxNames[i];
+      fxtag.style.color = '#666';
+    } else {
+      s.inst.noLoop();
+    }
+  }, { threshold: 0.2 }).observe(el);
+});
+
+fxtag.textContent = fxNames[0];
+
+window.addEventListener('resize', () => {
+  sketches.forEach(s => {
+    const el = document.getElementById(s.id);
+    if (s.inst && el) s.inst.resizeCanvas(el.clientWidth, el.clientHeight);
+  });
+});
+</script>
+</body>
+</html>
