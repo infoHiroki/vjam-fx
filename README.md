@@ -4,20 +4,18 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage.
 
 ## Features
 
-- **194 visual presets** in 14 categories
+- **191 visual presets** in 13 categories
 - **Multi-layer**: up to 3 presets running simultaneously with fade transitions
 - **CSS filters**: Invert, Hue Rotate, Grayscale, Saturate, Brightness, Contrast, Sepia, Blur
 - **4 blend modes**: Screen, Lighten, Difference, Exclusion (toggle selection)
 - **Light page detection**: auto-switches blend to Difference on light-themed pages
 - **Auto-cycle**: BPM-connected automatic preset rotation (16 beats, 4-15s clamp)
-- **Auto Blend**: randomize blend modes during Auto (requires Auto ON)
-- **Auto Filter**: randomize filters during Auto (requires Auto ON)
+- **Blend Rnd**: randomize blend modes independently (works with or without Auto)
+- **Filter Rnd**: randomize filters independently (works with or without Auto)
 - **Beat detection**: video/audio element analysis + tab audio capture — no microphone needed (Web Audio API)
 - **Text Effects**: random text effects with auto font/position/color
-- **Image FX**: image-based visual effects
-- **Scenes**: save/load preset+filter+blend configurations to slots
+- **Scenes**: save/load preset+filter+blend configurations to 12 slots
 - **Lock**: lock current preset selection to prevent changes
-- **OSD feedback**: on-screen display for active presets and effects
 - **Navigation persistence**: effects survive page navigations via Service Worker
 - **Zero impact when OFF**: no background scripts, no content scripts
 
@@ -39,7 +37,7 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage.
 5. **Reset** — full reset (all layers, filters, blend, auto, toggle OFF)
 6. **Next** — random 1-3 presets (FX unchanged)
 7. **Auto** — preset rotation on repeat (BPM-connected interval, FX unchanged)
-8. **Auto Blend** / **Auto Filter** — randomize blend/filters during Auto
+8. **Blend Rnd** / **Filter Rnd** — randomize blend/filters independently
 9. **Save** — save current configuration to a scene slot
 10. **Text** — toggle random text effects
 11. **Lock** — lock current preset selection
@@ -50,7 +48,7 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage.
 
 ```bash
 npm install
-npm test            # Run all 1704 tests
+npm test            # Run all 1733 tests
 npm run test:watch  # Watch mode
 ```
 
@@ -66,17 +64,15 @@ vjam-fx/
 │   ├── popup.css          # Dark theme UI
 │   └── popup.js           # Controller (injects via chrome.scripting)
 ├── content/               # Injected into pages (MAIN world)
-│   ├── content.js         # VJamFXEngine — overlay, multi-layer, filters, OSD, auto-cycle
+│   ├── content.js         # VJamFXEngine — overlay, multi-layer, filters, auto-cycle
 │   ├── base-preset.js     # Base class for all presets
-│   ├── audio-analyzer.js  # Video/tab audio FFT, beat detection, BPM estimation
 │   ├── audio-bridge.js    # ISOLATED world — SW→MAIN audioData relay
 │   ├── text-overlay.js    # Text effects overlay
-│   ├── image-effects.js   # Image-based visual effects
-│   └── presets/           # 194 visual presets (IIFE pattern)
+│   └── presets/           # 191 visual presets (IIFE pattern)
 ├── offscreen/             # Offscreen document for tabCapture audio
 ├── lib/p5.min.js          # p5.js graphics engine
 ├── icons/                 # Extension icons (16/48/128px)
-└── test/                  # Vitest + jsdom tests (1704 tests)
+└── test/                  # Vitest + jsdom tests (1733 tests)
 ```
 
 ### Preset Categories
@@ -96,7 +92,6 @@ vjam-fx/
 | Audio Reactive | 16 | Frequency Rings, Equalizer, Sine Waves, Waveform |
 | Particles | 8 | Particle Storm, Fireflies, Confetti, Sparks |
 | Weather | 4 | Rain, Neon Rain, Cyber Rain, Snow |
-| Image FX | 3 | Image Glitch, Image Kaleidoscope, Image Mirror |
 
 ### Action Buttons
 
@@ -105,8 +100,8 @@ vjam-fx/
 | **Reset** | Full reset: all layers removed, filters cleared, blend → screen, auto-cycle OFF, toggle OFF |
 | **Next** | Random 1-3 presets (FX unchanged). User's filters/blend preserved. |
 | **Auto** | Preset rotation on repeat. BPM-connected interval (16 beats, clamped 4-15s). FX unchanged. |
-| **Auto Blend** | Randomize blend modes during Auto rotation (requires Auto ON) |
-| **Auto Filter** | Randomize filters during Auto rotation (requires Auto ON) |
+| **Blend Rnd** | Randomize blend modes independently (works with or without Auto) |
+| **Filter Rnd** | Randomize filters independently (works with or without Auto) |
 | **Save** | Save current configuration to a scene slot. Click slot to load, right-click to clear. |
 | **Text** | Toggle random text effects with auto font/position/color |
 | **Lock** | Lock current preset selection to prevent changes |
