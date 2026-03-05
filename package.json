@@ -6,7 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "rm -f vjam-fx.zip && zip -r vjam-fx.zip manifest.json background/ content/ popup/ offscreen/ lib/ icons/"
+    "package": "rm -f vjam-fx-v1.0.0.zip && zip -r vjam-fx-v1.0.0.zip manifest.json background/ content/ popup/ offscreen/ lib/ icons/"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
