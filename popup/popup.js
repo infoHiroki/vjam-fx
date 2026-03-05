@@ -1331,10 +1331,20 @@ class PopupController {
 
 export { PopupController };
 
+// CTA rotation — show a different value prop each time popup opens
+const _ctaMessages = [
+  'Take it to a party → VJam Full (HDMI output)',
+  '270+ presets with GLSL shaders → VJam Full',
+  'Beat detection from mic → VJam Full',
+  'Works offline on any device → VJam Full',
+];
+
 // Auto-init in popup context
 if (typeof document !== 'undefined' && document.getElementById) {
   document.addEventListener('DOMContentLoaded', () => {
     const controller = new PopupController();
     controller.init();
+    const ctaEl = document.getElementById('cta-text');
+    if (ctaEl) ctaEl.textContent = _ctaMessages[Math.floor(Math.random() * _ctaMessages.length)];
   });
 }

@@ -55,7 +55,7 @@ VJam FX overlays real-time music-reactive visual effects on top of any website. 
 - No tracking, no analytics, no data collection
 - Only accesses the current tab when you click the icon
 
-**Powered by VJam** — the full VJ system with 194+ presets, video/image layers, and HDMI output for live performances. Try it at vjam.vercel.app
+**Part of the VJam ecosystem.** Want HDMI output, mic input, GLSL shaders, and 270+ presets? → VJam Full (vjam.vercel.app)
 
 ## Category
 Fun
