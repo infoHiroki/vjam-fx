@@ -12,7 +12,7 @@ def read_file(path):
     with open(os.path.join(EXT_PATH, path), 'r') as f:
         return f.read()
 
-CORE_SCRIPTS = ['lib/p5.min.js', 'content/base-preset.js', 'content/audio-analyzer.js']
+CORE_SCRIPTS = ['lib/p5.min.js', 'content/base-preset.js']
 
 def inject_and_start(page, preset_names, blend='screen', filters=None):
     for s in CORE_SCRIPTS:

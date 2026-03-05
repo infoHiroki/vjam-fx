@@ -4,7 +4,6 @@ import { resolve } from 'path';
 
 // Load IIFE scripts in order (same as Chrome injection)
 const baseCode = readFileSync(resolve(__dirname, '../content/base-preset.js'), 'utf-8');
-const analyzerCode = readFileSync(resolve(__dirname, '../content/audio-analyzer.js'), 'utf-8');
 const engineCode = readFileSync(resolve(__dirname, '../content/content.js'), 'utf-8');
 
 // Load a preset for testing
@@ -18,7 +17,6 @@ describe('VJamFXEngine', () => {
     // Initialize VJamFX namespace
     window.VJamFX = { presets: {} };
     eval(baseCode);
-    eval(analyzerCode);
     eval(neonCode);
     // Clear any previous engine
     delete window._vjamFxEngine;
