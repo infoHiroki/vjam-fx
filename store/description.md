@@ -4,7 +4,7 @@
 VJam FX — VJ Effects for Any Website
 
 ## Short Description (132 chars max)
-Overlay 194 music-reactive VJ visuals on any webpage. Beat detection, auto-cycle, multi-layer, filters, blend modes, scenes. Free.
+Overlay 191 music-reactive VJ visuals on any webpage. Beat detection, auto-cycle, multi-layer, filters, blend modes, scenes. Free.
 
 ## Detailed Description
 
@@ -12,7 +12,7 @@ Turn any webpage into a VJ performance!
 
 VJam FX overlays real-time music-reactive visual effects on top of any website. Audio is captured directly from video/audio elements on the page — no microphone needed.
 
-**194 Presets in 14 Categories:**
+**191 Presets in 13 Categories:**
 - Immersive (25): Wormhole, Warp Speed, Portal Ring, Aurora, Crystal Cave, and more
 - Frames & Film (13): Neon Frame, Light Leak, Film Burn, VHS Noise, Scan Line
 - Patterns (16): Kaleidoscope, Mandala, Sacred Geometry, Moire
@@ -44,7 +44,7 @@ VJam FX overlays real-time music-reactive visual effects on top of any website. 
 **How to use:**
 1. Click the VJam FX icon in your toolbar
 2. Toggle ON and press "Auto" for instant BPM-synced visuals
-3. Or press "Next" for random presets, or select manually from 194 presets
+3. Or press "Next" for random presets, or select manually from 191 presets
 4. Play a video — audio-reactive visuals start automatically (no microphone needed)
 5. Customize with filters, blend modes, and opacity
 6. Save your favorite configurations to 12 Scene slots

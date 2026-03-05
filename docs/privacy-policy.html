@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — VJam FX</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#030303;color:#f0f0f0;line-height:1.7;padding:2rem}
+.wrap{max-width:720px;margin:0 auto}
+h1{font-size:2rem;font-weight:800;margin-bottom:.5rem;background:linear-gradient(135deg,#FF1493,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+h2{font-size:1.2rem;font-weight:700;margin:2rem 0 .5rem;color:#ccc}
+p,li{color:#aaa;font-size:.95rem}
+ul{padding-left:1.2rem;margin:.5rem 0}
+li{margin:.3rem 0}
+strong{color:#ddd}
+.updated{color:#666;font-size:.85rem;margin-bottom:2rem}
+a{color:#00cc66;text-decoration:none}
+a:hover{text-decoration:underline}
+.back{margin-top:3rem;display:inline-block;color:#888;font-size:.85rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Privacy Policy — VJam FX</h1>
+<p class="updated">Last updated: February 28, 2026</p>
+
+<h2>What VJam FX Does</h2>
+<p>VJam FX is a Chrome extension that overlays visual effects on webpages. It captures audio directly from video/audio elements on the page to detect beats and sync visual effects to music — no microphone needed.</p>
+
+<h2>Data Collection</h2>
+<p><strong>VJam FX collects no data.</strong> Specifically:</p>
+<ul>
+<li><strong>No personal information</strong> is collected, stored, or transmitted</li>
+<li><strong>No browsing history</strong> is accessed or recorded</li>
+<li><strong>No analytics or tracking</strong> of any kind</li>
+<li><strong>No cookies</strong> are set</li>
+<li><strong>No third-party services</strong> are used</li>
+<li><strong>No network requests</strong> are made (except loading the extension's own files)</li>
+</ul>
+
+<h2>Audio Capture</h2>
+<p>VJam FX uses two methods to capture audio for beat detection — <strong>no microphone is required</strong>:</p>
+<ul>
+<li><strong>Video/Audio Element Capture</strong> (primary): Uses <code>createMediaElementSource</code> to capture audio directly from <code>&lt;video&gt;</code> and <code>&lt;audio&gt;</code> elements on the page. This is completely silent — no recording indicator is shown.</li>
+<li><strong>Tab Audio Capture</strong> (fallback): If video element audio is unavailable (e.g., CORS/MSE restrictions), the extension falls back to capturing the tab's audio output via <code>tabCapture</code>. This may show a recording indicator in the browser.</li>
+</ul>
+<p>In both cases:</p>
+<ul>
+<li>Audio is analyzed <strong>entirely locally</strong> in your browser using the Web Audio API</li>
+<li>Audio data is processed in real-time for beat detection and frequency analysis</li>
+<li><strong>No audio is recorded, stored, or transmitted</strong> anywhere</li>
+<li>Audio capture is active only while effects are running</li>
+</ul>
+
+<h2>Permissions</h2>
+<ul>
+<li><strong>activeTab</strong>: Allows the extension to inject visual effects into the current tab only when you click the extension icon. No access to other tabs.</li>
+<li><strong>scripting</strong>: Required to inject the visual effects engine (p5.js canvas) into the webpage.</li>
+<li><strong>webNavigation</strong>: Used to maintain visual effects when you navigate within a website.</li>
+<li><strong>tabCapture</strong>: Used to capture tab audio for beat detection when video element audio is unavailable. Audio is processed locally only.</li>
+<li><strong>offscreen</strong>: Required to create an offscreen document for processing tab audio capture data.</li>
+<li><strong>storage</strong>: Used to save your scene configurations (preset selections, blend modes, filter settings) locally in your browser.</li>
+</ul>
+
+<h2>Data Storage</h2>
+<p>VJam FX stores your effect settings and scene configurations (selected presets, blend mode, filter choices, saved scenes) locally in your browser's extension storage. This data never leaves your device.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the updated version will be included with the extension update.</p>
+
+<h2>Contact</h2>
+<p>For questions about this privacy policy: <a href="mailto:vjam.contact@gmail.com">vjam.contact@gmail.com</a></p>
+
+<a href="./" class="back">&larr; Back to VJam FX</a>
+</div>
+</body>
+</html>

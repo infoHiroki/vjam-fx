@@ -2,8 +2,8 @@
 
 VJam FXは、YouTube・Spotify・SoundCloudなど音声のあるWebページに、音楽に反応するビジュアルエフェクトを重ねるChrome拡張機能です。セットアップ不要。クリックするだけ。
 
-🎨 194種類のビジュアルプリセット
-14カテゴリ: Particles, Geometry, Wave, Tunnel, Grid, Abstract, Nature, Text, Neon, Retro, Glitch, Minimal, Psychedelic, 3D
+🎨 191種類のビジュアルプリセット
+13カテゴリ: Immersive, Frames & Film, Patterns, Organic, Nature, Water, Grid & Tech, Space, Neon & Glow, Glitch & Retro, Audio Reactive, Particles, Weather
 
 🎵 ビートリアクティブ
 リアルタイムで音楽に反応。ページ上の動画・音楽プレイヤー・ストリーミングサービスの音声に対応。
