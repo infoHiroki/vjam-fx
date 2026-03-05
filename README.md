@@ -48,7 +48,7 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage.
 
 ```bash
 npm install
-npm test            # Run all 1733 tests
+npm test            # Run all 1722 tests
 npm run test:watch  # Watch mode
 ```
 
@@ -72,7 +72,7 @@ vjam-fx/
 ├── offscreen/             # Offscreen document for tabCapture audio
 ├── lib/p5.min.js          # p5.js graphics engine
 ├── icons/                 # Extension icons (16/48/128px)
-└── test/                  # Vitest + jsdom tests (1733 tests)
+└── test/                  # Vitest + jsdom tests (1722 tests)
 ```
 
 ### Preset Categories
@@ -129,4 +129,4 @@ ISC
 
 ---
 
-**[Get VJam Full](https://vjam.vercel.app)** — Full VJ system with 194+ presets, video/image layers, and more.
+**[Get VJam Full](https://vjam.vercel.app)** — Full VJ system with 270+ presets, HDMI output, mic input, GLSL shaders, and more.
