@@ -73,10 +73,10 @@ def take_screenshots():
         print("Screenshot 2: Wikipedia page (base)")
 
         # Screenshot 3: Dark themed site
-        page.goto('https://github.com')
+        page.goto('https://soundcloud.com/discover')
         time.sleep(2)
-        page.screenshot(path=os.path.join(SCREENSHOTS_DIR, '03-github-page.png'))
-        print("Screenshot 3: GitHub page (base)")
+        page.screenshot(path=os.path.join(SCREENSHOTS_DIR, '03-soundcloud-page.png'))
+        print("Screenshot 3: SoundCloud page (base)")
 
         # Screenshot 4: Google
         page.goto('https://www.google.com')

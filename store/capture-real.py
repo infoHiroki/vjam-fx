@@ -179,12 +179,12 @@ with sync_playwright() as pw:
     page.screenshot(path=os.path.join(OUT, '03-youtube-fx.png'))
     print('OK: 03-youtube-fx.png')
 
-    # 4. GitHub with wormhole + difference
-    page.goto('https://github.com/explore')
+    # 5. SoundCloud with wormhole + constellation
+    page.goto('https://soundcloud.com/discover')
     time.sleep(3)
     inject_and_start(page, ['wormhole', 'constellation'], 'difference')
-    page.screenshot(path=os.path.join(OUT, '04-github-fx.png'))
-    print('OK: 04-github-fx.png')
+    page.screenshot(path=os.path.join(OUT, '05-soundcloud-fx.png'))
+    print('OK: 05-soundcloud-fx.png')
 
     ctx.close()
 
