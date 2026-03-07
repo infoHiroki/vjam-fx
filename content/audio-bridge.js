@@ -29,5 +29,11 @@
     if (event.data && event.data.source === 'vjam-fx-engine' && event.data.type === 'stopTabCapture') {
       chrome.runtime.sendMessage({ type: 'stopTabAudio' }).catch(function() {});
     }
+    if (event.data && event.data.source === 'vjam-fx-engine' && event.data.type === 'pauseTabCapture') {
+      chrome.runtime.sendMessage({ type: 'pauseTabAudio' }).catch(function() {});
+    }
+    if (event.data && event.data.source === 'vjam-fx-engine' && event.data.type === 'resumeTabCapture') {
+      chrome.runtime.sendMessage({ type: 'resumeTabAudio' }).catch(function() {});
+    }
   });
 })();

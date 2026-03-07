@@ -106,6 +106,13 @@
           if (!this.overlay.parentNode || this.overlay.parentNode !== targetParent) {
             targetParent.appendChild(this.overlay);
           }
+          // Pause/resume tabCapture during fullscreen (recording indicator blocks fullscreen)
+          var origin = window.location.origin || '*';
+          if (fsEl) {
+            window.postMessage({ source: 'vjam-fx-engine', type: 'pauseTabCapture' }, origin);
+          } else {
+            window.postMessage({ source: 'vjam-fx-engine', type: 'resumeTabCapture' }, origin);
+          }
         };
         document.addEventListener('fullscreenchange', this._onFullscreenChange);
       }
