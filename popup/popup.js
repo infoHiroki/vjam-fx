@@ -1210,7 +1210,7 @@ class PopupController {
 
   async _startAll() {
     if (!this._tabId) return;
-    if (this._busy) { this._pendingStart = true; return; }
+    if (this._busy) { this._pendingStart = true; this._pendingStop = false; return; }
     this._busy = true;
 
     if (this.activeLayers.size === 0) {
@@ -1282,7 +1282,7 @@ class PopupController {
   }
 
   async _stopAll() {
-    if (this._busy) { this._pendingStop = true; return; }
+    if (this._busy) { this._pendingStop = true; this._pendingStart = false; return; }
     this._busy = true;
     try {
       await this._sendCommand({ action: 'stopVideoAudio' });
