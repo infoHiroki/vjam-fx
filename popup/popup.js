@@ -567,7 +567,7 @@ class PopupController {
       // Start audio if enabled
       if (this.audioEnabled) {
         await this._sendCommand({ action: 'startVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+        await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => console.debug('VJam FX: startTabAudio', e));
       }
 
       this._updateUI();
@@ -673,14 +673,14 @@ class PopupController {
     // Settings: Cycle bars
     const cycleEl = document.getElementById('setting-cycle');
     if (cycleEl) {
-      cycleEl.addEventListener('change', () => {
+      cycleEl.addEventListener('change', async () => {
         const val = parseInt(cycleEl.value, 10);
         this.settings.barsPerCycle = isNaN(val) || val < 1 ? 8 : val;
         this._saveSettings();
         // Re-send auto-cycle with updated bars if active
         if (this.autoCycleActive) {
           const allIds = this.presets.map(p => p.id);
-          this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+          await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
         }
       });
     }
@@ -899,15 +899,15 @@ class PopupController {
 
         if (this.audioEnabled) {
           await this._sendCommand({ action: 'startVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+          await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => console.debug('VJam FX: startTabAudio', e));
           if (this.isActive) {
-            this._sendCommand({ action: 'setAudioEnabled', enabled: true });
+            await this._sendCommand({ action: 'setAudioEnabled', enabled: true });
           }
         } else {
           await this._sendCommand({ action: 'stopVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
+          chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => console.debug('VJam FX: stopTabAudio', e));
           if (this.isActive) {
-            this._sendCommand({ action: 'setAudioEnabled', enabled: false });
+            await this._sendCommand({ action: 'setAudioEnabled', enabled: false });
           }
         }
         this._saveState();
@@ -920,7 +920,7 @@ class PopupController {
       btnReset.addEventListener('click', async () => {
         if (this._busy) return;
         await this._sendCommand({ action: 'stopVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => console.debug('VJam FX: stopTabAudio', e));
         // Full reset (no lock respect — reset everything except scenes)
         await this._sendCommand({ action: 'kill' });
 
@@ -1000,7 +1000,8 @@ class PopupController {
         await this._sendCommand({ action: 'kill', locks: this.locks });
         if (!this.locks.effect) {
           const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
-          const shuffled = this.presets.slice().sort(() => Math.random() - 0.5);
+          const shuffled = this.presets.slice();
+          for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
           const chosen = shuffled.slice(0, count);
           // Only inject chosen presets (not all 204)
           for (const p of chosen) {
@@ -1035,7 +1036,7 @@ class PopupController {
         // Start video audio if needed
         if (this.audioEnabled) {
           await this._sendCommand({ action: 'startVideoAudio' });
-          chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+          await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => console.debug('VJam FX: startTabAudio', e));
         }
         this._saveState();
 
@@ -1208,7 +1209,8 @@ class PopupController {
   }
 
   async _startAll() {
-    if (!this._tabId || this._busy) return;
+    if (!this._tabId) return;
+    if (this._busy) { this._pendingStart = true; return; }
     this._busy = true;
 
     if (this.activeLayers.size === 0) {
@@ -1245,7 +1247,7 @@ class PopupController {
       // Start video audio capture + tabCapture fallback
       if (this.audioEnabled) {
         await this._sendCommand({ action: 'startVideoAudio' });
-        chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(() => {});
+        await chrome.runtime.sendMessage({ type: 'startTabAudio', tabId: this._tabId }).catch(e => console.debug('VJam FX: startTabAudio', e));
       }
 
       // Apply settings to engine
@@ -1273,6 +1275,7 @@ class PopupController {
       this._busy = false;
       if (this._pendingStop) {
         this._pendingStop = false;
+        this._pendingStart = false;
         this._stopAll();
       }
     }
@@ -1283,7 +1286,7 @@ class PopupController {
     this._busy = true;
     try {
       await this._sendCommand({ action: 'stopVideoAudio' });
-      chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(() => {});
+      chrome.runtime.sendMessage({ type: 'stopTabAudio', tabId: this._tabId }).catch(e => console.debug('VJam FX: stopTabAudio', e));
       await this._sendCommand({ action: 'stop' });
       this.isActive = false;
       this._coreInjected = false;
@@ -1291,6 +1294,11 @@ class PopupController {
       await this._saveState();
     } finally {
       this._busy = false;
+      if (this._pendingStart) {
+        this._pendingStart = false;
+        this._pendingStop = false;
+        this._startAll();
+      }
     }
   }
 

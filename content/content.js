@@ -159,10 +159,6 @@
       this._videoAudioMedia = media;
       try {
         var ctx = new AudioContext();
-        // AudioContext may be suspended due to autoplay policy
-        if (ctx.state === 'suspended') {
-          ctx.resume().catch(function() {});
-        }
         var src = ctx.createMediaElementSource(media);
         var newAnalyser = ctx.createAnalyser();
         newAnalyser.fftSize = 2048;
@@ -191,30 +187,38 @@
         // Delay stopTabCapture — verify analyser produces non-silent data first
         // (createMediaElementSource can "succeed" but return silence due to CORS/MSE)
         var self = this;
-        var checkCount = 0;
         if (self._silenceCheckTimer) clearInterval(self._silenceCheckTimer);
-        var checkTimer = self._silenceCheckTimer = setInterval(function() {
-          checkCount++;
-          if (!self._videoAudioAnalyser) { clearInterval(checkTimer); return; }
-          var testData = new Float32Array(self._videoAudioAnalyser.fftSize);
-          self._videoAudioAnalyser.getFloatTimeDomainData(testData);
-          var hasSignal = false;
-          for (var i = 0; i < testData.length; i++) {
-            if (testData[i] !== 0) { hasSignal = true; break; }
-          }
-          if (hasSignal) {
-            // Real audio confirmed — stop tabCapture fallback
-            window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, '*');
-            clearInterval(checkTimer);
-          } else if (checkCount >= 10) {
-            // 2 seconds of silence — CORS/MSE restriction likely, keep tabCapture
-            // Disconnect our silent analyser so engine falls through to _externalAudioData
-            if (self._videoAudioAnalyser) { self._videoAudioAnalyser.disconnect(); self._videoAudioAnalyser = null; }
-            self._videoAudioFreqData = null;
-            self._videoAudioTimeData = null;
-            clearInterval(checkTimer);
-          }
-        }, 200);
+        var startSilenceCheck = function() {
+          var checkCount = 0;
+          var checkTimer = self._silenceCheckTimer = setInterval(function() {
+            checkCount++;
+            if (!self._videoAudioAnalyser) { clearInterval(checkTimer); return; }
+            var testData = new Float32Array(self._videoAudioAnalyser.fftSize);
+            self._videoAudioAnalyser.getFloatTimeDomainData(testData);
+            var hasSignal = false;
+            for (var i = 0; i < testData.length; i++) {
+              if (testData[i] !== 0) { hasSignal = true; break; }
+            }
+            if (hasSignal) {
+              // Real audio confirmed — stop tabCapture fallback
+              window.postMessage({ source: 'vjam-fx-engine', type: 'stopTabCapture' }, window.location.origin || '*');
+              clearInterval(checkTimer);
+            } else if (checkCount >= 10) {
+              // 2 seconds of silence — CORS/MSE restriction likely, keep tabCapture
+              // Disconnect our silent analyser so engine falls through to _externalAudioData
+              if (self._videoAudioAnalyser) { self._videoAudioAnalyser.disconnect(); self._videoAudioAnalyser = null; }
+              self._videoAudioFreqData = null;
+              self._videoAudioTimeData = null;
+              clearInterval(checkTimer);
+            }
+          }, 200);
+        };
+        // Wait for AudioContext to resume before starting silence check
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(startSilenceCheck).catch(startSilenceCheck);
+        } else {
+          startSilenceCheck();
+        }
       } catch (e) {
         // createMediaElementSource failed (e.g. already called on this element)
         // Do NOT stop tabCapture — let it continue as fallback audio source
@@ -769,7 +773,8 @@
         }
       } else {
         const count = 1 + Math.floor(Math.random() * Math.min(3, presets.length));
-        const shuffled = presets.slice().sort(() => Math.random() - 0.5);
+        const shuffled = presets.slice();
+        for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
         chosen = shuffled.slice(0, count);
 
         // Remove layers not in chosen set
@@ -805,8 +810,6 @@
         this._applyFilters();
       }
 
-      // OSD shows active layers
-      const names = chosen.join(' + ');
     }
 
     _stopAutoCycle() {
