@@ -3,8 +3,3 @@ node_modules/
 *.log
 *.zip
 store/videos/
-
-# iOS
-ios/VJamFX/VJamFX/Resources/vjam-fx-bundle.js
-ios/build/
-*.xcuserdata
