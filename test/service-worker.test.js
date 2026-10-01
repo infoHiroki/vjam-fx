@@ -187,6 +187,72 @@ describe('Service Worker', () => {
       expect(calls[1][0].func).toBeDefined();
     });
 
+    // 遷移後に Auto / Rnd を再開するとき、popup が保存したデフォルトプールをエンジンに渡す
+    describe('default pool on re-inject', () => {
+      const POOL = {
+        filters: ['saturate(2)', 'hue-rotate(90deg) saturate(2)'],
+        blends: ['screen', 'difference'],
+      };
+
+      // 遷移後の再注入で、最後に送る起動 func をフェイクのエンジンで実行し、エンジンに届いたメッセージを返す
+      async function messagesAfterNavigation(state) {
+        messageListeners[0]({ type: 'setState', tabId: 1, state }, {}, vi.fn());
+        await navigationListeners[0]({ tabId: 1, frameId: 0 });
+        await new Promise(r => setTimeout(r, 400));
+
+        const startCall = chrome.scripting.executeScript.mock.calls
+          .map(c => c[0])
+          .find(c => c.func && c.args && c.args.length > 0);
+        const messages = [];
+        window._vjamFxEngine = { handleMessage: (msg) => messages.push(msg) };
+        try {
+          startCall.func(...startCall.args);
+        } finally {
+          delete window._vjamFxEngine;
+        }
+        return messages;
+      }
+
+      it('passes the saved pool to startAutoCycle', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: ['rain', 'neon-tunnel'], autoBlend: true, autoFilters: true, pool: POOL,
+        });
+        const cmd = messages.find(m => m.action === 'startAutoCycle');
+        expect(cmd.presets).toEqual(['rain', 'neon-tunnel']);
+        expect(cmd.pool).toEqual(POOL);
+        expect(cmd.autoBlend).toBe(true);
+        expect(cmd.autoFilters).toBe(true);
+      });
+
+      it('re-injects the pool presets', async () => {
+        await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: ['rain', 'neon-tunnel'], autoBlend: true, autoFilters: true, pool: POOL,
+        });
+        const files = chrome.scripting.executeScript.mock.calls.flatMap(c => c[0].files || []);
+        expect(files).toContain('content/presets/rain.js');
+        expect(files).toContain('content/presets/neon-tunnel.js');
+      });
+
+      it('passes null when no pool was saved (engine falls back)', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true,
+        });
+        const cmd = messages.find(m => m.action === 'startAutoCycle');
+        expect(cmd.pool).toBeNull();
+      });
+
+      it('does not start auto-cycle when Auto was off', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: null, pool: POOL,
+        });
+        expect(messages.some(m => m.action === 'startAutoCycle')).toBe(false);
+      });
+    });
+
     it('should not re-inject for iframe navigations (frameId !== 0)', async () => {
       const sendResponse = vi.fn();
       messageListeners[0](

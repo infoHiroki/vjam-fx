@@ -631,6 +631,7 @@ class PopupController {
           autoCyclePresets: this.autoCycleActive ? this.poolPresets.map(p => p.id) : null,
           autoBlend: this.autoBlend,
           autoFilters: this.autoFilters,
+          pool: this.pool, // SW がページ遷移後に Auto / Rnd を再開するときにエンジンへ渡す
           locks: this.locks,
           textState: this.textState,
         },

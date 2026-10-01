@@ -640,6 +640,25 @@ describe('PopupController', () => {
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.autoCyclePresets).toEqual(['rain']);
     });
+
+    it('saves the pool filters / blends (SW passes them to the engine after navigation)', async () => {
+      controller.isActive = true;
+      controller.autoCycleActive = true;
+      controller.pool = { filters: POOL.filters, blends: POOL.blends };
+      await controller._saveState();
+      const call = chrome.runtime.sendMessage.mock.calls[0];
+      expect(call[0].state.pool).toEqual({ filters: POOL.filters, blends: POOL.blends });
+    });
+
+    it('saves a null pool when the pool could not be loaded (engine falls back)', async () => {
+      controller.isActive = true;
+      controller.autoCycleActive = true;
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no file')));
+      await controller._loadPool();
+      await controller._saveState();
+      const call = chrome.runtime.sendMessage.mock.calls[0];
+      expect(call[0].state.pool).toBeNull();
+    });
   });
 
   // エンジンのレイヤー上限(iPad / iPhone は 3、それ以外は 5)で外れたレイヤーは、popup のチェックも外す
