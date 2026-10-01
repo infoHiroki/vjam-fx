@@ -908,10 +908,33 @@ describe('mse-tap', () => {
       expect(media()).toBeNull();
     });
 
-    it('does not fall back to zero-size media in the DOM', () => {
+    it('does not fall back to a zero-size <video> in the DOM', () => {
       const dummy = fakeMedia({ w: 0, h: 0 });
       dummy.play();
       expect(media()).toBeNull();
+    });
+
+    it('falls back to a playing <audio> in the DOM even at zero size (no controls)', () => {
+      fakeMedia({ tag: 'audio', w: 0, h: 0, paused: true });
+      expect(media()).toBeNull();
+      const hidden = fakeMedia({ tag: 'audio', w: 0, h: 0 });
+      fakeMedia({ tag: 'audio', w: 0, h: 0 });
+      fakeMedia({ w: 0, h: 360 }); // ダミーの <video> は 0 サイズのまま除く
+      expect(media()).toBe(hidden);
+    });
+
+    it('orders: largest playing media → playing <audio> in the DOM → played media outside the DOM', () => {
+      const outside = fakeMedia({ tag: 'audio', inDom: false });
+      outside.play();
+      expect(media()).toBe(outside);
+      const hidden = fakeMedia({ tag: 'audio', w: 0, h: 0 });
+      expect(media()).toBe(hidden);
+      const v = fakeMedia({ w: 320, h: 180 });
+      expect(media()).toBe(v);
+      v.st.paused = true;
+      expect(media()).toBe(hidden);
+      hidden.st.paused = true;
+      expect(media()).toBe(outside);
     });
 
     it('passes play() through to the original', () => {

@@ -827,17 +827,21 @@
     };
   }
 
-  // 再生中で表示面積が一番大きいメディア。幅か高さが 0 のもの(ダミーの <video> など)は除く。
-  // DOM に無いものは面積が測れないので、DOM に再生中のものが無いときの次点(最後に play() したもの)。無ければ null
+  // 本編のメディア。無ければ null
+  // 1) 再生中で表示面積が一番大きい video / audio(幅か高さが 0 のもの = ダミーの <video> などは除く)
+  // 2) 再生中の DOM の <audio>(controls なしは 0×0 なので大きさは見ない)
+  // 3) play() で覚えた DOM に無い要素(面積が測れない。最後に play() したもの)
   function pickMedia() {
-    var list = document.querySelectorAll('video, audio'), best = null, bestArea = 0;
+    var list = document.querySelectorAll('video, audio'), best = null, bestArea = 0, audio = null;
     for (var i = 0; i < list.length; i++) {
       var m = list[i];
       if (m.paused) continue;
       var r = m.getBoundingClientRect(), area = r.width * r.height;
       if (area > bestArea) { bestArea = area; best = m; }
+      if (!audio && m.tagName === 'AUDIO') audio = m;
     }
     if (best) return best;
+    if (audio) return audio;
     for (var k = played.length - 1; k >= 0; k--) {
       var p = played[k];
       if (p.paused) { forgetPlayed.call(p); continue; }
