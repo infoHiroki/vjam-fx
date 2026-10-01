@@ -128,6 +128,9 @@
     // --- Media Audio Capture (createMediaElementSource) ---
 
     _startVideoAudio() {
+      // Safari(mse-tap あり): 音は MSE タップから取る。<video> は Web Audio に通さない
+      // (iPad Safari では MSE / 標準 HLS とも無音しか返らず、動画の音がグラフに吸い込まれて消音になるリスクだけ残る)
+      if (window.__vjamMse) return;
       // Already connected — just reconnect analyser
       if (this._videoAudioCtx && this._videoAudioSource) {
         if (this._videoAudioCtx.state === 'suspended') {
@@ -161,6 +164,7 @@
 
     _connectMediaElement(media) {
       this._stopMediaObserver();
+      if (window.__vjamMse) return; // Safari: createMediaElementSource は張らない(_startVideoAudio 参照)
       // Skip if already connected to this element
       if (this._videoAudioMedia === media && this._videoAudioCtx) return;
       // Close old AudioContext if switching to a different element
@@ -391,6 +395,29 @@
       return { beat: beat, bpm: this._videoAudioTempo, strength: Math.min(1, strength * sens), rms: rms * sens, bass: Math.min(1, bass * sens), mid: Math.min(1, mid * sens), treble: Math.min(1, treble * sens) };
     }
 
+    // --- MSE tap (Safari: content/mse-tap.js が document_start で window.__vjamMse を入れる) ---
+
+    // 再生時刻を読む要素。再生中のものを優先
+    _mseMedia() {
+      var list = document.querySelectorAll('video, audio');
+      for (var i = 0; i < list.length; i++) {
+        if (!list[i].paused) return list[i];
+      }
+      return list[0] || null;
+    }
+
+    // 今の再生位置の MSE 解析。__vjamMse が無い(Chrome)・データが無い・一時停止中は null
+    _readMseAudioData() {
+      var mse = window.__vjamMse;
+      if (!mse || typeof mse.frameAt !== 'function') return null;
+      var media = this._mseMedia();
+      if (!media || media.paused) return null;
+      var f = mse.frameAt(media.currentTime);
+      if (!f) return null;
+      var sens = this._audioSensitivity;
+      return { beat: !!f.beat, bpm: f.bpm, strength: Math.min(1, f.strength * sens), rms: f.rms * sens, bass: Math.min(1, f.bass * sens), mid: Math.min(1, f.mid * sens), treble: Math.min(1, f.treble * sens) };
+    }
+
     createOverlay() {
       if (this.overlay) return this.overlay;
 
@@ -567,10 +594,15 @@
         }
 
         // Feed audio to ALL active layers (throttled to 15Hz)
-        // Priority: video audio (createMediaElementSource) → external bridge (offscreen)
+        // Priority: MSE tap (Safari) → video audio (createMediaElementSource) → external bridge (offscreen)
         var audioData = null;
         if (self.audioEnabled && timestamp - lastAudioTime >= AUDIO_INTERVAL) {
-          if (self._videoAudioAnalyser) {
+          var mseData = self._readMseAudioData();
+          if (mseData) {
+            audioData = mseData;
+            // MSE が取れている間は analyser を外す(source→destination は維持)
+            if (self._videoAudioAnalyser) self._stopVideoAudio();
+          } else if (self._videoAudioAnalyser) {
             audioData = self._readVideoAudioData();
           } else if (self._externalAudioData) {
             audioData = self._externalAudioData;
