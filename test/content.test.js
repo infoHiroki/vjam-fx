@@ -94,6 +94,84 @@ describe('VJamFXEngine', () => {
     });
   });
 
+  // 背景未指定のページは mix-blend-mode の相手が無いので、html に Canvas を入れる(#13)
+  describe('backdrop for transparent page', () => {
+    const root = () => document.documentElement;
+
+    beforeEach(() => {
+      document.body.style.backgroundColor = '';
+    });
+
+    afterEach(() => {
+      document.body.style.backgroundImage = '';
+    });
+
+    it('should set html background to Canvas when html and body are transparent', () => {
+      engine.createOverlay();
+      expect(root().style.backgroundColor).toBe('canvas');
+    });
+
+    it('should judge light page by the actual Canvas color', () => {
+      engine.createOverlay();
+      expect(getComputedStyle(root()).backgroundColor).toBe('rgb(255, 255, 255)');
+      expect(engine.isLightPage).toBe(true);
+      expect(engine.overlay.style.mixBlendMode).toBe('difference');
+    });
+
+    it('should restore the original inline value on destroy', () => {
+      engine.createOverlay();
+      engine.destroy();
+      expect(root().style.backgroundColor).toBe('');
+    });
+
+    it('should restore a transparent inline value on destroy', () => {
+      root().style.backgroundColor = 'transparent';
+      engine.createOverlay();
+      expect(root().style.backgroundColor).toBe('canvas');
+      engine.destroy();
+      expect(root().style.backgroundColor).toBe('transparent');
+    });
+
+    it('should restore on stop (overlay removed) and set again on next start', () => {
+      engine.handleMessage({ action: 'start', preset: 'neon-tunnel' });
+      expect(root().style.backgroundColor).toBe('canvas');
+      engine.handleMessage({ action: 'stop' });
+      expect(root().style.backgroundColor).toBe('');
+      engine.handleMessage({ action: 'start', preset: 'neon-tunnel' });
+      expect(root().style.backgroundColor).toBe('canvas');
+    });
+
+    it('should not touch html when body has a background color', () => {
+      document.body.style.backgroundColor = 'rgb(255, 255, 255)';
+      engine.createOverlay();
+      expect(root().style.backgroundColor).toBe('');
+      engine.destroy();
+      expect(root().style.backgroundColor).toBe('');
+    });
+
+    it('should not touch html when html has a background color', () => {
+      root().style.backgroundColor = 'rgb(15, 15, 15)';
+      engine.createOverlay();
+      expect(root().style.backgroundColor).toBe('rgb(15, 15, 15)');
+      engine.destroy();
+      expect(root().style.backgroundColor).toBe('rgb(15, 15, 15)');
+    });
+
+    it('should not touch html when body has a background image', () => {
+      // html に色を入れると body の背景画像がビューポート全体に広がらなくなる
+      document.body.style.backgroundImage = 'linear-gradient(red, blue)';
+      engine.createOverlay();
+      expect(root().style.backgroundColor).toBe('');
+    });
+
+    it('should not overwrite a value the page set while overlay was on', () => {
+      engine.createOverlay();
+      root().style.backgroundColor = 'rgb(0, 0, 0)';
+      engine.destroy();
+      expect(root().style.backgroundColor).toBe('rgb(0, 0, 0)');
+    });
+  });
+
   describe('constructor', () => {
     it('should initialize as inactive', () => {
       expect(engine.active).toBe(false);

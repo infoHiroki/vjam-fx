@@ -30,15 +30,27 @@
     'blur':       'blur(3px)',
   };
 
+  // 背景色の rgb(数値の配列)。透明(alpha 0)なら null
+  function backgroundRgb(el) {
+    const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+    return (!m || (m.length === 4 && Number(m[3]) === 0)) ? null : m;
+  }
+
+  // 背景に何も塗られていない(色が透明で画像も無い)
+  function hasNoBackground(el) {
+    const img = getComputedStyle(el).backgroundImage;
+    return !backgroundRgb(el) && (!img || img === 'none');
+  }
+
   function isLightPage() {
-    // body が透明なら html を見る。両方透明ならブラウザ既定の白
+    // body が透明なら html を見る。背景未指定のページは createOverlay が html に Canvas を入れるので、その実際の色で決まる
     const els = [document.body, document.documentElement];
     for (let i = 0; i < els.length; i++) {
       if (!els[i]) continue;
-      const m = getComputedStyle(els[i]).backgroundColor.match(/[\d.]+/g);
-      if (!m || (m.length === 4 && Number(m[3]) === 0)) continue;
-      return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 > 0.5;
+      const m = backgroundRgb(els[i]);
+      if (m) return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 > 0.5;
     }
+    // 背景画像だけのページなど、色が取れないときは明るい扱い
     return true;
   }
 
@@ -51,6 +63,7 @@
       this.currentPreset = null;
       this.currentPresetName = null;
       this.overlay = null;
+      this._savedRootBg = null; // createOverlay で html に Canvas を入れる前のインラインの値(入れていなければ null)
       this.audioEnabled = true;
       this._externalAudioData = null;
       this._rafId = null;
@@ -421,6 +434,14 @@
     createOverlay() {
       if (this.overlay) return this.overlay;
 
+      // 背景が透明なページでは、ブラウザが既定で塗る白は mix-blend-mode の相手にならず、黒いキャンバスがそのまま覆う。
+      // html に Canvas(ブラウザ既定の背景と同じ色。ダークモードにも追従)を入れて、合成の相手を作る。見た目は変わらない
+      const root = document.documentElement;
+      if (hasNoBackground(document.body) && hasNoBackground(root)) {
+        this._savedRootBg = root.style.backgroundColor;
+        root.style.backgroundColor = 'Canvas';
+      }
+
       // Auto-detect page brightness (default screen → difference on light pages)
       this.isLightPage = isLightPage();
 
@@ -441,6 +462,14 @@
       this.overlay = overlay;
 
       return overlay;
+    }
+
+    // createOverlay で html に入れた Canvas を、元のインラインの値に戻す(その後ページが書き換えていたら触らない)
+    _restoreRootBackground() {
+      if (this._savedRootBg === null) return;
+      const root = document.documentElement;
+      if (root.style.backgroundColor.toLowerCase() === 'canvas') root.style.backgroundColor = this._savedRootBg;
+      this._savedRootBg = null;
     }
 
     setBlendMode(mode) {
@@ -661,6 +690,7 @@
         this.overlay.remove();
         this.overlay = null;
       }
+      this._restoreRootBackground();
 
       if (this._onBridgeMessage) {
         window.removeEventListener('message', this._onBridgeMessage);
@@ -945,6 +975,7 @@
             this.overlay.remove();
             this.overlay = null;
           }
+          this._restoreRootBackground();
           this.activeFilters.clear();
           break;
         case 'switchPreset':
