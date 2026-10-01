@@ -6,6 +6,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 ## Development Rules
 - **MVP / KISS / YAGNI**
 - **Commit**: 日本語、絵文字+簡潔1行、Co-Authored-By: Claude
+- **PR マージ**: lead の Claude が見て問題なければ、「おけ」を待たずにマージしてよい(2026-10-01〜)
 
 ## Tech Stack
 - Vanilla JavaScript (IIFE pattern, no bundler)
