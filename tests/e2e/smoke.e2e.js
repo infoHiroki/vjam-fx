@@ -12,6 +12,19 @@ import {
 const VISIBLE_DIFF = 0.1;  // ベースラインとの差がこれを超えたら「見えている」
 const MOVING_DIFF = 0.05;  // 1 秒あけた 2 枚の差がこれを超えたら「動いている」
 
+// スクショの平均の明るさ(輝度 0〜255)。PNG のデコードはページの中で行う
+function meanLuma(page, png) {
+  return page.evaluate(async (b64) => {
+    const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+    const ctx = new OffscreenCanvas(bmp.width, bmp.height).getContext('2d');
+    ctx.drawImage(bmp, 0, 0);
+    const d = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    return sum / (d.length / 4);
+  }, png.toString('base64'));
+}
+
 function collectLogs(page, tag, logs) {
   page.on('console', (m) => logs.push(`[${tag}:${m.type()}] ${m.text()}`));
   page.on('pageerror', (e) => logs.push(`[${tag}:pageerror] ${e}`));
@@ -184,7 +197,7 @@ test.describe.serial('ダークページ → ライトページ遷移', () => {
 });
 
 test.describe.serial('背景未指定のライトページ', () => {
-  let site, ext;
+  let site, ext, page, popup, baseline;
 
   test.beforeAll(async ({ headless }) => {
     site = await startSite();
@@ -197,12 +210,12 @@ test.describe.serial('背景未指定のライトページ', () => {
   });
 
   test('Next でエフェクトが見える(ベースラインとの差)', async () => {
-    const page = ext.context.pages()[0] ?? await ext.context.newPage();
+    page = ext.context.pages()[0] ?? await ext.context.newPage();
     await page.goto(`${site.base}/page3.html`);
     await expect.poll(() => isAudioPlaying(page)).toBe(true);
-    const baseline = await page.screenshot();
+    baseline = await page.screenshot();
 
-    const popup = await openPopup(ext, site.base);
+    popup = await openPopup(ext, site.base);
     await popup.click('#btn-next');
     await expect.poll(async () => {
       const s = await readState(page);
@@ -212,5 +225,22 @@ test.describe.serial('背景未指定のライトページ', () => {
 
     await expect.poll(async () => diffScore(baseline, await page.screenshot()), { timeout: 10_000 })
       .toBeGreaterThan(VISIBLE_DIFF);
+  });
+
+  // 背景が透明だと mix-blend-mode の相手が無く、黒いキャンバスがそのまま覆う(#13)。
+  // Next はランダムで透けるプリセットだと見逃すので、背景を黒で塗りつぶす radar で確かめる
+  test('黒に潰れない(本文が読める明るさが残る)', async () => {
+    await popup.click('#btn-reset');
+    await expect.poll(async () => (await readState(page)).layers.length).toBe(0);
+    await popup.locator('#preset-list input[value="radar"]').check();
+    await expect.poll(async () => (await readState(page)).layers, { timeout: 15_000 }).toEqual(['radar']);
+    // フェードイン(1.5 秒)が終わってから測る
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[data-vjam-layer="radar"]');
+      return el && getComputedStyle(el).opacity === '1';
+    });
+    expect((await readState(page)).isLight).toBe(true);
+    // 覆われると 0.2 倍前後まで落ちる。合成できていればほぼベースラインのまま
+    expect(await meanLuma(page, await page.screenshot())).toBeGreaterThan(await meanLuma(page, baseline) * 0.5);
   });
 });
