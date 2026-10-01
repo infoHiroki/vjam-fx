@@ -39,6 +39,32 @@ describe('VJamFXEngine', () => {
     document.documentElement.style.backgroundColor = '';
   });
 
+  describe('overlay stacking', () => {
+    it('pins z-index / position with !important so site CSS cannot push it under a player', () => {
+      // jsdom は z-index / position の priority を保持しないので、important 付きで指定していることを確かめる
+      // (実ブラウザでの効き目は Chromium / iPad Safari で確認済み)
+      const spy = vi.spyOn(CSSStyleDeclaration.prototype, 'setProperty');
+      try {
+        engine.createOverlay();
+        const calls = spy.mock.calls.map(c => c.join('|'));
+        for (const c of ['position|fixed|important', 'top|0|important', 'left|0|important', 'width|100vw|important',
+          'height|100vh|important', 'z-index|2147483647|important', 'pointer-events|none|important']) {
+          expect(calls).toContain(c);
+        }
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('still lets blend mode and opacity change at runtime', () => {
+      engine.createOverlay();
+      engine.setBlendMode('difference');
+      engine.setOpacity(0.5);
+      expect(engine.overlay.style.mixBlendMode).toBe('difference');
+      expect(engine.overlay.style.opacity).toBe('0.5');
+    });
+  });
+
   describe('light page', () => {
     it('should treat transparent body + transparent html as light', () => {
       document.body.style.backgroundColor = '';

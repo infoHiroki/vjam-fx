@@ -498,16 +498,14 @@
 
       const overlay = document.createElement('div');
       overlay.setAttribute('data-vjam-fx', 'overlay');
-      overlay.style.cssText = [
-        'position: fixed',
-        'top: 0',
-        'left: 0',
-        'width: 100vw',
-        'height: 100vh',
-        'z-index: 2147483647',
-        'pointer-events: none',
-        `mix-blend-mode: ${this._effectiveBlendMode()}`,
-      ].join('; ');
+      // 位置と重なり順は !important で固定する。サイトの CSS に潰されないように
+      // (動画サイトの「フルサイズ」表示で、プレイヤー以外の z-index を 0 !important にするものがある)
+      const pinned = [
+        ['position', 'fixed'], ['top', '0'], ['left', '0'], ['width', '100vw'], ['height', '100vh'],
+        ['z-index', '2147483647'], ['pointer-events', 'none'],
+      ];
+      for (let i = 0; i < pinned.length; i++) overlay.style.setProperty(pinned[i][0], pinned[i][1], 'important');
+      overlay.style.mixBlendMode = this._effectiveBlendMode();
 
       document.body.appendChild(overlay);
       this.overlay = overlay;
