@@ -140,9 +140,18 @@ async function injectAndStart(tabId, state) {
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      func: (layers, blendMode, filters, autoCyclePresets, opacity, autoBlend, autoFilters, locks, textState, pool, barsPerCycle) => {
+      func: (layers, blendMode, filters, autoCyclePresets, opacity, autoBlend, autoFilters, locks, textState, pool, barsPerCycle, fadeDuration, audioSensitivity) => {
         if (!window._vjamFxEngine) return;
         const engine = window._vjamFxEngine;
+
+        // popup の設定(フェード時間・音の感度)を戻す。最初のレイヤーのフェードインから効かせるため start より前に送る
+        // 保存が無いとき(古い状態)は送らない = エンジン既定
+        if (fadeDuration != null) {
+          engine.handleMessage({ action: 'setFadeDuration', duration: fadeDuration });
+        }
+        if (audioSensitivity != null) {
+          engine.handleMessage({ action: 'setAudioSensitivity', sensitivity: audioSensitivity });
+        }
 
         // Start first layer
         engine.handleMessage({
@@ -185,7 +194,7 @@ async function injectAndStart(tabId, state) {
           }
         }
       },
-      args: [layers, state.blendMode || 'screen', state.filters || [], state.autoCyclePresets || null, state.opacity, !!state.autoBlend, !!state.autoFilters, state.locks || {}, state.textState || null, state.pool || null, state.barsPerCycle || null],
+      args: [layers, state.blendMode || 'screen', state.filters || [], state.autoCyclePresets || null, state.opacity, !!state.autoBlend, !!state.autoFilters, state.locks || {}, state.textState || null, state.pool || null, state.barsPerCycle || null, state.fadeDuration ?? null, state.audioSensitivity ?? null],
     });
 
     return true;

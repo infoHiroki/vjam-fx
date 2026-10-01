@@ -633,6 +633,8 @@ class PopupController {
           autoFilters: this.autoFilters,
           pool: this.pool, // SW がページ遷移後に Auto / Rnd を再開するときにエンジンへ渡す
           barsPerCycle: this.settings.barsPerCycle, // 同上(遷移後も設定した拍数で切り替える)
+          fadeDuration: this.settings.fadeDuration, // SW が遷移後にエンジンへ送る(フェード時間)
+          audioSensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0, // 同上(音の感度。エンジンに渡す倍率で)
           locks: this.locks,
           textState: this.textState,
         },
@@ -692,6 +694,7 @@ class PopupController {
         this._saveSettings();
         if (this.isActive) {
           this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+          this._saveState(); // SW の状態にも入れる(ページ遷移後もこのフェード時間で)
         }
       });
     }
@@ -720,6 +723,7 @@ class PopupController {
         this._saveSettings();
         if (this.isActive) {
           this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
+          this._saveState(); // SW の状態にも入れる(ページ遷移後もこの感度で)
         }
       });
     }

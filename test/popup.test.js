@@ -239,6 +239,49 @@ describe('PopupController', () => {
       await new Promise(r => setTimeout(r, 0));
       expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     });
+
+    // SW がページ遷移後にフェード時間・音の感度をエンジンへ戻す
+    it('should include fadeDuration and audioSensitivity (engine multiplier) in saved state', async () => {
+      controller.isActive = true;
+      controller.settings.fadeDuration = 3;
+      controller.settings.sensitivity = 'hi';
+      await controller._saveState();
+      const call = chrome.runtime.sendMessage.mock.calls[0];
+      expect(call[0].state.fadeDuration).toBe(3);
+      expect(call[0].state.audioSensitivity).toBe(2.0);
+    });
+
+    for (const [id, value, key, expected] of [
+      ['setting-fade', '0', 'fadeDuration', 0],
+      ['setting-sensitivity', 'lo', 'audioSensitivity', 0.5],
+    ]) {
+      it(`should save state when ${id} is changed while active`, async () => {
+        const el = document.createElement('input');
+        el.id = id;
+        container.querySelector('.popup').appendChild(el);
+        controller._bindEvents();
+        controller.isActive = true;
+
+        el.value = value;
+        el.dispatchEvent(new Event('change'));
+        await vi.waitFor(() => expect(chrome.runtime.sendMessage.mock.calls.some(c => c[0].type === 'setState')).toBe(true));
+        const call = chrome.runtime.sendMessage.mock.calls.find(c => c[0].type === 'setState');
+        expect(call[0].state[key]).toBe(expected);
+      });
+
+      it(`should not save state when ${id} is changed while inactive`, async () => {
+        const el = document.createElement('input');
+        el.id = id;
+        container.querySelector('.popup').appendChild(el);
+        controller._bindEvents();
+        controller.isActive = false;
+
+        el.value = value;
+        el.dispatchEvent(new Event('change'));
+        await new Promise(r => setTimeout(r, 0));
+        expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+      });
+    }
   });
 
   describe('audio', () => {

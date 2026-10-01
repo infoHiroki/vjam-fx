@@ -318,6 +318,40 @@ describe('Service Worker', () => {
       });
     });
 
+    // popup で変えたフェード時間・音の感度を、遷移後もエンジンに戻す
+    describe('fadeDuration / audioSensitivity on re-inject', () => {
+      it('sends the saved fadeDuration and audioSensitivity to the engine', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen', fadeDuration: 3, audioSensitivity: 2.0,
+        });
+        expect(messages.find(m => m.action === 'setFadeDuration').duration).toBe(3);
+        expect(messages.find(m => m.action === 'setAudioSensitivity').sensitivity).toBe(2.0);
+      });
+
+      it('sends them before start (the first fade-in uses the saved duration)', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen', fadeDuration: 3, audioSensitivity: 0.5,
+        });
+        const startIdx = messages.findIndex(m => m.action === 'start');
+        expect(messages.findIndex(m => m.action === 'setFadeDuration')).toBeLessThan(startIdx);
+        expect(messages.findIndex(m => m.action === 'setAudioSensitivity')).toBeLessThan(startIdx);
+      });
+
+      it('keeps fadeDuration 0 (no fade)', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen', fadeDuration: 0, audioSensitivity: 1.0,
+        });
+        expect(messages.find(m => m.action === 'setFadeDuration').duration).toBe(0);
+      });
+
+      it('sends neither when they were not saved (engine uses its defaults)', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+        });
+        expect(messages.some(m => m.action === 'setFadeDuration' || m.action === 'setAudioSensitivity')).toBe(false);
+      });
+    });
+
     it('should not re-inject for iframe navigations (frameId !== 0)', async () => {
       const sendResponse = vi.fn();
       messageListeners[0](
