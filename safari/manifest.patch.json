@@ -1,0 +1,11 @@
+{
+  "permissions_remove": ["tabCapture", "offscreen"],
+  "content_scripts_add": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/mse-tap.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ]
+}
