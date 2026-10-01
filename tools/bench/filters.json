@@ -1,0 +1,33 @@
+{
+  "note": "single = content/content.js の FILTER_VALUES / compound = VJam (~/Dev/vjam/src/main.js) の COMPOUND_FILTERS / blends = content/content.js の VALID_BLEND_MODES",
+  "single": {
+    "invert": "invert(1)",
+    "hue-rotate": "hue-rotate(180deg)",
+    "grayscale": "grayscale(1)",
+    "saturate": "saturate(2.5)",
+    "brightness": "brightness(1.4)",
+    "contrast": "contrast(1.5)",
+    "sepia": "sepia(1)",
+    "blur": "blur(3px)"
+  },
+  "compound": [
+    "saturate(2.5)",
+    "saturate(2)",
+    "saturate(3)",
+    "hue-rotate(180deg) saturate(2)",
+    "hue-rotate(120deg) saturate(2)",
+    "hue-rotate(90deg) saturate(2)",
+    "hue-rotate(60deg) saturate(2.5)",
+    "hue-rotate(30deg) saturate(2)",
+    "hue-rotate(240deg) saturate(2)",
+    "hue-rotate(270deg) saturate(2)",
+    "invert(1) saturate(2)",
+    "invert(1) hue-rotate(180deg)",
+    "saturate(2.5) contrast(1.3)",
+    "saturate(2) contrast(1.3)",
+    "saturate(3) contrast(1.5)",
+    "hue-rotate(180deg) contrast(1.5)"
+  ],
+  "blends": ["screen", "lighten", "difference", "exclusion", "color-dodge"],
+  "lightPageBlends": ["difference", "exclusion"]
+}
