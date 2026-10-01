@@ -203,6 +203,42 @@ describe('PopupController', () => {
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.audioEnabled).toBe(false);
     });
+
+    // SW がページ遷移後に Auto / Rnd を再開するとき、同じ拍数で回す
+    it('should include barsPerCycle in saved state', async () => {
+      controller.isActive = true;
+      controller.settings.barsPerCycle = 32;
+      await controller._saveState();
+      const call = chrome.runtime.sendMessage.mock.calls[0];
+      expect(call[0].state.barsPerCycle).toBe(32);
+    });
+
+    it('should save state when barsPerCycle is changed while active', async () => {
+      const cycleEl = document.createElement('input');
+      cycleEl.id = 'setting-cycle';
+      container.querySelector('.popup').appendChild(cycleEl);
+      controller._bindEvents();
+      controller.isActive = true;
+
+      cycleEl.value = '8';
+      cycleEl.dispatchEvent(new Event('change'));
+      await vi.waitFor(() => expect(chrome.runtime.sendMessage.mock.calls.some(c => c[0].type === 'setState')).toBe(true));
+      const call = chrome.runtime.sendMessage.mock.calls.find(c => c[0].type === 'setState');
+      expect(call[0].state.barsPerCycle).toBe(8);
+    });
+
+    it('should not save state when barsPerCycle is changed while inactive', async () => {
+      const cycleEl = document.createElement('input');
+      cycleEl.id = 'setting-cycle';
+      container.querySelector('.popup').appendChild(cycleEl);
+      controller._bindEvents();
+      controller.isActive = false;
+
+      cycleEl.value = '8';
+      cycleEl.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 0));
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
   });
 
   describe('audio', () => {

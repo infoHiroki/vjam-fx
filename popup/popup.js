@@ -632,6 +632,7 @@ class PopupController {
           autoBlend: this.autoBlend,
           autoFilters: this.autoFilters,
           pool: this.pool, // SW がページ遷移後に Auto / Rnd を再開するときにエンジンへ渡す
+          barsPerCycle: this.settings.barsPerCycle, // 同上(遷移後も設定した拍数で切り替える)
           locks: this.locks,
           textState: this.textState,
         },
@@ -706,6 +707,8 @@ class PopupController {
         if (this.autoCycleActive) {
           await this._sendCommand(this._autoCycleCommand());
         }
+        // SW の状態にも入れる(ページ遷移後もこの拍数で回す)
+        if (this.isActive) this._saveState();
       });
     }
 
