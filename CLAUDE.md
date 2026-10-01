@@ -13,7 +13,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - p5.js (2D graphics)
 - Chrome Extension Manifest V3
 - Service Worker (状態永続化)
-- Vitest + jsdom (testing, 1729 tests)
+- Vitest + jsdom (testing, 1810 tests)
 
 ## Architecture
 - **Popup**: `popup/` — UI controller, injects via `chrome.scripting.executeScript`
@@ -44,7 +44,8 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - p5.js injected first as classic script, then engine
 - ブレンド: 排他トグル3つ（Lighten/Diff/Exclusion）＋デフォルトscreen、Auto対応
 - フィルタ: 重ね掛けトグル8つ、Auto対応
-- ライトページ自動検出(body→html背景、透明なら白扱い) → 既定screenは描画だけdifferenceに置換（`blendMode`はscreenのまま＝popup/SWに漏らさない）、ランダムblendはdifference/exclusionのみ
+- 背景未指定（html・body とも透明で画像なし）のページは、overlay を作るとき html に `Canvas` を入れて合成の相手を作る（無いと黒キャンバスがページを覆う。外すとき元に戻す）
+- ライトページ自動検出(body→html背景) → 既定screenは描画だけdifferenceに置換（`blendMode`はscreenのまま＝popup/SWに漏らさない）、ランダムblendはdifference/exclusionのみ
 - Popup非同期操作: `_busy`フラグ + `_pendingStart`/`_pendingStop`で排他制御（last-action-wins）
 - createGraphicsプリセット: `windowResized`時に古いバッファを`.remove()`してからnew
 - audio-bridge: `event.source === window`でpostMessage origin検証
@@ -85,7 +86,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 
 ## Testing
 ```bash
-npm test          # vitest run (1729 tests)
+npm test          # vitest run (1810 tests)
 npm run test:watch
 ```
 
