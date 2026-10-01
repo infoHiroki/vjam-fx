@@ -1,0 +1,622 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		10173288306E44E9005B6A41 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10173287306E44E9005B6A41 /* AppDelegate.swift */; };
+		1017328C306E44E9005B6A41 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 1017328A306E44E9005B6A41 /* Main.html */; };
+		1017328E306E44E9005B6A41 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 1017328D306E44E9005B6A41 /* Icon.png */; };
+		10173290306E44E9005B6A41 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 1017328F306E44E9005B6A41 /* Style.css */; };
+		10173292306E44E9005B6A41 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10173291306E44E9005B6A41 /* SceneDelegate.swift */; };
+		10173294306E44E9005B6A41 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10173293306E44E9005B6A41 /* ViewController.swift */; };
+		10173297306E44E9005B6A41 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 10173295306E44E9005B6A41 /* LaunchScreen.storyboard */; };
+		1017329A306E44E9005B6A41 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 10173298306E44E9005B6A41 /* Main.storyboard */; };
+		101732A2306E44EA005B6A41 /* VJam FX Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 101732A1306E44EA005B6A41 /* VJam FX Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		101732A7306E44EA005B6A41 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101732A6306E44EA005B6A41 /* SafariWebExtensionHandler.swift */; };
+		101732A9306E44EA005B6A41 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1017329B306E44EA005B6A41 /* Assets.xcassets */; };
+		101732BA306E44EB005B6A41 /* background in Resources */ = {isa = PBXBuildFile; fileRef = 101732B4306E44EB005B6A41 /* background */; };
+		101732BB306E44EB005B6A41 /* popup in Resources */ = {isa = PBXBuildFile; fileRef = 101732B5306E44EB005B6A41 /* popup */; };
+		101732BC306E44EB005B6A41 /* content in Resources */ = {isa = PBXBuildFile; fileRef = 101732B6306E44EB005B6A41 /* content */; };
+		101732BD306E44EB005B6A41 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 101732B7306E44EB005B6A41 /* icons */; };
+		101732BE306E44EB005B6A41 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 101732B8306E44EB005B6A41 /* manifest.json */; };
+		101732BF306E44EB005B6A41 /* lib in Resources */ = {isa = PBXBuildFile; fileRef = 101732B9306E44EB005B6A41 /* lib */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		101732A3306E44EA005B6A41 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1017327C306E44E9005B6A41 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 101732A0306E44EA005B6A41;
+			remoteInfo = "VJam FX Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		101732AF306E44EA005B6A41 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				101732A2306E44EA005B6A41 /* VJam FX Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		10173284306E44E9005B6A41 /* VJam FX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VJam FX.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		10173287306E44E9005B6A41 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		1017328B306E44E9005B6A41 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		1017328D306E44E9005B6A41 /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		1017328F306E44E9005B6A41 /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		10173291306E44E9005B6A41 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		10173293306E44E9005B6A41 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		10173296306E44E9005B6A41 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		10173299306E44E9005B6A41 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		1017329B306E44EA005B6A41 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1017329C306E44EA005B6A41 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		101732A1306E44EA005B6A41 /* VJam FX Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "VJam FX Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		101732A6306E44EA005B6A41 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		101732A8306E44EA005B6A41 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		101732B4306E44EB005B6A41 /* background */ = {isa = PBXFileReference; lastKnownFileType = folder; name = background; path = "../../../build/safari-ext/background"; sourceTree = "<group>"; };
+		101732B5306E44EB005B6A41 /* popup */ = {isa = PBXFileReference; lastKnownFileType = folder; name = popup; path = "../../../build/safari-ext/popup"; sourceTree = "<group>"; };
+		101732B6306E44EB005B6A41 /* content */ = {isa = PBXFileReference; lastKnownFileType = folder; name = content; path = "../../../build/safari-ext/content"; sourceTree = "<group>"; };
+		101732B7306E44EB005B6A41 /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = "../../../build/safari-ext/icons"; sourceTree = "<group>"; };
+		101732B8306E44EB005B6A41 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = "../../../build/safari-ext/manifest.json"; sourceTree = "<group>"; };
+		101732B9306E44EB005B6A41 /* lib */ = {isa = PBXFileReference; lastKnownFileType = folder; name = lib; path = "../../../build/safari-ext/lib"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		10173281306E44E9005B6A41 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1017329E306E44EA005B6A41 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1017327B306E44E9005B6A41 = {
+			isa = PBXGroup;
+			children = (
+				10173286306E44E9005B6A41 /* VJam FX */,
+				101732A5306E44EA005B6A41 /* VJam FX Extension */,
+				10173285306E44E9005B6A41 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		10173285306E44E9005B6A41 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				10173284306E44E9005B6A41 /* VJam FX.app */,
+				101732A1306E44EA005B6A41 /* VJam FX Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		10173286306E44E9005B6A41 /* VJam FX */ = {
+			isa = PBXGroup;
+			children = (
+				10173287306E44E9005B6A41 /* AppDelegate.swift */,
+				10173291306E44E9005B6A41 /* SceneDelegate.swift */,
+				10173293306E44E9005B6A41 /* ViewController.swift */,
+				10173295306E44E9005B6A41 /* LaunchScreen.storyboard */,
+				10173298306E44E9005B6A41 /* Main.storyboard */,
+				1017329B306E44EA005B6A41 /* Assets.xcassets */,
+				1017329C306E44EA005B6A41 /* Info.plist */,
+				10173289306E44E9005B6A41 /* Resources */,
+			);
+			path = "VJam FX";
+			sourceTree = "<group>";
+		};
+		10173289306E44E9005B6A41 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1017328A306E44E9005B6A41 /* Main.html */,
+				1017328D306E44E9005B6A41 /* Icon.png */,
+				1017328F306E44E9005B6A41 /* Style.css */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		101732A5306E44EA005B6A41 /* VJam FX Extension */ = {
+			isa = PBXGroup;
+			children = (
+				101732B3306E44EA005B6A41 /* Resources */,
+				101732A6306E44EA005B6A41 /* SafariWebExtensionHandler.swift */,
+				101732A8306E44EA005B6A41 /* Info.plist */,
+			);
+			path = "VJam FX Extension";
+			sourceTree = "<group>";
+		};
+		101732B3306E44EA005B6A41 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				101732B4306E44EB005B6A41 /* background */,
+				101732B5306E44EB005B6A41 /* popup */,
+				101732B6306E44EB005B6A41 /* content */,
+				101732B7306E44EB005B6A41 /* icons */,
+				101732B8306E44EB005B6A41 /* manifest.json */,
+				101732B9306E44EB005B6A41 /* lib */,
+			);
+			name = Resources;
+			path = "VJam FX Extension";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		10173283306E44E9005B6A41 /* VJam FX */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 101732B0306E44EA005B6A41 /* Build configuration list for PBXNativeTarget "VJam FX" */;
+			buildPhases = (
+				10173280306E44E9005B6A41 /* Sources */,
+				10173281306E44E9005B6A41 /* Frameworks */,
+				10173282306E44E9005B6A41 /* Resources */,
+				101732AF306E44EA005B6A41 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				101732A4306E44EA005B6A41 /* PBXTargetDependency */,
+			);
+			name = "VJam FX";
+			packageProductDependencies = (
+			);
+			productName = "VJam FX";
+			productReference = 10173284306E44E9005B6A41 /* VJam FX.app */;
+			productType = "com.apple.product-type.application";
+		};
+		101732A0306E44EA005B6A41 /* VJam FX Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 101732AC306E44EA005B6A41 /* Build configuration list for PBXNativeTarget "VJam FX Extension" */;
+			buildPhases = (
+				1017329D306E44EA005B6A41 /* Sources */,
+				1017329E306E44EA005B6A41 /* Frameworks */,
+				1017329F306E44EA005B6A41 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "VJam FX Extension";
+			packageProductDependencies = (
+			);
+			productName = "VJam FX Extension";
+			productReference = 101732A1306E44EA005B6A41 /* VJam FX Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1017327C306E44E9005B6A41 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2640;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					10173283306E44E9005B6A41 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					101732A0306E44EA005B6A41 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+				};
+			};
+			buildConfigurationList = 1017327F306E44E9005B6A41 /* Build configuration list for PBXProject "VJam FX" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1017327B306E44E9005B6A41;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 10173285306E44E9005B6A41 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				10173283306E44E9005B6A41 /* VJam FX */,
+				101732A0306E44EA005B6A41 /* VJam FX Extension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		10173282306E44E9005B6A41 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1017328E306E44E9005B6A41 /* Icon.png in Resources */,
+				1017329A306E44E9005B6A41 /* Main.storyboard in Resources */,
+				10173297306E44E9005B6A41 /* LaunchScreen.storyboard in Resources */,
+				1017328C306E44E9005B6A41 /* Main.html in Resources */,
+				101732A9306E44EA005B6A41 /* Assets.xcassets in Resources */,
+				10173290306E44E9005B6A41 /* Style.css in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1017329F306E44EA005B6A41 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				101732BF306E44EB005B6A41 /* lib in Resources */,
+				101732BC306E44EB005B6A41 /* content in Resources */,
+				101732BD306E44EB005B6A41 /* icons in Resources */,
+				101732BE306E44EB005B6A41 /* manifest.json in Resources */,
+				101732BA306E44EB005B6A41 /* background in Resources */,
+				101732BB306E44EB005B6A41 /* popup in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		10173280306E44E9005B6A41 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10173294306E44E9005B6A41 /* ViewController.swift in Sources */,
+				10173288306E44E9005B6A41 /* AppDelegate.swift in Sources */,
+				10173292306E44E9005B6A41 /* SceneDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1017329D306E44EA005B6A41 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				101732A7306E44EA005B6A41 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		101732A4306E44EA005B6A41 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 101732A0306E44EA005B6A41 /* VJam FX Extension */;
+			targetProxy = 101732A3306E44EA005B6A41 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		1017328A306E44E9005B6A41 /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1017328B306E44E9005B6A41 /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		10173295306E44E9005B6A41 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				10173296306E44E9005B6A41 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		10173298306E44E9005B6A41 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				10173299306E44E9005B6A41 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		101732AA306E44EA005B6A41 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		101732AB306E44EA005B6A41 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		101732AD306E44EA005B6A41 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "VJam FX Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "VJam FX Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vjam.fx.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		101732AE306E44EA005B6A41 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "VJam FX Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "VJam FX Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vjam.fx.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		101732B1306E44EA005B6A41 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "VJam FX/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "VJam FX";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vjam.fx;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		101732B2306E44EA005B6A41 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "VJam FX/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "VJam FX";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vjam.fx;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1017327F306E44E9005B6A41 /* Build configuration list for PBXProject "VJam FX" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				101732AA306E44EA005B6A41 /* Debug */,
+				101732AB306E44EA005B6A41 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		101732AC306E44EA005B6A41 /* Build configuration list for PBXNativeTarget "VJam FX Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				101732AD306E44EA005B6A41 /* Debug */,
+				101732AE306E44EA005B6A41 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		101732B0306E44EA005B6A41 /* Build configuration list for PBXNativeTarget "VJam FX" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				101732B1306E44EA005B6A41 /* Debug */,
+				101732B2306E44EA005B6A41 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1017327C306E44E9005B6A41 /* Project object */;
+}
