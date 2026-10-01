@@ -50,6 +50,7 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage.
 npm install
 npm test            # Run all 1729 tests
 npm run test:watch  # Watch mode
+npm run test:e2e    # Real-Chromium smoke test: loads the extension and drives the popup (Playwright, headless)
 ```
 
 ## Architecture
