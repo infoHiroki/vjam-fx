@@ -154,6 +154,25 @@ describe('Service Worker', () => {
   });
 
   describe('webNavigation.onCompleted', () => {
+    // 遷移後の再注入で、最後に送る起動 func をフェイクのエンジンで実行し、エンジンに届いたメッセージを返す
+    async function messagesAfterNavigation(state) {
+      messageListeners[0]({ type: 'setState', tabId: 1, state }, {}, vi.fn());
+      await navigationListeners[0]({ tabId: 1, frameId: 0 });
+      await new Promise(r => setTimeout(r, 400));
+
+      const startCall = chrome.scripting.executeScript.mock.calls
+        .map(c => c[0])
+        .find(c => c.func && c.args && c.args.length > 0);
+      const messages = [];
+      window._vjamFxEngine = { handleMessage: (msg) => messages.push(msg) };
+      try {
+        startCall.func(...startCall.args);
+      } finally {
+        delete window._vjamFxEngine;
+      }
+      return messages;
+    }
+
     it('should register navigation listener', () => {
       expect(chrome.webNavigation.onCompleted.addListener).toHaveBeenCalled();
       expect(navigationListeners.length).toBe(1);
@@ -194,25 +213,6 @@ describe('Service Worker', () => {
         blends: ['screen', 'difference'],
       };
 
-      // 遷移後の再注入で、最後に送る起動 func をフェイクのエンジンで実行し、エンジンに届いたメッセージを返す
-      async function messagesAfterNavigation(state) {
-        messageListeners[0]({ type: 'setState', tabId: 1, state }, {}, vi.fn());
-        await navigationListeners[0]({ tabId: 1, frameId: 0 });
-        await new Promise(r => setTimeout(r, 400));
-
-        const startCall = chrome.scripting.executeScript.mock.calls
-          .map(c => c[0])
-          .find(c => c.func && c.args && c.args.length > 0);
-        const messages = [];
-        window._vjamFxEngine = { handleMessage: (msg) => messages.push(msg) };
-        try {
-          startCall.func(...startCall.args);
-        } finally {
-          delete window._vjamFxEngine;
-        }
-        return messages;
-      }
-
       it('passes the saved pool to startAutoCycle', async () => {
         const messages = await messagesAfterNavigation({
           active: true, layers: ['rain'], blendMode: 'screen',
@@ -250,6 +250,71 @@ describe('Service Worker', () => {
           autoCyclePresets: null, pool: POOL,
         });
         expect(messages.some(m => m.action === 'startAutoCycle')).toBe(false);
+      });
+    });
+
+    // 遷移後も popup と同じように回す: Auto が OFF でも Rnd だけ ON なら Rnd を再開、拍数の設定も引き継ぐ
+    describe('Rnd / barsPerCycle on re-inject', () => {
+      const POOL = { filters: ['saturate(2)'], blends: ['screen', 'difference'] };
+
+      it('restarts Rnd (startAutoFX) when only Rnd was on', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: null, autoBlend: false, autoFilters: true, pool: POOL,
+        });
+        const cmd = messages.find(m => m.action === 'startAutoFX');
+        expect(cmd).toMatchObject({ autoBlend: false, autoFilters: true, pool: POOL });
+        expect(messages.some(m => m.action === 'startAutoCycle')).toBe(false);
+      });
+
+      it('restarts Blend Rnd alone too', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: null, autoBlend: true, autoFilters: false, pool: POOL,
+        });
+        const cmd = messages.find(m => m.action === 'startAutoFX');
+        expect(cmd).toMatchObject({ autoBlend: true, autoFilters: false, pool: POOL });
+      });
+
+      it('starts neither Auto nor Rnd when both were off', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: null, autoBlend: false, autoFilters: false, pool: POOL,
+        });
+        expect(messages.some(m => m.action === 'startAutoFX' || m.action === 'startAutoCycle')).toBe(false);
+      });
+
+      it('does not start Rnd separately when Auto is on (auto-cycle handles blend / filter)', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true, pool: POOL,
+        });
+        expect(messages.some(m => m.action === 'startAutoCycle')).toBe(true);
+        expect(messages.some(m => m.action === 'startAutoFX')).toBe(false);
+      });
+
+      it('passes the saved barsPerCycle to startAutoCycle', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true, pool: POOL, barsPerCycle: 32,
+        });
+        expect(messages.find(m => m.action === 'startAutoCycle').barsPerCycle).toBe(32);
+      });
+
+      it('passes the saved barsPerCycle to startAutoFX', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: null, autoBlend: true, autoFilters: true, pool: POOL, barsPerCycle: 8,
+        });
+        expect(messages.find(m => m.action === 'startAutoFX').barsPerCycle).toBe(8);
+      });
+
+      it('passes null when no barsPerCycle was saved (engine uses its default 16)', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true, pool: POOL,
+        });
+        expect(messages.find(m => m.action === 'startAutoCycle').barsPerCycle).toBeNull();
       });
     });
 
