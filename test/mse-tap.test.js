@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -9,6 +9,11 @@ function loadTap() {
   eval(tapCode);
   return window.__vjamMse;
 }
+
+// タップは読み込み時の window.fetch を持つので、差し替えられる口を先に置く(外には出ない)
+let fetchImpl;
+const realFetch = window.fetch;
+const realPlay = HTMLMediaElement.prototype.play;
 
 // ---- byte builders ----
 
@@ -99,6 +104,98 @@ function same(a, b) {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
+// MPEG-TS:188 バイトのパケット。中身が短いときは adaptation field(stuffing)で埋める。payload が null なら adaptation field だけ
+function tsPacket(pid, payload, pusi = false) {
+  const pkt = new Uint8Array(188).fill(0xFF);
+  pkt[0] = 0x47;
+  pkt[1] = (pusi ? 0x40 : 0) | (pid >> 8);
+  pkt[2] = pid & 0xFF;
+  if (payload === null) {
+    pkt[3] = 0x20; pkt[4] = 183; pkt[5] = 0;
+    return pkt;
+  }
+  const room = 184 - payload.length;
+  if (room === 0) {
+    pkt[3] = 0x10;
+  } else {
+    pkt[3] = 0x30; pkt[4] = room - 1;
+    if (room > 1) pkt[5] = 0x00;
+  }
+  pkt.set(payload, 188 - payload.length);
+  return pkt;
+}
+
+// PSI(pointer_field + セクション + ダミーの CRC)
+function psi(tableId, body) {
+  const len = body.length + 4;
+  return [0, tableId, 0xB0 | (len >> 8), len & 0xFF, ...body, 0, 0, 0, 0];
+}
+function tsPat(pmtPid) {
+  // 番組 0(NIT)→ 番組 1
+  return psi(0x00, [0, 1, 0xC1, 0, 0, 0, 0, 0xE0, 0x10, 0, 1, 0xE0 | (pmtPid >> 8), pmtPid & 0xFF]);
+}
+function tsPmt(streams) {
+  const info = [0x05, 0x04, 0x48, 0x44, 0x4D, 0x56];
+  const es = [];
+  for (const s of streams) {
+    const d = s.desc || [];
+    es.push(s.type, 0xE0 | (s.pid >> 8), s.pid & 0xFF, 0xF0 | (d.length >> 8), d.length & 0xFF, ...d);
+  }
+  return psi(0x02, [0, 1, 0xC1, 0, 0, 0xE1, 0x00, 0xF0, info.length, ...info, ...es]);
+}
+function pesHeader(streamId = 0xC0) {
+  return [0, 0, 1, streamId, 0, 0, 0x80, 0x80, 5, 0x21, 0, 1, 0, 1]; // PTS だけ
+}
+
+const TS_PMT = 0x1000, TS_VIDEO = 0x100, TS_AUDIO = 0x101;
+
+// 映像 + 音声(AAC)の TS と、そこから取り出せるはずの音声
+function tsSegment(audioType = 0x0F) {
+  const a1 = new Array(300).fill(0).map((_, i) => (i * 5 + 1) & 0xFF);
+  const a2 = new Array(50).fill(0).map((_, i) => (i * 3 + 2) & 0xFF);
+  const video = new Array(150).fill(0x55);
+  const ts = bytes(
+    tsPacket(TS_AUDIO, [9, 9, 9]),                       // PMT より前 → 使わない
+    tsPacket(0, tsPat(TS_PMT), true),
+    tsPacket(TS_PMT, tsPmt([
+      { type: 0x1B, pid: TS_VIDEO, desc: [0x28, 4, 1, 2, 3, 4] },
+      { type: audioType, pid: TS_AUDIO, desc: [0x0A, 4, 0x65, 0x6E, 0x67, 0] },
+    ]), true),
+    tsPacket(TS_AUDIO, [7, 7, 7, 7]),                    // 前の区切りの PES の続き → 使わない
+    tsPacket(TS_VIDEO, [...pesHeader(0xE0), ...video], true),
+    tsPacket(TS_AUDIO, [...pesHeader(), ...a1.slice(0, 170)], true), // ちょうど 184 バイト(adaptation field なし)
+    tsPacket(TS_AUDIO, null),                            // adaptation field だけ
+    tsPacket(TS_AUDIO, a1.slice(170)),                   // stuffing あり
+    tsPacket(TS_VIDEO, video),
+    tsPacket(TS_AUDIO, [...pesHeader(), ...a2], true),
+  );
+  return { ts, audio: bytes(a1, a2) };
+}
+
+const enc = s => new TextEncoder().encode(s);
+
+// メディア要素。paused / currentTime / currentSrc / 表示サイズは el.st と引数で決める(jsdom は再生できない)
+function fakeMedia({ tag = 'video', src = '', w = 640, h = 360, paused = false, inDom = true } = {}) {
+  const el = document.createElement(tag);
+  el.st = { src, paused, time: 0 };
+  Object.defineProperty(el, 'paused', { get: () => el.st.paused });
+  Object.defineProperty(el, 'currentTime', { get: () => el.st.time });
+  Object.defineProperty(el, 'currentSrc', { get: () => el.st.src });
+  el.getBoundingClientRect = () => ({ x: 0, y: 0, top: 0, left: 0, width: w, height: h, right: w, bottom: h });
+  if (inDom) document.body.appendChild(el);
+  return el;
+}
+
+// 5 秒の 120 BPM キック。どのデータも同じ音として返す
+function fakeAudioBuffer() {
+  const sr = 44100, n = sr * 5, ch = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, since = t % 0.5;
+    ch[i] = 0.8 * Math.exp(-since / 0.05) * Math.sin(2 * Math.PI * 55 * t) + 0.02 * Math.sin(2 * Math.PI * 3000 * t);
+  }
+  return { sampleRate: sr, length: n, getChannelData: () => ch };
+}
+
 // ---- synthetic audio ----
 
 function prng(seed) {
@@ -152,16 +249,23 @@ describe('mse-tap', () => {
   let lib;
 
   beforeEach(() => {
+    fetchImpl = () => Promise.reject(new Error('no network in tests'));
+    window.fetch = (...args) => fetchImpl(...args);
+    HTMLMediaElement.prototype.play = function() { return Promise.resolve(); }; // jsdom は再生できない
     lib = loadTap()._lib;
   });
 
   afterEach(() => {
     delete window.__vjamMse;
+    window.fetch = realFetch;
+    HTMLMediaElement.prototype.play = realPlay;
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
   });
 
   describe('install', () => {
-    it('exposes only frameAt / stats / _lib on window.__vjamMse', () => {
-      expect(Object.keys(window.__vjamMse).sort()).toEqual(['_lib', 'frameAt', 'stats']);
+    it('exposes only frameAt / media / stats / _lib on window.__vjamMse', () => {
+      expect(Object.keys(window.__vjamMse).sort()).toEqual(['_lib', 'frameAt', 'media', 'stats']);
     });
 
     it('does not throw without MediaSource (Chrome-less env) and returns null', () => {
@@ -560,16 +664,6 @@ describe('mse-tap', () => {
   describe('MediaSource hook', () => {
     let decodes, FakeSourceBuffer, FakeMediaSource;
 
-    // 5 秒の 120 BPM キック。どのデータも同じ音として返す
-    function fakeAudioBuffer() {
-      const sr = 44100, n = sr * 5, ch = new Float32Array(n);
-      for (let i = 0; i < n; i++) {
-        const t = i / sr, since = t % 0.5;
-        ch[i] = 0.8 * Math.exp(-since / 0.05) * Math.sin(2 * Math.PI * 55 * t) + 0.02 * Math.sin(2 * Math.PI * 3000 * t);
-      }
-      return { sampleRate: sr, length: n, getChannelData: () => ch };
-    }
-
     const flush = () => new Promise(r => setTimeout(r, 0));
 
     beforeEach(() => {
@@ -632,6 +726,16 @@ describe('mse-tap', () => {
     it('does not hook video SourceBuffers', () => {
       const sb = new FakeMediaSource().addSourceBuffer('video/webm; codecs="vp9"');
       expect(sb.appendBuffer).toBe(FakeSourceBuffer.prototype.appendBuffer);
+      const muxed = new FakeMediaSource().addSourceBuffer('video/mp4; codecs="avc1.4d401f, mp4a.40.2"');
+      expect(muxed.appendBuffer).toBe(FakeSourceBuffer.prototype.appendBuffer);
+    });
+
+    it('hooks audio-only video/mp4 (Twitch)', async () => {
+      const sb = new FakeMediaSource().addSourceBuffer('video/mp4;codecs="mp4a.40.2"');
+      sb.appendBuffer(bytes(mp4Init(44100), mp4Segment(0).all));
+      await flush();
+      expect(decodes.length).toBe(1);
+      expect(window.__vjamMse.frameAt(2)).not.toBeNull();
     });
 
     it('resets the analysis when the video switches (new audio SourceBuffer)', async () => {
@@ -702,6 +806,579 @@ describe('mse-tap', () => {
       expect(last.bpm).toBeLessThan(121);
       expect(beats.length).toBeGreaterThanOrEqual(19);
       expect(beats.length).toBeLessThanOrEqual(21);
+    });
+  });
+
+  describe('audio type', () => {
+    it('treats audio/* as audio', () => {
+      expect(lib.isAudioType('audio/mp4; codecs="mp4a.40.2"')).toBe(true);
+      expect(lib.isAudioType('audio/webm; codecs="opus"')).toBe(true);
+      expect(lib.isAudioType('audio/mpeg')).toBe(true);
+    });
+
+    it('treats audio-only codecs as audio even in video/* (Twitch)', () => {
+      for (const c of ['mp4a.40.2', 'opus', 'Opus', 'vorbis', 'flac', 'fLaC', 'ac-3', 'ec-3', 'mp3']) {
+        expect(lib.isAudioType(`video/mp4;codecs="${c}"`)).toBe(true);
+      }
+      expect(lib.isAudioType('video/mp4; codecs="mp4a.40.2, opus"')).toBe(true);
+      expect(lib.isAudioType('video/mp4;codecs=mp4a.40.5')).toBe(true);
+    });
+
+    it('does not treat video or muxed types as audio', () => {
+      expect(lib.isAudioType('video/mp4; codecs="avc1.4d401f"')).toBe(false);
+      expect(lib.isAudioType('video/mp4; codecs="avc1.4d401f,mp4a.40.2"')).toBe(false);
+      expect(lib.isAudioType('video/webm; codecs="vp9, opus"')).toBe(false);
+      expect(lib.isAudioType('video/mp4; codecs="mp4av"')).toBe(false);
+      expect(lib.isAudioType('video/mp4; codecs=""')).toBe(false);
+      expect(lib.isAudioType('video/mp4')).toBe(false);
+      expect(lib.isAudioType('')).toBe(false);
+      expect(lib.isAudioType(undefined)).toBe(false);
+    });
+  });
+
+  describe('media()', () => {
+    const media = () => window.__vjamMse.media();
+
+    it('returns null when nothing is playing', () => {
+      expect(media()).toBeNull();
+      fakeMedia({ paused: true });
+      expect(media()).toBeNull();
+    });
+
+    it('picks the playing media with the largest area', () => {
+      fakeMedia({ w: 320, h: 180 });                   // 広告
+      const main = fakeMedia({ w: 1280, h: 720 });
+      fakeMedia({ w: 1920, h: 1080, paused: true });   // 一時停止中
+      fakeMedia({ tag: 'audio', w: 300, h: 54 });
+      expect(media()).toBe(main);
+    });
+
+    it('skips media with zero width or height (dummy players)', () => {
+      fakeMedia({ w: 0, h: 360 });
+      fakeMedia({ w: 640, h: 0 });
+      expect(media()).toBeNull();
+      const small = fakeMedia({ w: 2, h: 2 });
+      expect(media()).toBe(small);
+    });
+
+    it('returns playing audio that is not in the DOM (new Audio() on SoundCloud)', () => {
+      const a = fakeMedia({ tag: 'audio', src: 'blob:https://soundcloud.test/1', w: 0, h: 0, inDom: false });
+      expect(media()).toBeNull(); // play() されていなければ知らない
+      a.play();
+      expect(media()).toBe(a);
+    });
+
+    it('prefers playing media in the DOM over media outside it', () => {
+      const a = fakeMedia({ tag: 'audio', w: 0, h: 0, inDom: false });
+      a.play();
+      const v = fakeMedia({ w: 320, h: 180 });
+      expect(media()).toBe(v);
+      v.st.paused = true;
+      expect(media()).toBe(a);
+    });
+
+    it('picks the last played among media outside the DOM', () => {
+      const a = fakeMedia({ tag: 'audio', inDom: false }), b = fakeMedia({ tag: 'audio', inDom: false });
+      a.play();
+      b.play();
+      expect(media()).toBe(b);
+      a.play();
+      expect(media()).toBe(a);
+    });
+
+    it('forgets media outside the DOM once it pauses or ends', () => {
+      const a = fakeMedia({ tag: 'audio', inDom: false });
+      a.play();
+      a.st.paused = true;
+      a.dispatchEvent(new Event('pause'));
+      a.st.paused = false; // play() を通らずに戻っても候補にしない
+      expect(media()).toBeNull();
+      a.play();
+      expect(media()).toBe(a);
+      a.dispatchEvent(new Event('ended'));
+      expect(media()).toBeNull();
+    });
+
+    it('drops media outside the DOM that is paused without a pause event (play() rejected)', () => {
+      const a = fakeMedia({ tag: 'audio', inDom: false });
+      a.play();
+      a.st.paused = true;
+      expect(media()).toBeNull();
+      a.st.paused = false;
+      expect(media()).toBeNull();
+    });
+
+    it('does not fall back to zero-size media in the DOM', () => {
+      const dummy = fakeMedia({ w: 0, h: 0 });
+      dummy.play();
+      expect(media()).toBeNull();
+    });
+
+    it('passes play() through to the original', () => {
+      const orig = vi.fn(() => 'played');
+      HTMLMediaElement.prototype.play = orig;
+      loadTap();
+      const a = fakeMedia({ tag: 'audio', inDom: false });
+      expect(a.play()).toBe('played');
+      expect(orig).toHaveBeenCalledTimes(1);
+      expect(orig.mock.contexts[0]).toBe(a);
+    });
+  });
+
+  describe('m3u8', () => {
+    const base = 'https://cdn.test/v/master.m3u8';
+
+    it('uses the audio rendition of a master playlist (DEFAULT=YES first)', () => {
+      const text = [
+        '#EXTM3U',
+        '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",NAME="en",URI="subs/en.m3u8"',
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="commentary",DEFAULT=NO,URI="audio/commentary.m3u8"',
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",DEFAULT=YES,AUTOSELECT=YES,URI="audio/en.m3u8"',
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Deutsch",DEFAULT=NO,URI="audio/de.m3u8"',
+        '#EXT-X-STREAM-INF:BANDWIDTH=800000,CODECS="avc1.4d401f,mp4a.40.2",AUDIO="aud"',
+        'video/720.m3u8',
+      ].join('\n');
+      expect(lib.parsePlaylist(text, base)).toEqual({ master: true, url: 'https://cdn.test/v/audio/en.m3u8' });
+    });
+
+    it('uses the lowest-bandwidth variant when there is no audio rendition URI', () => {
+      const text = [
+        '#EXTM3U',
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="main",DEFAULT=YES', // URI なし = 音声はバリアントの中
+        '#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720,CODECS="avc1.4d401f,mp4a.40.2"',
+        'hi/index.m3u8',
+        '#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=100,URI="iframe.m3u8"',
+        '#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=416x234',
+        '',
+        '/lo/index.m3u8',
+        '#EXT-X-STREAM-INF:BANDWIDTH=1200000',
+        'https://other.test/mid.m3u8',
+      ].join('\r\n');
+      expect(lib.parsePlaylist(text, base)).toEqual({ master: true, url: 'https://cdn.test/lo/index.m3u8' });
+    });
+
+    it('reads a media playlist (EXTINF, MAP, BYTERANGE, relative URLs)', () => {
+      const text = [
+        '#EXTM3U',
+        '#EXT-X-VERSION:7',
+        '#EXT-X-TARGETDURATION:7',
+        '#EXT-X-PLAYLIST-TYPE:VOD',
+        '#EXT-X-MAP:URI="init.mp4"',
+        '#EXTINF:6.25,',
+        'seg0.m4s',
+        '#EXTINF:5.5,title',
+        '../other/seg1.m4s',
+        '#EXT-X-DISCONTINUITY',
+        '#EXT-X-MAP:URI="https://cdn2.test/all.mp4",BYTERANGE="720@0"',
+        '#EXTINF:4,',
+        '#EXT-X-BYTERANGE:1000@720',
+        'https://cdn2.test/all.mp4',
+        '#EXTINF:4,',
+        '#EXT-X-BYTERANGE:2000',
+        'https://cdn2.test/all.mp4',
+        '#EXT-X-ENDLIST',
+      ].join('\n');
+      const pl = lib.parsePlaylist(text, 'https://cdn.test/v/audio/en.m3u8');
+      expect(pl.master).toBe(false);
+      expect(pl.live).toBe(false);
+      expect(pl.encrypted).toBe(false);
+      const init1 = { uri: 'https://cdn.test/v/audio/init.mp4', range: null };
+      const init2 = { uri: 'https://cdn2.test/all.mp4', range: [0, 720] };
+      expect(pl.segs).toEqual([
+        { uri: 'https://cdn.test/v/audio/seg0.m4s', start: 0, dur: 6.25, range: null, map: init1 },
+        { uri: 'https://cdn.test/v/other/seg1.m4s', start: 6.25, dur: 5.5, range: null, map: init1 },
+        { uri: 'https://cdn2.test/all.mp4', start: 11.75, dur: 4, range: [720, 1000], map: init2 },
+        { uri: 'https://cdn2.test/all.mp4', start: 15.75, dur: 4, range: [1720, 2000], map: init2 },
+      ]);
+    });
+
+    it('flags live playlists (no EXT-X-ENDLIST)', () => {
+      const pl = lib.parsePlaylist('#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:100\n#EXTINF:2,\nlive100.ts\n#EXTINF:2,\nlive101.ts\n', base);
+      expect(pl.live).toBe(true);
+      expect(pl.segs.map(s => s.uri)).toEqual(['https://cdn.test/v/live100.ts', 'https://cdn.test/v/live101.ts']);
+    });
+
+    it('flags encrypted playlists', () => {
+      const aes = '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST';
+      expect(lib.parsePlaylist(aes, base).encrypted).toBe(true);
+      const none = '#EXTM3U\n#EXT-X-KEY:METHOD=NONE\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST';
+      expect(lib.parsePlaylist(none, base).encrypted).toBe(false);
+    });
+
+    it('returns null for something that is not a playlist', () => {
+      expect(lib.parsePlaylist('<html></html>', base)).toBeNull();
+      expect(lib.parsePlaylist('', base)).toBeNull();
+      expect(lib.parsePlaylist('﻿#EXTM3U\n#EXTINF:1,\na.ts\n#EXT-X-ENDLIST', base).segs.length).toBe(1);
+    });
+  });
+
+  describe('segment window', () => {
+    const segs = new Array(10).fill(0).map((_, i) => ({ start: i * 4, dur: 4 }));
+
+    // 取る順番(取ったものは次から要らない)
+    function order(t, needed = () => true) {
+      const done = new Set(), out = [];
+      for (;;) {
+        const i = lib.pickSegment(segs, t, s => !done.has(s) && needed(s));
+        if (i < 0) return out;
+        done.add(segs[i]);
+        out.push(i);
+      }
+    }
+
+    it('takes only segments overlapping [t - 2, t + 15], from the current one', () => {
+      expect(order(0)).toEqual([0, 1, 2, 3]);
+      expect(order(9)).toEqual([2, 3, 4, 5, 1]);
+      expect(order(30)).toEqual([7, 8, 9]);
+      expect(order(100)).toEqual([]);
+    });
+
+    it('skips segments that are not needed', () => {
+      expect(order(9, s => s.start !== 12)).toEqual([2, 4, 5, 1]);
+    });
+  });
+
+  describe('MPEG-TS audio', () => {
+    it('joins the audio PES payloads (PAT → PMT → audio PID, PES header, adaptation field)', () => {
+      const { ts, audio } = tsSegment();
+      expect(same(lib.tsAudio(ts), audio)).toBe(true);
+    });
+
+    it('accepts MP3 audio streams', () => {
+      for (const type of [0x03, 0x04]) {
+        const { ts, audio } = tsSegment(type);
+        expect(same(lib.tsAudio(ts), audio)).toBe(true);
+      }
+    });
+
+    it('skips a PES whose header is broken', () => {
+      const { ts, audio } = tsSegment();
+      const broken = tsPacket(TS_AUDIO, [0, 0, 2, 0xC0, 0, 0, 0x80, 0x80, 5, 0x21, 0, 1, 0, 1, 8, 8, 8], true);
+      const tail = tsPacket(TS_AUDIO, [6, 6, 6]); // 壊れた PES の続き
+      expect(same(lib.tsAudio(bytes(ts, broken, tail)), audio)).toBe(true);
+    });
+
+    it('resyncs after garbage', () => {
+      const { ts, audio } = tsSegment();
+      expect(same(lib.tsAudio(bytes([1, 2, 3], ts)), audio)).toBe(true);
+    });
+
+    it('returns null without an audio stream', () => {
+      const ts = bytes(
+        tsPacket(0, tsPat(TS_PMT), true),
+        tsPacket(TS_PMT, tsPmt([{ type: 0x1B, pid: TS_VIDEO }]), true),
+        tsPacket(TS_VIDEO, [...pesHeader(0xE0), 1, 2, 3], true),
+      );
+      expect(lib.tsAudio(ts)).toBeNull();
+      expect(lib.tsAudio(new Uint8Array(0))).toBeNull();
+    });
+  });
+
+  describe('standard HLS', () => {
+    const MASTER = 'https://cdn.test/v/master.m3u8';
+    const AUDIO_PL = 'https://cdn.test/v/audio/en.m3u8';
+    const INIT = 'https://cdn.test/v/audio/init.mp4';
+    const seg = i => `https://cdn.test/v/audio/s${i}.m4s`;
+    let clock, calls, files, decodes, tap;
+
+    const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(r => setTimeout(r, 0)); };
+
+    // 偽のサーバ(fetch のモック)。Range には 206 で答える。値が関数ならそれが返す Response
+    function serve(f) {
+      files = f;
+      fetchImpl = (url, opts = {}) => {
+        const range = opts.headers && opts.headers.Range;
+        calls.push(range ? `${url} ${range}` : url);
+        const body = files[url];
+        if (body === undefined) return Promise.resolve(new Response('', { status: 404 }));
+        if (typeof body === 'function') return Promise.resolve(body(opts));
+        const b = typeof body === 'string' ? enc(body) : body;
+        if (!range) return Promise.resolve(new Response(b));
+        const [, s, e] = /bytes=(\d+)-(\d+)/.exec(range);
+        return Promise.resolve(new Response(b.slice(+s, +e + 1), { status: 206 }));
+      };
+    }
+
+    // master → 音声の再生リスト(fMP4、4 秒 × n 本)
+    function vodFiles(n = 10) {
+      const f = {
+        [MASTER]: '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="en",DEFAULT=YES,URI="audio/en.m3u8"\n' +
+          '#EXT-X-STREAM-INF:BANDWIDTH=900000,AUDIO="a"\nvideo/720.m3u8\n',
+        [INIT]: mp4Init(44100),
+      };
+      let pl = '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MAP:URI="init.mp4"\n';
+      for (let i = 0; i < n; i++) {
+        pl += `#EXTINF:4.0,\ns${i}.m4s\n`;
+        f[seg(i)] = mp4Segment(i * 4 * 44100).all;
+      }
+      f[AUDIO_PL] = pl + '#EXT-X-ENDLIST\n';
+      return f;
+    }
+
+    const fetchedSegs = () => calls.filter(c => /\.m4s/.test(c)).map(c => +/s(\d+)\.m4s/.exec(c)[1]);
+
+    // エンジンの音声ループ 1 回(時計を進めて frameAt)
+    function engineTick(m, ms = 600) {
+      clock += ms;
+      return tap.frameAt(m.currentTime);
+    }
+
+    beforeEach(() => {
+      calls = []; decodes = []; clock = 1e6;
+      vi.spyOn(Date, 'now').mockImplementation(() => clock);
+      window.OfflineAudioContext = class {
+        decodeAudioData(buf) {
+          decodes.push(new Uint8Array(buf));
+          return Promise.resolve(fakeAudioBuffer());
+        }
+      };
+      tap = loadTap();
+    });
+
+    afterEach(() => {
+      delete window.OfflineAudioContext;
+      delete window.MediaSource;
+    });
+
+    it('does not fetch while the engine is not calling frameAt', async () => {
+      serve(vodFiles());
+      const v = fakeMedia({ src: MASTER });
+      await settle();
+      clock += 10000;
+      await settle();
+      expect(calls).toEqual([]);
+      tap.frameAt(0);              // エンジンが使い始めた
+      expect(calls).toEqual([MASTER]);
+      clock += 2500;               // VJam FX OFF / 音声 OFF:frameAt が止まった
+      await settle();
+      expect(calls).toEqual([MASTER]);
+      engineTick(v);               // 再開
+      await settle();
+      expect(calls.slice(0, 3)).toEqual([MASTER, AUDIO_PL, INIT]);
+      expect(fetchedSegs()).toEqual([0, 1, 2, 3]);
+    });
+
+    it('does not fetch while the media is paused', async () => {
+      serve(vodFiles());
+      fakeMedia({ src: MASTER, paused: true });
+      tap.frameAt(0);
+      await settle();
+      expect(calls).toEqual([]);
+    });
+
+    it('follows master → audio playlist and decodes init + segment', async () => {
+      serve(vodFiles());
+      fakeMedia({ src: MASTER });
+      tap.frameAt(0);
+      await settle();
+      expect(calls).toEqual([MASTER, AUDIO_PL, INIT, seg(0), seg(1), seg(2), seg(3)]); // init は 1 回だけ
+      expect(decodes.length).toBe(4);
+      expect(same(decodes[0], bytes(mp4Init(44100), mp4Segment(0).all))).toBe(true);
+      expect(tap.frameAt(2)).not.toBeNull();
+      expect(tap.stats.hlsSegments).toBe(4);
+      const size = u => (typeof files[u] === 'string' ? enc(files[u]) : files[u]).length;
+      expect(tap.stats.hlsBytes).toBe(calls.reduce((n, u) => n + size(u), 0));
+    });
+
+    it('fetches one request at a time', async () => {
+      const f = vodFiles();
+      let release;
+      f[seg(0)] = () => new Promise(r => { release = () => r(new Response(mp4Segment(0).all)); });
+      serve(f);
+      const v = fakeMedia({ src: MASTER });
+      tap.frameAt(0);
+      await settle();
+      engineTick(v);
+      engineTick(v);
+      await settle();
+      expect(fetchedSegs()).toEqual([0]);
+      release();
+      await settle();
+      expect(fetchedSegs()).toEqual([0, 1, 2, 3]);
+    });
+
+    it('does not fetch segments outside [t - 2, t + 15]', async () => {
+      serve(vodFiles());
+      const v = fakeMedia({ src: MASTER });
+      tap.frameAt(0);
+      await settle();
+      expect(fetchedSegs()).toEqual([0, 1, 2, 3]);
+      v.st.time = 30; // シーク
+      engineTick(v);
+      await settle();
+      expect(fetchedSegs()).toEqual([0, 1, 2, 3, 7, 8, 9]);
+      v.st.time = 31;
+      engineTick(v);
+      await settle();
+      expect(fetchedSegs()).toEqual([0, 1, 2, 3, 7, 8, 9]); // 取った区切りは取り直さない
+      expect(tap.frameAt(31)).not.toBeNull();
+    });
+
+    it('decodes only the audio of TS segments', async () => {
+      const { ts, audio } = tsSegment();
+      const src = 'https://cdn.test/hls/stream.m3u8';
+      serve({
+        [src]: '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n#EXT-X-ENDLIST\n',
+        'https://cdn.test/hls/a.ts': ts,
+        'https://cdn.test/hls/b.ts': ts,
+      });
+      fakeMedia({ src });
+      tap.frameAt(0);
+      await settle();
+      expect(calls).toEqual([src, 'https://cdn.test/hls/a.ts', 'https://cdn.test/hls/b.ts']);
+      expect(decodes.length).toBe(2);
+      expect(same(decodes[0], audio)).toBe(true);
+      expect(tap.frameAt(5)).not.toBeNull();
+    });
+
+    it('fetches EXT-X-BYTERANGE segments with Range requests', async () => {
+      const init = mp4Init(44100), s0 = mp4Segment(0).all, s1 = mp4Segment(4 * 44100).all;
+      const file = bytes(init, s0, s1), u = 'https://cdn.test/br/media.mp4';
+      const src = 'https://cdn.test/br/index.m3u8';
+      serve({
+        [src]: `#EXTM3U\n#EXT-X-MAP:URI="media.mp4",BYTERANGE="${init.length}@0"\n` +
+          `#EXTINF:4,\n#EXT-X-BYTERANGE:${s0.length}@${init.length}\nmedia.mp4\n` +
+          `#EXTINF:4,\n#EXT-X-BYTERANGE:${s1.length}\nmedia.mp4\n#EXT-X-ENDLIST\n`,
+        [u]: file,
+      });
+      fakeMedia({ src });
+      tap.frameAt(0);
+      await settle();
+      expect(calls).toEqual([
+        src,
+        `${u} bytes=0-${init.length - 1}`,
+        `${u} bytes=${init.length}-${init.length + s0.length - 1}`,
+        `${u} bytes=${init.length + s0.length}-${file.length - 1}`,
+      ]);
+      expect(same(decodes[1], bytes(init, s1))).toBe(true);
+    });
+
+    it('gives up byte-range segments when the server ignores Range (no whole-file download)', async () => {
+      const src = 'https://cdn.test/br/index.m3u8', u = 'https://cdn.test/br/media.mp4';
+      serve({
+        [src]: '#EXTM3U\n#EXTINF:4,\n#EXT-X-BYTERANGE:100@0\nmedia.mp4\n#EXTINF:4,\n#EXT-X-BYTERANGE:100\nmedia.mp4\n#EXT-X-ENDLIST\n',
+        [u]: () => new Response(new Uint8Array(1e6)), // 200 で丸ごと
+      });
+      const v = fakeMedia({ src });
+      tap.frameAt(0);
+      await settle();
+      expect(calls).toEqual([src, `${u} bytes=0-99`, `${u} bytes=100-199`]);
+      expect(tap.stats.lastErr).toMatch(/byte range/);
+      expect(tap.stats.hlsBytes).toBe(enc(files[src]).length);
+      engineTick(v);
+      await settle();
+      expect(calls.length).toBe(3); // 失敗した区切りは取り直さない
+    });
+
+    it('probes URLs that do not look like HLS with the first 64 bytes', async () => {
+      const src = 'https://media.test/play?id=5';
+      serve({
+        [src]: '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:4,\nhttps://media.test/seg/a.ts\n#EXT-X-ENDLIST\n',
+        'https://media.test/seg/a.ts': tsSegment().ts,
+      });
+      fakeMedia({ src });
+      tap.frameAt(0);
+      await settle();
+      expect(calls).toEqual([`${src} bytes=0-63`, src, 'https://media.test/seg/a.ts']);
+      expect(decodes.length).toBe(1);
+    });
+
+    it('does not download a progressive mp4', async () => {
+      const src = 'https://media.test/movie.mp4';
+      let pulled = 0, cancelled = false;
+      serve({
+        // Range を無視して丸ごと返すサーバ(終わらない)
+        [src]: () => new Response(new ReadableStream({
+          pull(c) { pulled++; c.enqueue(bytes(box('ftyp', [0x69, 0x73, 0x6F, 0x6D], [0, 0, 2, 0]), new Array(65536).fill(0))); },
+          cancel() { cancelled = true; },
+        })),
+      });
+      const v = fakeMedia({ src });
+      tap.frameAt(0);
+      await settle();
+      expect(calls).toEqual([`${src} bytes=0-63`]);
+      expect(pulled).toBeLessThan(5);
+      expect(cancelled).toBe(true); // 読むのをやめて通信も切る
+      expect(tap.stats.lastErr).toMatch(/not HLS/);
+      engineTick(v);
+      await settle();
+      expect(calls.length).toBe(1);
+      expect(tap.stats.hlsSegments).toBe(0);
+    });
+
+    it('does not fetch segments of live playlists', async () => {
+      const src = 'https://cdn.test/live/index.m3u8';
+      serve({
+        [src]: '#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\na.ts\n#EXTINF:2,\nb.ts\n',
+        'https://cdn.test/live/a.ts': tsSegment().ts,
+      });
+      const v = fakeMedia({ src });
+      tap.frameAt(0);
+      await settle();
+      engineTick(v);
+      await settle();
+      expect(calls).toEqual([src]);
+      expect(tap.stats.lastErr).toMatch(/live/);
+    });
+
+    it('drops the analysis and starts over when the src changes', async () => {
+      serve(vodFiles());
+      const v = fakeMedia({ src: MASTER });
+      tap.frameAt(0);
+      await settle();
+      expect(tap.frameAt(2)).not.toBeNull();
+      const next = 'https://cdn.test/w/index.m3u8';
+      v.st.src = next; // 次の動画
+      clock += 600;
+      expect(tap.frameAt(2)).toBeNull();
+      expect(calls[calls.length - 1]).toBe(next);
+    });
+
+    it('drops MSE data when a standard HLS video takes over', async () => {
+      window.MediaSource = class {
+        addSourceBuffer() { return { timestampOffset: 0, appendBuffer() {}, abort() {}, remove() {} }; }
+      };
+      tap = loadTap();
+      new window.MediaSource().addSourceBuffer('audio/webm; codecs="opus"').appendBuffer(bytes(webmInit(), webmCluster(0)));
+      await settle();
+      expect(tap.frameAt(2)).not.toBeNull();
+      serve({});
+      fakeMedia({ src: MASTER });
+      clock += 600;
+      expect(tap.frameAt(2)).toBeNull();
+      expect(calls).toEqual([MASTER]);
+    });
+
+    it('stops and drops its data when the media switches to MediaSource (blob:)', async () => {
+      serve(vodFiles());
+      const v = fakeMedia({ src: MASTER });
+      tap.frameAt(0);
+      await settle();
+      const n = calls.length;
+      v.st.src = 'blob:https://cdn.test/1';
+      clock += 600;
+      expect(tap.frameAt(2)).toBeNull();
+      v.st.time = 30;
+      engineTick(v);
+      await settle();
+      expect(calls.length).toBe(n);
+    });
+
+    it('drops a segment that arrives after the src changed', async () => {
+      const f = vodFiles();
+      let release;
+      f[seg(0)] = () => new Promise(r => { release = () => r(new Response(mp4Segment(0).all)); });
+      serve(f);
+      const v = fakeMedia({ src: MASTER });
+      tap.frameAt(0);
+      await settle();
+      expect(release).toBeTypeOf('function');
+      v.st.src = 'https://cdn.test/w/index.m3u8';
+      engineTick(v);
+      release();
+      await settle();
+      expect(decodes.length).toBe(0);
+      expect(tap.frameAt(2)).toBeNull();
     });
   });
 });
