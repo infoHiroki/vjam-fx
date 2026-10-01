@@ -445,6 +445,33 @@ describe('mse-tap', () => {
       }
     });
 
+    it('batches small fragments until minBytes (low-latency streams like Twitch)', () => {
+      // 1 秒おきの小さい断片
+      const f1 = mp4Segment(0), f2 = mp4Segment(44100), f3 = mp4Segment(88200);
+      const sp = lib.createMp4Splitter({ minBytes: f1.mdat.length * 2 + 1 });
+      expect(sp.push(bytes(init, f1.all))).toEqual([]);
+      expect(sp.push(f2.all)).toEqual([]);
+      const out = sp.push(f3.all);
+      expect(out.map(s => s.time)).toEqual([0]);
+      expect(same(out[0].data, bytes(init, f1.moof, f1.mdat, f2.moof, f2.mdat, f3.moof, f3.mdat))).toBe(true);
+    });
+
+    it('flushes a batch when the time jumps back (seek)', () => {
+      const sp = lib.createMp4Splitter({ minBytes: 1e9 });
+      sp.push(bytes(init, s2.all));
+      const out = sp.push(s1.all);
+      expect(out.map(s => s.time)).toEqual([10]);
+    });
+
+    it('drops a pending batch on reset', () => {
+      const f1 = mp4Segment(0), f2 = mp4Segment(44100), f3 = mp4Segment(88200);
+      const sp = lib.createMp4Splitter({ minBytes: f1.mdat.length * 2 });
+      sp.push(bytes(init, f1.all));
+      sp.reset();
+      expect(sp.push(f2.all)).toEqual([]);
+      expect(sp.push(f3.all).map(s => s.time)).toEqual([1]);
+    });
+
     it('accepts styp / sidx between segments', () => {
       const styp = box('styp', [0x6D, 0x73, 0x64, 0x68], [0, 0, 0, 0]);
       const sidx = fullBox('sidx', 0, new Array(24).fill(0));
@@ -687,6 +714,7 @@ describe('mse-tap', () => {
         }
       };
       lib = loadTap()._lib;
+      lib.config.mp4MinBatch = 0; // テストの断片は小さいので、まとめずに 1 つずつ出す
     });
 
     afterEach(() => {

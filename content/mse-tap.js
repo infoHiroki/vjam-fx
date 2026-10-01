@@ -25,6 +25,8 @@
   var HLS_EVERY = 500;           // frameAt から HLS を見に行く間隔(ms)
   var HLS_BEHIND = 2;            // 取りに行く区切りは [再生位置 - 2 秒, 再生位置 + 15 秒] にかかるものだけ
   var HLS_AHEAD = 15;
+  // fMP4 の断片がこれより小さい(低遅延配信の 0.数秒の断片)ときは、たまるまでまとめてデコード。テストからは _lib.config で変える
+  var CONFIG = { mp4MinBatch: 16000 };
   var EMPTY = new Uint8Array(0);
 
   // ---- bytes ----
@@ -257,16 +259,25 @@
     return -1;
   }
 
-  // push(bytes) → [{ data: init + moof + mdat, time: 秒(timestampOffset 抜き) }]
-  function createMp4Splitter() {
+  // push(bytes) → [{ data: init + moof + mdat (+ moof + mdat ...), time: 秒(timestampOffset 抜き) }]
+  // opts.minBytes: mdat の合計がこれに届くまで断片をまとめる(短すぎる断片は decodeAudioData が失敗する。Twitch など)
+  function createMp4Splitter(opts) {
+    var minBytes = (opts && opts.minBytes) || 0;
     var pend = EMPTY, ftyp = null, init = null, timescale = 0, moof = null;
+    var batch = [], batchTime = NaN, batchBytes = 0, lastTime = NaN;
     var self = { resyncs: 0 };
+
+    function dropBatch() { batch = []; batchTime = NaN; batchBytes = 0; lastTime = NaN; }
+    function flush(out) {
+      if (batch.length && init) out.push({ data: concat.apply(null, [init].concat(batch)), time: batchTime });
+      dropBatch();
+    }
 
     self.push = function(b) {
       var out = [];
       if (pend.length && isSegmentStart(b)) {
         // 途中の box が終わらないうちに新しいセグメント = 流し直し
-        pend = EMPTY; moof = null; self.resyncs++;
+        pend = EMPTY; moof = null; self.resyncs++; dropBatch();
       }
       pend = pend.length ? concat(pend, b) : b;
       var p = 0;
@@ -284,15 +295,20 @@
         var box = pend.subarray(p, p + h.size);
         p += h.size;
         if (h.type === 'ftyp') {
-          ftyp = box.slice(); init = null; moof = null;
+          ftyp = box.slice(); init = null; moof = null; dropBatch();
         } else if (h.type === 'moov') {
           init = ftyp ? concat(ftyp, box) : box.slice();
-          timescale = mp4Timescale(box);
+          timescale = mp4Timescale(box); dropBatch();
         } else if (h.type === 'moof') {
           moof = box.slice();
         } else if (h.type === 'mdat') {
           if (moof && init && timescale > 0) {
-            out.push({ data: concat(init, moof, box), time: tfdtTime(moof) / timescale });
+            var t = tfdtTime(moof) / timescale;
+            // 時刻が戻った・大きく跳んだ(シーク)ら、まとめていた分を先に出す
+            if (batch.length && (!(t >= lastTime) || t - lastTime > 5)) flush(out);
+            if (!batch.length) batchTime = t;
+            batch.push(moof, box.slice()); batchBytes += box.length; lastTime = t;
+            if (batchBytes >= minBytes) flush(out);
           }
           moof = null;
         }
@@ -302,7 +318,7 @@
       return out;
     };
 
-    self.reset = function() { pend = EMPTY; moof = null; };
+    self.reset = function() { pend = EMPTY; moof = null; dropBatch(); };
     return self;
   }
 
@@ -716,7 +732,7 @@
 
   function createSplitter(type) {
     if (/webm/i.test(type)) return createWebmSplitter();
-    if (/mp4/i.test(type)) return createMp4Splitter();
+    if (/mp4/i.test(type)) return createMp4Splitter({ minBytes: CONFIG.mp4MinBatch });
     return null;
   }
 
@@ -1021,6 +1037,7 @@
       mp4Timescale: mp4Timescale,
       tfdtTime: tfdtTime,
       createMp4Splitter: createMp4Splitter,
+      config: CONFIG,
       parsePlaylist: parsePlaylist,
       pickSegment: pickSegment,
       tsAudio: tsAudio,
