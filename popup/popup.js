@@ -232,7 +232,7 @@ const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'colo
 
 const DEFAULT_SETTINGS = {
   fadeDuration: 1.5,
-  barsPerCycle: 8,
+  barsPerCycle: 16, // Auto が切り替える拍数
   sensitivity: 'mid',
 };
 
@@ -240,7 +240,10 @@ const SENSITIVITY_MAP = { lo: 0.5, mid: 1.0, hi: 2.0 };
 
 class PopupController {
   constructor() {
-    this.presets = ALL_PRESETS;
+    this.presets = ALL_PRESETS; // 手動の一覧(全部)
+    // デフォルトプール(Next / Auto / Rnd の抽選対象)。読めるまで・読めないときは全プリセット + エンジン既定の filter / blend
+    this.poolPresets = ALL_PRESETS;
+    this.pool = null; // { filters, blends } — エンジンに引数で渡す(エンジンは MAIN world なので fetch しない)
     this.activeLayers = new Set();  // preset IDs currently active
     this.activeFilters = new Set();
     this.selectedBlendMode = 'screen';
@@ -275,6 +278,7 @@ class PopupController {
 
     await this._loadSettings();
     await this._loadScenes();
+    await this._loadPool();
     this._buildPresetList();
     await this._syncState();
     this._bindEvents();
@@ -464,6 +468,27 @@ class PopupController {
     } catch (e) { /* storage not available */ }
   }
 
+  // デフォルトプールを読む(popup は拡張のページなので fetch できる)。知らないプリセットは無視
+  async _loadPool() {
+    try {
+      const res = await fetch('/content/default-pool.json');
+      const pool = await res.json();
+      const ids = new Set(Array.isArray(pool.presets) ? pool.presets : []);
+      const presets = ALL_PRESETS.filter(p => ids.has(p.id));
+      if (presets.length > 0) this.poolPresets = presets;
+      this.pool = { filters: pool.filters, blends: pool.blends };
+    } catch (e) { /* 読めない: 今の全プリセットで動く */ }
+  }
+
+  // Auto / Rnd の開始コマンド(抽選対象はプール)
+  _autoCycleCommand(extra) {
+    return { action: 'startAutoCycle', presets: this.poolPresets.map(p => p.id), interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, pool: this.pool, ...extra };
+  }
+
+  _autoFXCommand() {
+    return { action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters, pool: this.pool };
+  }
+
   async _loadScenes() {
     try {
       const result = await chrome.storage.local.get('vjamfx_scenes');
@@ -531,7 +556,7 @@ class PopupController {
       if (layers.length > 0) {
         await this._sendCommand({ action: 'start', preset: layers[0], blendMode: scene.blendMode || 'screen' });
         for (let i = 1; i < layers.length; i++) {
-          await this._sendCommand({ action: 'addLayer', preset: layers[i] });
+          await this._sendAddLayer(layers[i]);
         }
       } else {
         // Empty scene — deactivate
@@ -558,10 +583,9 @@ class PopupController {
       // Re-apply current Auto/Rnd state (don't restore from scene — keep current popup state)
       if (this.autoCycleActive) {
         await this._injectAllPresets();
-        const allIds = this.presets.map(p => p.id);
-        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, skipFirstTick: true });
+        await this._sendCommand(this._autoCycleCommand({ skipFirstTick: true }));
       } else if (this.autoBlend || this.autoFilters) {
-        await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+        await this._sendCommand(this._autoFXCommand());
       }
 
       // Start audio if enabled
@@ -604,7 +628,7 @@ class PopupController {
           opacity: this.opacity,
           audioEnabled: this.audioEnabled,
           filters: [...this.activeFilters],
-          autoCyclePresets: this.autoCycleActive ? this.presets.map(p => p.id) : null,
+          autoCyclePresets: this.autoCycleActive ? this.poolPresets.map(p => p.id) : null,
           autoBlend: this.autoBlend,
           autoFilters: this.autoFilters,
           locks: this.locks,
@@ -675,12 +699,11 @@ class PopupController {
     if (cycleEl) {
       cycleEl.addEventListener('change', async () => {
         const val = parseInt(cycleEl.value, 10);
-        this.settings.barsPerCycle = isNaN(val) || val < 1 ? 8 : val;
+        this.settings.barsPerCycle = isNaN(val) || val < 1 ? DEFAULT_SETTINGS.barsPerCycle : val;
         this._saveSettings();
         // Re-send auto-cycle with updated bars if active
         if (this.autoCycleActive) {
-          const allIds = this.presets.map(p => p.id);
-          await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+          await this._sendCommand(this._autoCycleCommand());
         }
       });
     }
@@ -999,8 +1022,8 @@ class PopupController {
         // Kill with locks so engine preserves locked state
         await this._sendCommand({ action: 'kill', locks: this.locks });
         if (!this.locks.effect) {
-          const count = 1 + Math.floor(Math.random() * Math.min(3, this.presets.length));
-          const shuffled = this.presets.slice();
+          const count = 1 + Math.floor(Math.random() * Math.min(3, this.poolPresets.length));
+          const shuffled = this.poolPresets.slice();
           for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
           const chosen = shuffled.slice(0, count);
           // Only inject chosen presets (not all 204)
@@ -1031,7 +1054,7 @@ class PopupController {
         }
         // Re-start standalone Rnd if active (kill stops engine-side timers)
         if (this.autoBlend || this.autoFilters) {
-          await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+          await this._sendCommand(this._autoFXCommand());
         }
         // Start video audio if needed
         if (this.audioEnabled) {
@@ -1070,8 +1093,7 @@ class PopupController {
             await this._startAll();
           }
           await this._injectAllPresets();
-          const allIds = this.presets.map(p => p.id);
-          await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+          await this._sendCommand(this._autoCycleCommand());
           // Clear preset checkboxes — auto-cycle manages presets automatically
           document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
           this._updateLayerCount();
@@ -1079,7 +1101,7 @@ class PopupController {
           await this._sendCommand({ action: 'stopAutoCycle' });
           // Blend Random / Filter Random が残っていれば独立動作を継続
           if (this.autoBlend || this.autoFilters) {
-            await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+            await this._sendCommand(this._autoFXCommand());
           }
         }
         this._saveState();
@@ -1117,7 +1139,7 @@ class PopupController {
         if (this.autoCycleActive) {
           await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         } else if (this.autoBlend || this.autoFilters) {
-          await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+          await this._sendCommand(this._autoFXCommand());
         } else {
           await this._sendCommand({ action: 'stopAutoFX' });
         }
@@ -1138,7 +1160,7 @@ class PopupController {
         if (this.autoCycleActive) {
           await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
         } else if (this.autoBlend || this.autoFilters) {
-          await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+          await this._sendCommand(this._autoFXCommand());
         } else {
           await this._sendCommand({ action: 'stopAutoFX' });
         }
@@ -1197,8 +1219,9 @@ class PopupController {
     this._injectedPresets.add(presetId);
   }
 
+  // Auto 用: プールのプリセットを全部 inject
   async _injectAllPresets() {
-    const toInject = this.presets.filter(p => !this._injectedPresets.has(p.id));
+    const toInject = this.poolPresets.filter(p => !this._injectedPresets.has(p.id));
     if (toInject.length === 0) return;
     const BATCH = 20;
     for (let i = 0; i < toInject.length; i += BATCH) {
@@ -1237,7 +1260,7 @@ class PopupController {
       });
 
       for (let i = 1; i < layers.length; i++) {
-        await this._sendCommand({ action: 'addLayer', preset: layers[i] });
+        await this._sendAddLayer(layers[i]);
       }
 
       for (const f of this.activeFilters) {
@@ -1258,10 +1281,9 @@ class PopupController {
       // Re-start Auto/Rnd if active
       if (this.autoCycleActive) {
         await this._injectAllPresets();
-        const allIds = this.presets.map(p => p.id);
-        await this._sendCommand({ action: 'startAutoCycle', presets: allIds, interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks });
+        await this._sendCommand(this._autoCycleCommand());
       } else if (this.autoBlend || this.autoFilters) {
-        await this._sendCommand({ action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters });
+        await this._sendCommand(this._autoFXCommand());
       }
 
       await this._saveState();
@@ -1306,10 +1328,38 @@ class PopupController {
     try {
       await this._injectCore();
       await this._injectPreset(presetId);
-      await this._sendCommand({ action: 'addLayer', preset: presetId });
+      await this._sendAddLayer(presetId);
       await this._saveState();
     } catch (e) {
       console.warn('VJam FX: Failed to add layer', e);
+    }
+  }
+
+  // addLayer を送り、エンジンのレイヤー上限(iPad / iPhone は 3、それ以外は 5)で外れたものを popup のチェックからも外す
+  async _sendAddLayer(presetId) {
+    if (!this._tabId) return;
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        func: (preset) => {
+          const e = window._vjamFxEngine;
+          if (!e) return [];
+          const before = e.getActiveLayerNames();
+          e.handleMessage({ action: 'addLayer', preset: preset });
+          const after = e.getActiveLayerNames();
+          return before.filter(n => !after.includes(n));
+        },
+        args: [presetId],
+      });
+      if (!Array.isArray(result) || result.length === 0) return;
+      for (const id of result) this.activeLayers.delete(id);
+      document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
+        cb.checked = this.activeLayers.has(cb.value);
+      });
+      this._updateLayerCount();
+    } catch (e) {
+      console.warn('VJam FX: Failed to send command', e);
     }
   }
 

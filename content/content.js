@@ -30,6 +30,43 @@
     'blur':       'blur(3px)',
   };
 
+  // Rnd の候補が渡らないとき(SW のページ遷移復帰・プールが読めないとき)の filter。
+  // invert はオーバーレイの黒を白にしてページを潰し、blur は iPad で重いので外す
+  const FALLBACK_RND_FILTERS = ['hue-rotate', 'grayscale', 'saturate', 'brightness', 'contrast', 'sepia'].map(n => FILTER_VALUES[n]);
+
+  // VJam 本体と同じ回し方: 拍で数えて切り替え、blend は 90%・filter は 60% で変え、4〜6 回に 1 回 0.5 秒休む
+  const SWITCH_BEATS = 16;
+  const BLEND_CHANGE_RATE = 0.9;
+  const FILTER_CHANGE_RATE = 0.6;
+  const REST_MS = 500;
+
+  // 45fps を 2 秒続けて割ったら p5 を 30fps に落とす
+  const LOW_FPS = 45;
+  const LOW_FPS_SECONDS = 2;
+  const THROTTLED_FPS = 30;
+
+  // iPad / iPhone(iPadOS は Mac の UA を名乗るのでタッチ点の数で見分ける)
+  function isIOS() {
+    const ua = navigator.userAgent || '';
+    return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  }
+
+  function pickOne(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  // プールの filters(CSS の filter 文字列)。空・不正なら既定
+  function poolFilters(pool) {
+    const list = pool && Array.isArray(pool.filters) ? pool.filters.filter(f => typeof f === 'string' && f) : [];
+    return list.length ? list : FALLBACK_RND_FILTERS;
+  }
+
+  // プールの blends(使えるものだけ)。空なら全部
+  function poolBlends(pool) {
+    const list = pool && Array.isArray(pool.blends) ? pool.blends.filter(b => VALID_BLEND_MODES.includes(b)) : [];
+    return list.length ? list : VALID_BLEND_MODES;
+  }
+
   // 背景色の rgb(数値の配列)。透明(alpha 0)なら null
   function backgroundRgb(el) {
     const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
@@ -71,6 +108,15 @@
       // Multi-layer support
       this.activeLayers = new Map(); // name → { preset, container }
       this.activeFilters = new Set();
+      this._rndFilter = ''; // Rnd が選んだ filter(CSS 文字列 1 つ)。activeFilters(手動のボタン)とは別に持つ
+      this._maxLayers = isIOS() ? 3 : 5;
+
+      // 軽さ: 45fps を割り続けたら p5 を 30fps に落とす(OFF にするまで戻さない)
+      this._fpsThrottled = false;
+      this._fpsMeter = null;
+
+      // MSE タップの BPM(Auto / Rnd の間隔用。取れていなければ 0)
+      this._mseBpm = 0;
 
       // Video audio capture
       this._videoAudioMedia = null;
@@ -410,8 +456,11 @@
 
     // --- MSE tap (Safari: content/mse-tap.js が document_start で window.__vjamMse を入れる) ---
 
-    // 再生時刻を読む要素。再生中のものを優先
+    // 再生時刻を読む要素。mse-tap が本編を選べるならそれ(再生中で一番大きいもの。広告や幅 0 のダミーを避ける)、
+    // 選べない版なら再生中のものを優先
     _mseMedia() {
+      var mse = window.__vjamMse;
+      if (mse && typeof mse.media === 'function') return mse.media();
       var list = document.querySelectorAll('video, audio');
       for (var i = 0; i < list.length; i++) {
         if (!list[i].paused) return list[i];
@@ -421,12 +470,14 @@
 
     // 今の再生位置の MSE 解析。__vjamMse が無い(Chrome)・データが無い・一時停止中は null
     _readMseAudioData() {
+      this._mseBpm = 0;
       var mse = window.__vjamMse;
       if (!mse || typeof mse.frameAt !== 'function') return null;
       var media = this._mseMedia();
       if (!media || media.paused) return null;
       var f = mse.frameAt(media.currentTime);
       if (!f) return null;
+      this._mseBpm = f.bpm > 0 ? f.bpm : 0;
       var sens = this._audioSensitivity;
       return { beat: !!f.beat, bpm: f.bpm, strength: Math.min(1, f.strength * sens), rms: f.rms * sens, bass: Math.min(1, f.bass * sens), mid: Math.min(1, f.mid * sens), treble: Math.min(1, f.treble * sens) };
     }
@@ -491,9 +542,28 @@
       return (this.blendMode === 'screen' && this.isLightPage) ? 'difference' : this.blendMode;
     }
 
-    _randomBlendMode() {
-      const modes = this.isLightPage ? LIGHT_PAGE_BLEND_MODES : VALID_BLEND_MODES;
-      return modes[Math.floor(Math.random() * modes.length)];
+    // プールの blends から 1 つ。ライトページは difference / exclusion に限る(プールに無ければその 2 つから)
+    _randomBlendMode(pool) {
+      let modes = poolBlends(pool);
+      if (this.isLightPage) {
+        const visible = modes.filter(m => LIGHT_PAGE_BLEND_MODES.includes(m));
+        modes = visible.length ? visible : LIGHT_PAGE_BLEND_MODES;
+      }
+      return pickOne(modes);
+    }
+
+    // Rnd の blend。force でなければ 90% で変える
+    _randomizeBlend(pool, force) {
+      if (!force && Math.random() >= BLEND_CHANGE_RATE) return;
+      this.setBlendMode(this._randomBlendMode(pool));
+    }
+
+    // Rnd の filter。プールから 1 つだけ選んで掛ける(重ね掛けしない)。force でなければ 60% で変え、それ以外は「なし」も含めて維持
+    _randomizeFilter(pool, force) {
+      if (!force && Math.random() >= FILTER_CHANGE_RATE) return;
+      this.activeFilters.clear();
+      this._rndFilter = pickOne(poolFilters(pool));
+      this._applyFilters();
     }
 
     setOpacity(value) {
@@ -547,8 +617,14 @@
       if (canvas) {
         canvas.style.mixBlendMode = this._effectiveBlendMode();
       }
+      if (this._fpsThrottled) this._setLayerFps(preset, THROTTLED_FPS);
 
       this.activeLayers.set(presetName, { preset: preset, container: layerDiv });
+
+      // レイヤー上限(iPad / iPhone は 3、それ以外は 5)。超えたら古いものから外す
+      while (this.activeLayers.size > this._maxLayers) {
+        this._removeLayer(this.activeLayers.keys().next().value);
+      }
 
       // Fade in on next frame
       requestAnimationFrame(() => { layerDiv.style.opacity = '1'; });
@@ -652,11 +728,39 @@
           }
         }
         if (self._textOverlay) self._textOverlay.tick();
+        if (audioData && audioData.beat) self._onBeat();
+        self._trackFps(timestamp);
 
         self._rafId = requestAnimationFrame(loop);
       };
 
       this._rafId = requestAnimationFrame(loop);
+    }
+
+    // 1 秒ごとの fps を見て、45fps を 2 秒続けて割ったら全レイヤーの p5 を 30fps に落とす
+    _trackFps(now) {
+      if (this._fpsThrottled) return;
+      const m = this._fpsMeter;
+      // 初回・タブが裏にいた(rAF が止まっていた)ときは数え直す
+      if (!m || now - m.last > 1000) {
+        this._fpsMeter = { start: now, last: now, frames: 0, low: 0 };
+        return;
+      }
+      m.last = now;
+      m.frames++;
+      if (now - m.start < 1000) return;
+      const fps = m.frames * 1000 / (now - m.start);
+      m.low = fps < LOW_FPS ? m.low + 1 : 0;
+      m.start = now;
+      m.frames = 0;
+      if (m.low >= LOW_FPS_SECONDS) {
+        this._fpsThrottled = true;
+        for (const [, layer] of this.activeLayers) this._setLayerFps(layer.preset, THROTTLED_FPS);
+      }
+    }
+
+    _setLayerFps(preset, fps) {
+      if (preset && preset.p5 && typeof preset.p5.frameRate === 'function') preset.p5.frameRate(fps);
     }
 
     stop() {
@@ -678,6 +782,10 @@
 
       this.currentPreset = null;
       this.currentPresetName = null;
+
+      // OFF にしたら fps の制限を解く(次に ON にしたときは 60fps から測り直す)
+      this._fpsThrottled = false;
+      this._fpsMeter = null;
     }
 
     destroy() {
@@ -704,6 +812,7 @@
 
       this._externalAudioData = null;
       this.activeFilters.clear();
+      this._rndFilter = '';
 
       // Allow re-injection by clearing singleton reference
       window._vjamFxEngine = null;
@@ -733,13 +842,15 @@
 
     clearFilters() {
       this.activeFilters.clear();
+      this._rndFilter = '';
       this._applyFilters();
     }
 
     _applyFilters() {
       if (!this.overlay) return;
-      const css = [...this.activeFilters].map(f => FILTER_VALUES[f]).filter(Boolean).join(' ') || 'none';
-      this.overlay.style.filter = css;
+      const parts = [...this.activeFilters].map(f => FILTER_VALUES[f]).filter(Boolean);
+      if (this._rndFilter) parts.push(this._rndFilter);
+      this.overlay.style.filter = parts.join(' ') || 'none';
     }
 
     /**
@@ -769,30 +880,42 @@
     }
 
     /**
-     * Randomize blend mode + filters
+     * Randomize blend mode + filter (options.pool: { filters, blends })
+     * 呼ばれたら必ず変える。blend も filter もプールから 1 つ
      */
     randomizeFX(options) {
-      const skipBlend = options && options.skipBlend;
+      const pool = options && options.pool;
+      if (!(options && options.skipBlend)) this._randomizeBlend(pool, true);
+      this._randomizeFilter(pool, true);
+    }
 
-      // Random blend mode (unless skipped)
-      if (!skipBlend) {
-        const mode = this._randomBlendMode();
-        this.setBlendMode(mode);
+    // N 拍ぶんの長さ(4〜15 秒にクランプ)。BPM が取れなければ base
+    _beatsInterval(beats, base) {
+      const bpm = this._tempoBpm();
+      if (!(bpm > 0)) return base;
+      return Math.max(4000, Math.min(15000, (60 / bpm) * beats * 1000));
+    }
+
+    // 今の BPM。音声ループと同じ優先順(MSE タップ → analyser → bridge)。取れなければ 0
+    _tempoBpm() {
+      if (this._mseBpm > 0) return this._mseBpm;
+      if (this._videoAudioAnalyser && this._videoAudioTempo > 0) return this._videoAudioTempo;
+      if (this._externalAudioData && this._externalAudioData.bpm > 0) return this._externalAudioData.bpm;
+      return 0;
+    }
+
+    // 音声ループで拍が来るたびに呼ぶ。Auto / Rnd の拍を数え、届いたら切り替える
+    _onBeat() {
+      if (this._autoCycleTimer && ++this._autoCycleBeats >= this._barsPerCycle) this._autoSwitch();
+      if (this._autoFXTimer && ++this._autoFXBeats >= SWITCH_BEATS) {
+        this._autoFXTick();
+        this._scheduleAutoFX();
       }
-
-      // Random filters (each 30% chance)
-      this.activeFilters.clear();
-      const filterNames = Object.keys(FILTER_VALUES);
-      for (let i = 0; i < filterNames.length; i++) {
-        if (Math.random() < 0.3) {
-          this.activeFilters.add(filterNames[i]);
-        }
-      }
-      this._applyFilters();
-
     }
 
     // --- Auto-Cycle ---
+    // 拍で数えて切り替える(barsPerCycle 拍、既定 16)。拍が取れないときは時間の fallback(同じ拍数ぶん、4〜15 秒)。
+    // 4〜6 回に 1 回は休む(外して 0.5 秒後に切り替え)
 
     startAutoCycle(presetNames, intervalMs, options) {
       this._stopAutoCycle();
@@ -802,38 +925,60 @@
       this._autoCycleBaseInterval = intervalMs || 8000;
       this._autoBlend = !!(options && options.autoBlend);
       this._autoFilters = !!(options && options.autoFilters);
-      this._barsPerCycle = (options && options.barsPerCycle) || 4;
+      this._barsPerCycle = (options && options.barsPerCycle) || SWITCH_BEATS;
       this._autoCycleLocks = (options && options.locks) || {};
-
-      const self = this;
-      const scheduleNext = () => {
-        // Use BPM from audio to set interval (or fallback to base interval)
-        // Priority: video audio tempo → external bridge data
-        let interval = self._autoCycleBaseInterval;
-        let bpm = 0;
-        if (self._videoAudioAnalyser && self._videoAudioTempo > 0) {
-          bpm = self._videoAudioTempo;
-        } else if (self._externalAudioData && self._externalAudioData.bpm > 0) {
-          bpm = self._externalAudioData.bpm;
-        }
-        if (bpm > 0) {
-          interval = (60 / bpm) * (self._barsPerCycle || 4) * 1000; // beats in ms
-          interval = Math.max(4000, Math.min(15000, interval)); // Clamp 4-15 seconds
-        }
-        var timerId = setTimeout(() => {
-          // Guard: don't tick if cycle was stopped between schedule and fire
-          if (self._autoCycleTimer !== timerId) return;
-          self._autoCycleTick();
-          scheduleNext();
-        }, interval);
-        self._autoCycleTimer = timerId;
-      };
+      this._autoCyclePool = (options && options.pool) || null;
+      this._autoSwitchCount = 0;
+      this._autoRestAt = 4 + Math.floor(Math.random() * 3);
 
       // Skip first tick when only updating options (e.g. toggling Auto Blend/Filter)
       if (!(options && options.skipFirstTick)) {
         this._autoCycleTick();
       }
-      scheduleNext();
+      this._scheduleAutoCycle();
+    }
+
+    // 拍を数え直し、拍が取れないときの時間 fallback を張り直す。切り替えるたびに呼ぶ
+    _scheduleAutoCycle() {
+      clearTimeout(this._autoCycleTimer);
+      this._autoCycleBeats = 0;
+      const timerId = setTimeout(() => {
+        // Guard: don't tick if cycle was stopped between schedule and fire
+        if (this._autoCycleTimer !== timerId) return;
+        this._autoSwitch();
+      }, this._beatsInterval(this._barsPerCycle, this._autoCycleBaseInterval));
+      this._autoCycleTimer = timerId;
+    }
+
+    _autoSwitch() {
+      this._autoSwitchCount++;
+      if (this._autoSwitchCount < this._autoRestAt) {
+        this._autoCycleTick();
+        this._scheduleAutoCycle();
+        return;
+      }
+      // 休み: 外して 0.5 秒後に普通の切り替え(その間の拍では切り替えない)
+      this._autoSwitchCount = 0;
+      this._autoRestAt = 4 + Math.floor(Math.random() * 3);
+      this._autoCycleRest();
+      clearTimeout(this._autoCycleTimer);
+      this._autoCycleBeats = -Infinity;
+      const timerId = setTimeout(() => {
+        if (this._autoCycleTimer !== timerId) return;
+        this._autoCycleTick();
+        this._scheduleAutoCycle();
+      }, REST_MS);
+      this._autoCycleTimer = timerId;
+    }
+
+    // 休み: ロックされていないレイヤーを外し、Rnd が回している blend / filter を既定(screen / なし)に戻す
+    _autoCycleRest() {
+      const locks = this._autoCycleLocks || {};
+      if (!locks.effect) {
+        for (const name of [...this.activeLayers.keys()]) this._removeLayer(name);
+      }
+      if (this._autoBlend && !locks.blend) this.setBlendMode('screen');
+      if (this._autoFilters && !locks.filter) this.clearFilters();
     }
 
     updateAutoCycleOptions(options) {
@@ -877,24 +1022,9 @@
         }
       }
 
-      // Auto-blend: randomize blend mode (unless blend locked)
-      if (this._autoBlend && !locks.blend) {
-        const mode = this._randomBlendMode();
-        this.setBlendMode(mode);
-      }
-
-      // Auto-filters: randomize filters (unless filter locked)
-      if (this._autoFilters && !locks.filter) {
-        this.activeFilters.clear();
-        const filterNames = Object.keys(FILTER_VALUES);
-        for (let i = 0; i < filterNames.length; i++) {
-          if (Math.random() < 0.3) {
-            this.activeFilters.add(filterNames[i]);
-          }
-        }
-        this._applyFilters();
-      }
-
+      // Auto-blend / Auto-filters: プールから(unless locked)
+      if (this._autoBlend && !locks.blend) this._randomizeBlend(this._autoCyclePool);
+      if (this._autoFilters && !locks.filter) this._randomizeFilter(this._autoCyclePool);
     }
 
     _stopAutoCycle() {
@@ -905,51 +1035,31 @@
     }
 
     // --- Standalone Auto Blend/Filter (without preset Auto-Cycle) ---
+    // 16 拍ごと(拍が取れないときは 16 拍ぶんの時間、4〜15 秒)
 
     startAutoFX(options) {
       this._stopAutoFX();
       this._autoFXBlend = !!(options && options.autoBlend);
       this._autoFXFilters = !!(options && options.autoFilters);
+      this._autoFXPool = (options && options.pool) || null;
       if (!this._autoFXBlend && !this._autoFXFilters) return;
+      this._scheduleAutoFX();
+    }
 
-      const self = this;
-      const scheduleNext = () => {
-        let interval = 8000;
-        let bpm = 0;
-        if (self._videoAudioAnalyser && self._videoAudioTempo > 0) {
-          bpm = self._videoAudioTempo;
-        } else if (self._externalAudioData && self._externalAudioData.bpm > 0) {
-          bpm = self._externalAudioData.bpm;
-        }
-        if (bpm > 0) {
-          interval = (60 / bpm) * 4 * 1000;
-          interval = Math.max(4000, Math.min(15000, interval));
-        }
-        var fxTimerId = setTimeout(() => {
-          if (self._autoFXTimer !== fxTimerId) return;
-          self._autoFXTick();
-          scheduleNext();
-        }, interval);
-        self._autoFXTimer = fxTimerId;
-      };
-      scheduleNext();
+    _scheduleAutoFX() {
+      clearTimeout(this._autoFXTimer);
+      this._autoFXBeats = 0;
+      const timerId = setTimeout(() => {
+        if (this._autoFXTimer !== timerId) return;
+        this._autoFXTick();
+        this._scheduleAutoFX();
+      }, this._beatsInterval(SWITCH_BEATS, 8000));
+      this._autoFXTimer = timerId;
     }
 
     _autoFXTick() {
-      if (this._autoFXBlend) {
-        const mode = this._randomBlendMode();
-        this.setBlendMode(mode);
-      }
-      if (this._autoFXFilters) {
-        this.activeFilters.clear();
-        const filterNames = Object.keys(FILTER_VALUES);
-        for (let i = 0; i < filterNames.length; i++) {
-          if (Math.random() < 0.3) {
-            this.activeFilters.add(filterNames[i]);
-          }
-        }
-        this._applyFilters();
-      }
+      if (this._autoFXBlend) this._randomizeBlend(this._autoFXPool);
+      if (this._autoFXFilters) this._randomizeFilter(this._autoFXPool);
     }
 
     _stopAutoFX() {
@@ -977,6 +1087,7 @@
           }
           this._restoreRootBackground();
           this.activeFilters.clear();
+          this._rndFilter = '';
           break;
         case 'switchPreset':
           this.startPreset(msg.preset);
@@ -989,7 +1100,7 @@
           break;
         case 'setAudioEnabled':
           this.audioEnabled = !!msg.enabled;
-          if (!this.audioEnabled) this._externalAudioData = null;
+          if (!this.audioEnabled) { this._externalAudioData = null; this._mseBpm = 0; }
           break;
         case 'addLayer':
           if (!this.activeLayers.has(msg.preset)) {
@@ -1015,7 +1126,7 @@
           this.kill({ locks: msg.locks });
           break;
         case 'randomizeFX':
-          this.randomizeFX({ skipBlend: !!msg.skipBlend });
+          this.randomizeFX({ skipBlend: !!msg.skipBlend, pool: msg.pool });
           break;
         case 'setFadeDuration': {
           var fd = msg.duration != null ? msg.duration : 1.5;
@@ -1028,7 +1139,7 @@
           break;
         }
         case 'startAutoCycle':
-          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks, skipFirstTick: msg.skipFirstTick });
+          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks, skipFirstTick: msg.skipFirstTick, pool: msg.pool });
           break;
         case 'stopAutoCycle':
           this._stopAutoCycle();
@@ -1037,7 +1148,7 @@
           this.updateAutoCycleOptions({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, locks: msg.locks });
           break;
         case 'startAutoFX':
-          this.startAutoFX({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters });
+          this.startAutoFX({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, pool: msg.pool });
           break;
         case 'stopAutoFX':
           this._stopAutoFX();

@@ -1244,5 +1244,462 @@ describe('VJamFXEngine', () => {
       expect(layerPreset.updateAudio).toHaveBeenCalledTimes(1);
       expect(layerPreset.updateAudio.mock.calls[0][0].bpm).toBe(120);
     });
+
+    it('uses __vjamMse.media() to pick the main media when available', () => {
+      const main = document.createElement('video');
+      Object.defineProperty(main, 'paused', { value: false, configurable: true });
+      Object.defineProperty(main, 'currentTime', { value: 42, configurable: true });
+      window.__vjamMse.media = vi.fn(() => main);
+      startLoop();
+      tick(1000);
+      expect(window.__vjamMse.frameAt).toHaveBeenCalledWith(42);
+    });
+
+    it('does not read MSE when __vjamMse.media() finds no playing media', () => {
+      window.__vjamMse.media = vi.fn(() => null);
+      startLoop();
+      tick(1000);
+      expect(window.__vjamMse.frameAt).not.toHaveBeenCalled();
+    });
+
+    it('counts MSE beats for Auto / Rnd and measures fps in the loop', () => {
+      const onBeat = vi.spyOn(engine, '_onBeat');
+      const trackFps = vi.spyOn(engine, '_trackFps');
+      startLoop();
+      tick(1000);
+      expect(onBeat).toHaveBeenCalledTimes(1);
+      expect(trackFps).toHaveBeenCalledWith(1000);
+      window.__vjamMse.frameAt = vi.fn(() => ({ ...frame, beat: false }));
+      tick(2000);
+      expect(onBeat).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses the MSE BPM for the Auto / Rnd interval', () => {
+      startLoop();
+      tick(1000);
+      expect(engine._tempoBpm()).toBe(124);
+      expect(engine._beatsInterval(16, 8000)).toBeCloseTo(16 * 60 / 124 * 1000);
+      // データが無くなったら使わない
+      window.__vjamMse.frameAt = vi.fn(() => null);
+      tick(2000);
+      expect(engine._tempoBpm()).toBe(0);
+      expect(engine._beatsInterval(16, 8000)).toBe(8000);
+    });
+  });
+
+  // デフォルトプール + 軽さ対策(#6)
+  describe('default pool / VJam-style switching', () => {
+    const NAMES = ['pool-a', 'pool-b', 'pool-c', 'pool-d', 'pool-e', 'pool-f'];
+    const POOL = {
+      filters: ['saturate(2)', 'hue-rotate(90deg) saturate(2)', 'saturate(3) contrast(1.5)'],
+      blends: ['lighten', 'difference', 'plus-lighter'], // plus-lighter は FX に無いので使わない
+    };
+    const POOL_BLENDS = ['lighten', 'difference'];
+    const FALLBACK_FILTERS = ['hue-rotate(180deg)', 'grayscale(1)', 'saturate(2.5)', 'brightness(1.4)', 'contrast(1.5)', 'sepia(1)'];
+    const ALL_BLENDS = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
+
+    beforeAll(() => {
+      for (const name of NAMES) {
+        window.VJamFX.presets[name] = class {
+          constructor() { this.p5 = { frameRate: vi.fn(), remove() {} }; }
+          setup(container) { container.appendChild(document.createElement('canvas')); }
+          destroy() {}
+        };
+      }
+    });
+
+    afterAll(() => {
+      for (const name of NAMES) delete window.VJamFX.presets[name];
+    });
+
+    beforeEach(() => {
+      engine._fadeDuration = 0; // レイヤーをすぐ外す
+      engine.createOverlay();
+      engine.active = true;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    describe('Rnd filter', () => {
+      it('applies exactly one filter from the pool (never stacks)', () => {
+        for (let i = 0; i < 50; i++) {
+          engine.randomizeFX({ pool: POOL });
+          expect(POOL.filters).toContain(engine._rndFilter);
+          expect(engine.activeFilters.size).toBe(0);
+          expect(engine.overlay.style.filter).toBe(engine._rndFilter);
+        }
+      });
+
+      it('changes with 60% and otherwise keeps the current one (including none)', () => {
+        const rnd = vi.spyOn(Math, 'random');
+        rnd.mockReturnValue(0.7);
+        engine._randomizeFilter(POOL);
+        expect(engine._rndFilter).toBe('');
+        expect(['', 'none']).toContain(engine.overlay.style.filter);
+        rnd.mockReturnValue(0.5);
+        engine._randomizeFilter(POOL);
+        expect(engine._rndFilter).toBe(POOL.filters[1]);
+        rnd.mockReturnValue(0.99);
+        engine._randomizeFilter(POOL);
+        expect(engine._rndFilter).toBe(POOL.filters[1]);
+      });
+
+      it('replaces manual filters when it changes', () => {
+        engine.setFilter('invert', true);
+        engine.setFilter('sepia', true);
+        engine._randomizeFilter(POOL, true);
+        expect(engine.activeFilters.size).toBe(0);
+        expect(POOL.filters).toContain(engine.overlay.style.filter);
+      });
+
+      it('falls back to single filters without invert / blur when no pool is given', () => {
+        const seen = new Set();
+        for (let i = 0; i < 200; i++) {
+          engine.randomizeFX();
+          seen.add(engine._rndFilter);
+        }
+        expect([...seen].sort()).toEqual(FALLBACK_FILTERS.slice().sort());
+      });
+
+      it('falls back when the pool has no filters', () => {
+        engine._randomizeFilter({ filters: [], blends: POOL.blends }, true);
+        expect(FALLBACK_FILTERS).toContain(engine._rndFilter);
+      });
+
+      it('is cleared by clearFilters / kill / stop, and kept by kill with filter lock', () => {
+        engine._randomizeFilter(POOL, true);
+        engine.kill({ locks: { filter: true } });
+        expect(POOL.filters).toContain(engine.overlay.style.filter);
+        engine.clearFilters();
+        expect(engine._rndFilter).toBe('');
+        expect(engine.overlay.style.filter).toBe('none');
+        engine._randomizeFilter(POOL, true);
+        engine.kill({});
+        expect(engine.overlay.style.filter).toBe('none');
+        engine._randomizeFilter(POOL, true);
+        engine.handleMessage({ action: 'stop' });
+        expect(engine._rndFilter).toBe('');
+      });
+
+      it('keeps manual filter buttons working alongside the Rnd filter', () => {
+        engine._randomizeFilter(POOL, true);
+        const rndCss = engine._rndFilter;
+        engine.toggleFilter('sepia');
+        expect(engine.overlay.style.filter).toBe('sepia(1) ' + rndCss);
+        engine.toggleFilter('sepia');
+        expect(engine.overlay.style.filter).toBe(rndCss);
+      });
+    });
+
+    describe('Rnd blend', () => {
+      it('picks only from the pool blends that FX supports', () => {
+        const seen = new Set();
+        for (let i = 0; i < 100; i++) {
+          engine.randomizeFX({ pool: POOL });
+          seen.add(engine.blendMode);
+        }
+        expect([...seen].sort()).toEqual(POOL_BLENDS.slice().sort());
+      });
+
+      it('changes with 90% and otherwise keeps the current one', () => {
+        const rnd = vi.spyOn(Math, 'random');
+        rnd.mockReturnValue(0.95);
+        engine._randomizeBlend(POOL);
+        expect(engine.blendMode).toBe('screen');
+        rnd.mockReturnValue(0.5);
+        engine._randomizeBlend(POOL);
+        expect(engine.blendMode).toBe('difference');
+      });
+
+      it('uses all blend modes when no pool is given', () => {
+        const seen = new Set();
+        for (let i = 0; i < 200; i++) {
+          engine.randomizeFX();
+          seen.add(engine.blendMode);
+        }
+        expect([...seen].sort()).toEqual(ALL_BLENDS.slice().sort());
+      });
+
+      it('limits light pages to difference / exclusion within the pool', () => {
+        engine.isLightPage = true;
+        for (let i = 0; i < 50; i++) {
+          engine.randomizeFX({ pool: { blends: ['screen', 'lighten', 'difference'] } });
+          expect(engine.blendMode).toBe('difference');
+        }
+      });
+
+      it('uses difference / exclusion on light pages when the pool has neither', () => {
+        engine.isLightPage = true;
+        const seen = new Set();
+        for (let i = 0; i < 100; i++) {
+          engine.randomizeFX({ pool: { blends: ['screen', 'lighten'] } });
+          seen.add(engine.blendMode);
+        }
+        expect([...seen].sort()).toEqual(['difference', 'exclusion']);
+      });
+
+      it('respects skipBlend', () => {
+        engine.setBlendMode('lighten');
+        engine.handleMessage({ action: 'randomizeFX', skipBlend: true, pool: POOL });
+        expect(engine.blendMode).toBe('lighten');
+        expect(POOL.filters).toContain(engine._rndFilter);
+      });
+    });
+
+    describe('Auto / Rnd with the pool', () => {
+      it('Auto picks presets, blend and filter only from what popup passed', () => {
+        for (let i = 0; i < 30; i++) {
+          engine.handleMessage({ action: 'startAutoCycle', presets: NAMES.slice(0, 2), interval: 100000, autoBlend: true, autoFilters: true, pool: POOL });
+          for (const name of engine.getActiveLayerNames()) expect(NAMES.slice(0, 2)).toContain(name);
+          expect(['screen', ...POOL_BLENDS]).toContain(engine.blendMode);
+          expect(['', ...POOL.filters]).toContain(engine._rndFilter);
+          engine._stopAutoCycle();
+        }
+      });
+
+      it('Auto applies the pool on its tick', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        engine.startAutoCycle(NAMES, 100000, { autoBlend: true, autoFilters: true, pool: POOL });
+        expect(engine.blendMode).toBe('lighten');
+        expect(engine._rndFilter).toBe(POOL.filters[0]);
+      });
+
+      it('Auto without a pool (SW restore after navigation) uses the fallback', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        engine.handleMessage({ action: 'startAutoCycle', presets: NAMES, interval: 100000, autoBlend: true, autoFilters: true });
+        expect(engine.blendMode).toBe('screen');
+        expect(engine._rndFilter).toBe(FALLBACK_FILTERS[0]);
+      });
+
+      it('standalone Rnd applies the pool on its tick', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        engine.handleMessage({ action: 'startAutoFX', autoBlend: true, autoFilters: true, pool: POOL });
+        engine._autoFXTick();
+        expect(engine.blendMode).toBe('lighten');
+        expect(engine._rndFilter).toBe(POOL.filters[0]);
+      });
+    });
+
+    describe('beat counting', () => {
+      it('defaults Auto to 16 beats', () => {
+        engine.startAutoCycle(NAMES, 100000, {});
+        expect(engine._barsPerCycle).toBe(16);
+      });
+
+      it('switches Auto every barsPerCycle beats and restarts the time fallback', () => {
+        vi.useFakeTimers();
+        engine.startAutoCycle(NAMES, 8000, { barsPerCycle: 16 });
+        engine._autoRestAt = 100;
+        const tick = vi.spyOn(engine, '_autoCycleTick');
+        for (let i = 0; i < 15; i++) engine._onBeat();
+        vi.advanceTimersByTime(7000);
+        expect(tick).not.toHaveBeenCalled();
+        engine._onBeat();
+        expect(tick).toHaveBeenCalledTimes(1);
+        // 拍で切り替えたので、時間 fallback はここから数え直し
+        vi.advanceTimersByTime(7000);
+        expect(tick).toHaveBeenCalledTimes(1);
+        vi.advanceTimersByTime(1000);
+        expect(tick).toHaveBeenCalledTimes(2);
+      });
+
+      it('switches standalone Rnd every 16 beats', () => {
+        vi.useFakeTimers();
+        engine.startAutoFX({ autoFilters: true });
+        const tick = vi.spyOn(engine, '_autoFXTick');
+        for (let i = 0; i < 15; i++) engine._onBeat();
+        expect(tick).not.toHaveBeenCalled();
+        engine._onBeat();
+        expect(tick).toHaveBeenCalledTimes(1);
+        for (let i = 0; i < 16; i++) engine._onBeat();
+        expect(tick).toHaveBeenCalledTimes(2);
+      });
+
+      it('ignores beats when Auto / Rnd are off', () => {
+        const auto = vi.spyOn(engine, '_autoSwitch');
+        const fx = vi.spyOn(engine, '_autoFXTick');
+        for (let i = 0; i < 40; i++) engine._onBeat();
+        expect(auto).not.toHaveBeenCalled();
+        expect(fx).not.toHaveBeenCalled();
+      });
+
+      it('keeps the 4-15 s clamp for the time fallback', () => {
+        engine._videoAudioAnalyser = { disconnect() {} };
+        engine._videoAudioTempo = 120;
+        expect(engine._beatsInterval(16, 8000)).toBe(8000);
+        engine._videoAudioTempo = 60;
+        expect(engine._beatsInterval(16, 8000)).toBe(15000);
+        engine._videoAudioTempo = 300;
+        expect(engine._beatsInterval(16, 8000)).toBe(4000);
+        engine._videoAudioAnalyser = null;
+        expect(engine._beatsInterval(16, 12345)).toBe(12345);
+        engine._externalAudioData = { bpm: 128 };
+        expect(engine._beatsInterval(16, 8000)).toBe(7500);
+      });
+    });
+
+    describe('rest (every 4-6 switches)', () => {
+      it('draws the rest point from 4-6', () => {
+        const seen = new Set();
+        for (let i = 0; i < 100; i++) {
+          engine.startAutoCycle(NAMES, 100000, { skipFirstTick: true });
+          seen.add(engine._autoRestAt);
+        }
+        engine._stopAutoCycle();
+        expect([...seen].sort()).toEqual([4, 5, 6]);
+      });
+
+      it('drops layers, resets blend / filter, then switches 0.5 s later', () => {
+        vi.useFakeTimers();
+        engine.startAutoCycle(NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL });
+        engine._autoRestAt = 4;
+        for (let i = 0; i < 3; i++) {
+          vi.advanceTimersByTime(8000);
+          expect(engine.activeLayers.size).toBeGreaterThan(0);
+        }
+        engine._randomizeBlend(POOL, true);
+        engine._randomizeFilter(POOL, true);
+        vi.advanceTimersByTime(8000); // 4 回目 = 休み
+        expect(engine.activeLayers.size).toBe(0);
+        expect(engine.blendMode).toBe('screen');
+        expect(engine.overlay.style.filter).toBe('none');
+        // 休みの間の拍では切り替えない
+        for (let i = 0; i < 40; i++) engine._onBeat();
+        vi.advanceTimersByTime(499);
+        expect(engine.activeLayers.size).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(engine.activeLayers.size).toBeGreaterThan(0);
+        expect(engine._autoRestAt).toBeGreaterThanOrEqual(4);
+        expect(engine._autoRestAt).toBeLessThanOrEqual(6);
+        // そのあとは普通に拍で切り替わる
+        const tick = vi.spyOn(engine, '_autoCycleTick');
+        for (let i = 0; i < 16; i++) engine._onBeat();
+        expect(tick).toHaveBeenCalledTimes(1);
+      });
+
+      it('also rests when the switch comes from beats', () => {
+        engine.startAutoCycle(NAMES, 100000, { barsPerCycle: 4 });
+        engine._autoRestAt = 1;
+        for (let i = 0; i < 4; i++) engine._onBeat();
+        expect(engine.activeLayers.size).toBe(0);
+        engine._stopAutoCycle();
+      });
+
+      it('keeps locked layers / blend / filter and what Rnd does not drive', () => {
+        vi.useFakeTimers();
+        engine._addLayer(NAMES[0]);
+        engine.setBlendMode('lighten');
+        engine.setFilter('sepia', true);
+        engine.startAutoCycle(NAMES, 8000, { autoBlend: false, autoFilters: true, locks: { effect: true, filter: true }, skipFirstTick: true });
+        engine._autoRestAt = 1;
+        vi.advanceTimersByTime(8000);
+        expect(engine.getActiveLayerNames()).toEqual([NAMES[0]]);
+        expect(engine.blendMode).toBe('lighten');
+        expect(engine.activeFilters.has('sepia')).toBe(true);
+      });
+
+      it('does not switch after Auto is stopped during the rest', () => {
+        vi.useFakeTimers();
+        engine.startAutoCycle(NAMES, 8000, {});
+        engine._autoRestAt = 1;
+        vi.advanceTimersByTime(8000);
+        expect(engine.activeLayers.size).toBe(0);
+        engine.kill({});
+        vi.advanceTimersByTime(10000);
+        expect(engine.activeLayers.size).toBe(0);
+      });
+    });
+
+    describe('layer cap', () => {
+      function withDevice(ua, touchPoints, fn) {
+        Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true });
+        Object.defineProperty(navigator, 'maxTouchPoints', { value: touchPoints, configurable: true });
+        try { return fn(); } finally {
+          delete navigator.userAgent;
+          delete navigator.maxTouchPoints;
+        }
+      }
+
+      it.each([
+        ['iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15', 5, 3],
+        ['iPad (old UA)', 'Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/605.1.15', 5, 3],
+        ['iPadOS (Mac UA + touch)', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15', 5, 3],
+        ['Mac', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36', 0, 5],
+        ['Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 0, 5],
+      ])('%s → %i layers', (label, ua, touchPoints, max) => {
+        const e = withDevice(ua, touchPoints, () => new VJamFXEngine());
+        expect(e._maxLayers).toBe(max);
+        e.destroy();
+      });
+
+      it('drops the oldest layer beyond 5 on PC', () => {
+        expect(engine._maxLayers).toBe(5);
+        for (const name of NAMES) engine.handleMessage({ action: 'addLayer', preset: name });
+        expect(engine.getActiveLayerNames()).toEqual(NAMES.slice(1));
+      });
+
+      it('drops the oldest layers beyond 3 on iPad / iPhone', () => {
+        engine._maxLayers = 3;
+        for (const name of NAMES.slice(0, 5)) engine._addLayer(name);
+        expect(engine.getActiveLayerNames()).toEqual(NAMES.slice(2, 5));
+        expect(engine.overlay.querySelectorAll('[data-vjam-layer]').length).toBe(3);
+      });
+    });
+
+    describe('fps throttle', () => {
+      // fps で seconds 秒ぶん _trackFps を呼ぶ。最後の時刻を返す
+      function run(fps, seconds, t0) {
+        let t = t0 || 0;
+        const n = Math.round(seconds * fps);
+        for (let i = 0; i < n; i++) { t += 1000 / fps; engine._trackFps(t); }
+        return t;
+      }
+
+      it('drops p5 to 30fps after 2 s below 45fps', () => {
+        engine._addLayer(NAMES[0]);
+        const p = engine.activeLayers.get(NAMES[0]).preset.p5;
+        engine._trackFps(0);
+        let t = run(40, 1.5);
+        expect(p.frameRate).not.toHaveBeenCalled();
+        t = run(40, 0.5, t);
+        expect(p.frameRate).toHaveBeenCalledWith(30);
+        expect(engine._fpsThrottled).toBe(true);
+      });
+
+      it('does not throttle at 60fps or for a single slow second', () => {
+        engine._addLayer(NAMES[0]);
+        const p = engine.activeLayers.get(NAMES[0]).preset.p5;
+        engine._trackFps(0);
+        let t = run(60, 3);
+        t = run(40, 1, t);
+        t = run(60, 1, t);
+        t = run(40, 1, t);
+        expect(p.frameRate).not.toHaveBeenCalled();
+      });
+
+      it('ignores the time the tab was hidden', () => {
+        engine._trackFps(0);
+        let t = run(60, 0.5);
+        t = run(60, 0.5, t + 3000);
+        t = run(60, 0.5, t + 3000);
+        t = run(60, 0.5, t + 3000);
+        expect(engine._fpsThrottled).toBe(false);
+      });
+
+      it('applies 30fps to layers added after throttling, and resets on stop', () => {
+        engine._trackFps(0);
+        run(30, 2.1);
+        expect(engine._fpsThrottled).toBe(true);
+        engine._addLayer(NAMES[1]);
+        expect(engine.activeLayers.get(NAMES[1]).preset.p5.frameRate).toHaveBeenCalledWith(30);
+        engine.stop();
+        expect(engine._fpsThrottled).toBe(false);
+        engine._addLayer(NAMES[2]);
+        expect(engine.activeLayers.get(NAMES[2]).preset.p5.frameRate).not.toHaveBeenCalled();
+      });
+    });
   });
 });
