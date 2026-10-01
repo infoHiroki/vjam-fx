@@ -431,7 +431,7 @@ describe('PopupController', () => {
       expect(controller.settings.fadeDuration).toBe(1.5);
     });
 
-    it('should reject NaN barsPerCycle and use default 8', () => {
+    it('should reject NaN barsPerCycle and use default 16', () => {
       const cycleEl = document.createElement('input');
       cycleEl.id = 'setting-cycle';
       container.querySelector('.popup').appendChild(cycleEl);
@@ -441,10 +441,10 @@ describe('PopupController', () => {
       cycleEl.value = 'not-a-number';
       cycleEl.dispatchEvent(new Event('change'));
 
-      expect(controller.settings.barsPerCycle).toBe(8);
+      expect(controller.settings.barsPerCycle).toBe(16);
     });
 
-    it('should reject barsPerCycle < 1 and use default 8', () => {
+    it('should reject barsPerCycle < 1 and use default 16', () => {
       const cycleEl = document.createElement('input');
       cycleEl.id = 'setting-cycle';
       container.querySelector('.popup').appendChild(cycleEl);
@@ -454,7 +454,7 @@ describe('PopupController', () => {
       cycleEl.value = '0';
       cycleEl.dispatchEvent(new Event('change'));
 
-      expect(controller.settings.barsPerCycle).toBe(8);
+      expect(controller.settings.barsPerCycle).toBe(16);
     });
 
     it('should clamp fadeDuration to minimum 0', () => {
@@ -531,6 +531,151 @@ describe('PopupController', () => {
 
       // Should return early without changing state
       expect(controller.isActive).toBe(activeBefore);
+    });
+  });
+
+  // デフォルトプール(#6): Next / Auto / Rnd の抽選対象。手動の一覧は全部のまま
+  describe('default pool', () => {
+    const POOL = {
+      version: 1,
+      presets: ['rain', 'neon-tunnel', 'no-such-preset'],
+      filters: ['saturate(2)', 'hue-rotate(90deg) saturate(2)'],
+      blends: ['screen', 'difference'],
+    };
+
+    // executeScript に渡ったコマンド(_sendCommand の args[0])
+    const sentCommands = () => chrome.scripting.executeScript.mock.calls
+      .map(c => c[0].args && c[0].args[0])
+      .filter(m => m && m.action);
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('loads presets / filters / blends from content/default-pool.json (unknown ids are ignored)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ json: () => Promise.resolve(POOL) });
+      vi.stubGlobal('fetch', fetchMock);
+      await controller._loadPool();
+      expect(fetchMock).toHaveBeenCalledWith('/content/default-pool.json');
+      expect(controller.poolPresets.map(p => p.id).sort()).toEqual(['neon-tunnel', 'rain']);
+      expect(controller.pool).toEqual({ filters: POOL.filters, blends: POOL.blends });
+      // 手動の一覧は全部
+      expect(controller.presets.length).toBe(191);
+    });
+
+    it('falls back to all presets when the pool cannot be read', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('not found')));
+      await controller._loadPool();
+      expect(controller.poolPresets.length).toBe(191);
+      expect(controller.pool).toBeNull();
+    });
+
+    it('falls back to all presets when the pool has no known preset', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: () => Promise.resolve({ ...POOL, presets: ['no-such-preset'] }) }));
+      await controller._loadPool();
+      expect(controller.poolPresets.length).toBe(191);
+    });
+
+    it('Next picks presets only from the pool', async () => {
+      const btn = document.createElement('button');
+      btn.id = 'btn-next';
+      container.querySelector('.popup').appendChild(btn);
+      controller._bindEvents();
+      controller.isActive = true;
+      controller._coreInjected = true;
+      controller.poolPresets = controller.presets.filter(p => p.id === 'rain');
+
+      for (let i = 0; i < 5; i++) {
+        btn.click();
+        await new Promise(r => setTimeout(r, 0));
+        await vi.waitFor(() => expect(controller._busy).toBe(false));
+      }
+      const picked = sentCommands().filter(m => m.action === 'start' || m.action === 'addLayer').map(m => m.preset);
+      expect(picked.length).toBeGreaterThan(0);
+      expect(new Set(picked)).toEqual(new Set(['rain']));
+      expect([...controller.activeLayers]).toEqual(['rain']);
+    });
+
+    it('Auto sends the pool presets and the pool to the engine', async () => {
+      const btn = document.createElement('button');
+      btn.id = 'btn-auto-cycle';
+      container.querySelector('.popup').appendChild(btn);
+      controller._bindEvents();
+      controller.isActive = true;
+      controller._coreInjected = true;
+      controller.poolPresets = controller.presets.filter(p => p.id === 'rain' || p.id === 'neon-tunnel');
+      controller.pool = { filters: POOL.filters, blends: POOL.blends };
+
+      btn.click();
+      await vi.waitFor(() => expect(sentCommands().some(m => m.action === 'startAutoCycle')).toBe(true));
+      const cmd = sentCommands().find(m => m.action === 'startAutoCycle');
+      expect(cmd.presets.sort()).toEqual(['neon-tunnel', 'rain']);
+      expect(cmd.pool).toEqual(controller.pool);
+      expect(cmd.barsPerCycle).toBe(16);
+      // Auto 用の inject もプールの分だけ
+      const injected = chrome.scripting.executeScript.mock.calls
+        .map(c => c[0].files && c[0].files[0])
+        .filter(f => f && f.startsWith('content/presets/'));
+      expect(injected.sort()).toEqual(['content/presets/neon-tunnel.js', 'content/presets/rain.js']);
+    });
+
+    it('Rnd sends the pool to the engine', async () => {
+      const btn = document.createElement('button');
+      btn.id = 'auto-filters';
+      container.querySelector('.popup').appendChild(btn);
+      controller._bindEvents();
+      controller.pool = { filters: POOL.filters, blends: POOL.blends };
+
+      btn.click();
+      await vi.waitFor(() => expect(sentCommands().some(m => m.action === 'startAutoFX')).toBe(true));
+      const cmd = sentCommands().find(m => m.action === 'startAutoFX');
+      expect(cmd).toEqual({ action: 'startAutoFX', autoBlend: false, autoFilters: true, pool: controller.pool });
+    });
+
+    it('saves the pool presets as autoCyclePresets (SW re-injects them after navigation)', async () => {
+      controller.isActive = true;
+      controller.autoCycleActive = true;
+      controller.poolPresets = controller.presets.filter(p => p.id === 'rain');
+      await controller._saveState();
+      const call = chrome.runtime.sendMessage.mock.calls[0];
+      expect(call[0].state.autoCyclePresets).toEqual(['rain']);
+    });
+  });
+
+  // エンジンのレイヤー上限(iPad / iPhone は 3、それ以外は 5)で外れたレイヤーは、popup のチェックも外す
+  describe('layer cap sync', () => {
+    it('unchecks the layers the engine dropped', async () => {
+      const list = document.getElementById('preset-list');
+      for (const id of ['rain', 'neon-tunnel']) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = id;
+        cb.checked = true;
+        list.appendChild(cb);
+      }
+      controller.activeLayers.add('rain');
+      controller.activeLayers.add('neon-tunnel');
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ result: ['rain'] }]);
+
+      await controller._sendAddLayer('neon-tunnel');
+
+      expect([...controller.activeLayers]).toEqual(['neon-tunnel']);
+      expect(list.querySelector('input[value="rain"]').checked).toBe(false);
+      expect(list.querySelector('input[value="neon-tunnel"]').checked).toBe(true);
+    });
+
+    it('runs addLayer in the engine and returns what was dropped', async () => {
+      await controller._sendAddLayer('rain');
+      const { func, args } = chrome.scripting.executeScript.mock.calls[0][0];
+      expect(args).toEqual(['rain']);
+      const engine = {
+        layers: ['a', 'b'],
+        getActiveLayerNames() { return this.layers.slice(); },
+        handleMessage(msg) { this.layers.push(msg.preset); this.layers.shift(); },
+      };
+      window._vjamFxEngine = engine;
+      expect(func('rain')).toEqual(['a']);
+      delete window._vjamFxEngine;
     });
   });
 });
