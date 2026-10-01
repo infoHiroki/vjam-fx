@@ -25,6 +25,8 @@ describe('VJamFXEngine', () => {
   });
 
   beforeEach(() => {
+    // 既定はダークページ（ライトページは 'light page' describe で個別に検証）
+    document.body.style.backgroundColor = 'rgb(17, 17, 17)';
     // Create fresh engine for each test
     engine = new VJamFXEngine();
     vi.clearAllMocks();
@@ -33,6 +35,63 @@ describe('VJamFXEngine', () => {
   afterEach(() => {
     engine.destroy();
     document.querySelectorAll('[data-vjam-fx]').forEach(el => el.remove());
+    document.body.style.backgroundColor = '';
+    document.documentElement.style.backgroundColor = '';
+  });
+
+  describe('light page', () => {
+    it('should treat transparent body + transparent html as light', () => {
+      document.body.style.backgroundColor = '';
+      engine.createOverlay();
+      expect(engine.isLightPage).toBe(true);
+      expect(engine.overlay.style.mixBlendMode).toBe('difference');
+    });
+
+    it('should fall back to html background when body is transparent', () => {
+      document.body.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+      document.documentElement.style.backgroundColor = 'rgb(15, 15, 15)';
+      engine.createOverlay();
+      expect(engine.isLightPage).toBe(false);
+      expect(engine.overlay.style.mixBlendMode).toBe('screen');
+    });
+
+    it('should render default screen as difference when start sends screen', () => {
+      document.body.style.backgroundColor = 'rgb(255, 255, 255)';
+      engine.handleMessage({ action: 'start', preset: 'neon-tunnel', blendMode: 'screen' });
+      expect(engine.overlay.style.mixBlendMode).toBe('difference');
+      const canvas = engine.overlay.querySelector('canvas');
+      if (canvas) expect(canvas.style.mixBlendMode).toBe('difference');
+    });
+
+    it('should keep reporting screen (user value) so popup/SW do not save difference', () => {
+      document.body.style.backgroundColor = 'rgb(255, 255, 255)';
+      engine.handleMessage({ action: 'start', preset: 'neon-tunnel', blendMode: 'screen' });
+      expect(engine.blendMode).toBe('screen');
+    });
+
+    it('should reset to screen on kill and still render difference', () => {
+      document.body.style.backgroundColor = 'rgb(255, 255, 255)';
+      engine.handleMessage({ action: 'start', preset: 'neon-tunnel', blendMode: 'exclusion' });
+      engine.kill({});
+      expect(engine.blendMode).toBe('screen');
+      expect(engine.overlay.style.mixBlendMode).toBe('difference');
+    });
+
+    it('should respect explicit non-screen blend on light page', () => {
+      document.body.style.backgroundColor = 'rgb(255, 255, 255)';
+      engine.createOverlay();
+      engine.setBlendMode('lighten');
+      expect(engine.blendMode).toBe('lighten');
+    });
+
+    it('should only randomize to visible blend modes on light page', () => {
+      document.body.style.backgroundColor = 'rgb(255, 255, 255)';
+      engine.createOverlay();
+      for (let i = 0; i < 50; i++) {
+        engine.randomizeFX();
+        expect(['difference', 'exclusion']).toContain(engine.blendMode);
+      }
+    });
   });
 
   describe('constructor', () => {

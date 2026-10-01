@@ -16,6 +16,8 @@
   if (window._vjamFxEngine) return;
 
   const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
+  // 白背景では screen/lighten/color-dodge が白のまま＝見えないので、ランダムはこの2つだけ
+  const LIGHT_PAGE_BLEND_MODES = ['difference', 'exclusion'];
 
   const FILTER_VALUES = {
     'invert':     'invert(1)',
@@ -29,10 +31,15 @@
   };
 
   function isLightPage() {
-    const bg = getComputedStyle(document.body).backgroundColor;
-    const m = bg.match(/\d+/g);
-    if (!m) return true; // no bg = likely white
-    return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 > 0.5;
+    // body が透明なら html を見る。両方透明ならブラウザ既定の白
+    const els = [document.body, document.documentElement];
+    for (let i = 0; i < els.length; i++) {
+      if (!els[i]) continue;
+      const m = getComputedStyle(els[i]).backgroundColor.match(/[\d.]+/g);
+      if (!m || (m.length === 4 && Number(m[3]) === 0)) continue;
+      return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255 > 0.5;
+    }
+    return true;
   }
 
   class VJamFXEngine {
@@ -387,6 +394,9 @@
     createOverlay() {
       if (this.overlay) return this.overlay;
 
+      // Auto-detect page brightness (default screen → difference on light pages)
+      this.isLightPage = isLightPage();
+
       const overlay = document.createElement('div');
       overlay.setAttribute('data-vjam-fx', 'overlay');
       overlay.style.cssText = [
@@ -397,17 +407,11 @@
         'height: 100vh',
         'z-index: 2147483647',
         'pointer-events: none',
-        `mix-blend-mode: ${this.blendMode}`,
+        `mix-blend-mode: ${this._effectiveBlendMode()}`,
       ].join('; ');
 
       document.body.appendChild(overlay);
       this.overlay = overlay;
-
-      // Auto-detect page brightness and switch blend mode
-      this.isLightPage = isLightPage();
-      if (this.isLightPage && this.blendMode === 'screen') {
-        this.setBlendMode('difference');
-      }
 
       return overlay;
     }
@@ -416,12 +420,24 @@
       if (!VALID_BLEND_MODES.includes(mode)) return;
       this.blendMode = mode;
       if (this.overlay) {
+        mode = this._effectiveBlendMode();
         this.overlay.style.mixBlendMode = mode;
         const canvases = this.overlay.querySelectorAll('canvas');
         for (let i = 0; i < canvases.length; i++) {
           canvases[i].style.mixBlendMode = mode;
         }
       }
+    }
+
+    // 実際に CSS に掛ける blend。既定の screen はライトページでは見えないので difference で描く
+    // (this.blendMode は popup/SW に返すユーザー側の値のまま)
+    _effectiveBlendMode() {
+      return (this.blendMode === 'screen' && this.isLightPage) ? 'difference' : this.blendMode;
+    }
+
+    _randomBlendMode() {
+      const modes = this.isLightPage ? LIGHT_PAGE_BLEND_MODES : VALID_BLEND_MODES;
+      return modes[Math.floor(Math.random() * modes.length)];
     }
 
     setOpacity(value) {
@@ -473,7 +489,7 @@
       // Apply blend mode to new canvas
       const canvas = layerDiv.querySelector('canvas');
       if (canvas) {
-        canvas.style.mixBlendMode = this.blendMode;
+        canvas.style.mixBlendMode = this._effectiveBlendMode();
       }
 
       this.activeLayers.set(presetName, { preset: preset, container: layerDiv });
@@ -698,7 +714,7 @@
 
       // Random blend mode (unless skipped)
       if (!skipBlend) {
-        const mode = VALID_BLEND_MODES[Math.floor(Math.random() * VALID_BLEND_MODES.length)];
+        const mode = this._randomBlendMode();
         this.setBlendMode(mode);
       }
 
@@ -801,7 +817,7 @@
 
       // Auto-blend: randomize blend mode (unless blend locked)
       if (this._autoBlend && !locks.blend) {
-        const mode = VALID_BLEND_MODES[Math.floor(Math.random() * VALID_BLEND_MODES.length)];
+        const mode = this._randomBlendMode();
         this.setBlendMode(mode);
       }
 
@@ -859,7 +875,7 @@
 
     _autoFXTick() {
       if (this._autoFXBlend) {
-        const mode = VALID_BLEND_MODES[Math.floor(Math.random() * VALID_BLEND_MODES.length)];
+        const mode = this._randomBlendMode();
         this.setBlendMode(mode);
       }
       if (this._autoFXFilters) {
