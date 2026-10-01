@@ -9,6 +9,16 @@
     constructor() {
       this.p5 = null;
       this.params = {};
+      // VJam 本体と同じ: サブクラスの static paramDefs の default を params に入れる(paramDefs の無いプリセットには何もしない)
+      const defs = this.constructor && this.constructor.paramDefs;
+      if (Array.isArray(defs)) {
+        for (const d of defs) {
+          if (!d || !d.key) continue;
+          if (d.default === undefined) continue;
+          if (this.params[d.key] !== undefined) continue;
+          this.params[d.key] = d.default;
+        }
+      }
     }
 
     setup(container) {}

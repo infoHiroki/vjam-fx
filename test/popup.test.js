@@ -35,8 +35,8 @@ describe('PopupController', () => {
   });
 
   describe('preset list', () => {
-    it('should have 191 presets available', () => {
-      expect(controller.presets.length).toBe(191);
+    it('should have 198 presets available', () => {
+      expect(controller.presets.length).toBe(198);
     });
 
     it('should have all expected preset names', () => {
@@ -185,7 +185,7 @@ describe('PopupController', () => {
       await controller._saveState();
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.autoCyclePresets).not.toBeNull();
-      expect(call[0].state.autoCyclePresets.length).toBe(191);
+      expect(call[0].state.autoCyclePresets.length).toBe(198);
     });
 
     it('should have null autoCyclePresets when not cycling', async () => {
@@ -639,20 +639,20 @@ describe('PopupController', () => {
       expect(controller.poolPresets.map(p => p.id).sort()).toEqual(['neon-tunnel', 'rain']);
       expect(controller.pool).toEqual({ filters: POOL.filters, blends: POOL.blends });
       // 手動の一覧は全部
-      expect(controller.presets.length).toBe(191);
+      expect(controller.presets.length).toBe(198);
     });
 
     it('falls back to all presets when the pool cannot be read', async () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('not found')));
       await controller._loadPool();
-      expect(controller.poolPresets.length).toBe(191);
+      expect(controller.poolPresets.length).toBe(198);
       expect(controller.pool).toBeNull();
     });
 
     it('falls back to all presets when the pool has no known preset', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: () => Promise.resolve({ ...POOL, presets: ['no-such-preset'] }) }));
       await controller._loadPool();
-      expect(controller.poolPresets.length).toBe(191);
+      expect(controller.poolPresets.length).toBe(198);
     });
 
     it('Next picks presets only from the pool', async () => {

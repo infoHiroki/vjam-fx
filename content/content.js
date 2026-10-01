@@ -849,7 +849,7 @@
     _applyFilters() {
       if (!this.overlay) return;
       const parts = [...this.activeFilters].map(f => FILTER_VALUES[f]).filter(Boolean);
-      if (this._rndFilter) parts.push(this._rndFilter);
+      if (this._rndFilter && this._rndFilter !== 'none') parts.push(this._rndFilter);
       this.overlay.style.filter = parts.join(' ') || 'none';
     }
 

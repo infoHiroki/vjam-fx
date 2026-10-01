@@ -46,6 +46,7 @@ const PRESET_CATEGORIES = [
     { id: 'vhs-rewind', name: 'VHS Rewind' },
     { id: 'polaroid-flash', name: 'Polaroid Flash' },
     { id: 'tape-distort', name: 'Tape Distort' },
+    { id: 'tape-warp', name: 'Tape Warp' },
   ]},
   { label: 'Patterns', presets: [
     { id: 'kaleidoscope', name: 'Kaleidoscope' },
@@ -64,6 +65,8 @@ const PRESET_CATEGORIES = [
     { id: 'dot-halftone', name: 'Dot Halftone' },
     { id: 'wave-rings', name: 'Wave Rings' },
     { id: 'pendulum-wave', name: 'Pendulum Wave' },
+    { id: 'compass-rose', name: 'Compass Rose' },
+    { id: 'square-hymn', name: 'Square Hymn' },
   ]},
   { label: 'Organic', presets: [
     { id: 'cellular', name: 'Cellular' },
@@ -77,6 +80,7 @@ const PRESET_CATEGORIES = [
     { id: 'bioluminescence', name: 'Bioluminescence' },
     { id: 'ink-blot', name: 'Ink Blot' },
     { id: 'ink-wash', name: 'Ink Wash' },
+    { id: 'ink-calligraphy', name: 'Ink Calligraphy' },
     { id: 'lava-lamp', name: 'Lava Lamp' },
     { id: 'lava-rise', name: 'Lava Rise' },
     { id: 'bubble-float', name: 'Bubble Float' },
@@ -148,7 +152,9 @@ const PRESET_CATEGORIES = [
     { id: 'dna-helix', name: 'DNA Helix' },
     { id: 'crystal-lattice', name: 'Crystal Lattice' },
     { id: 'radar', name: 'Radar' },
+    { id: 'sonar-ping', name: 'Sonar Ping' },
     { id: 'sand-dunes', name: 'Sand Dunes' },
+    { id: 'solar-flare', name: 'Solar Flare' },
   ]},
   { label: 'Neon & Glow', presets: [
     { id: 'neon-80s', name: 'Neon 80s' },
@@ -166,6 +172,7 @@ const PRESET_CATEGORIES = [
     { id: 'cathode-glow', name: 'Cathode Glow' },
     { id: 'fire-wall', name: 'Fire Wall' },
     { id: 'paper-lantern', name: 'Paper Lantern' },
+    { id: 'neon-type', name: 'Neon Type' },
   ]},
   { label: 'Glitch & Retro', presets: [
     { id: 'glitch-8bit', name: 'Glitch 8bit' },
