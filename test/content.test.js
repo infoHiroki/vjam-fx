@@ -1012,4 +1012,159 @@ describe('VJamFXEngine', () => {
       vi.useRealTimers();
     });
   });
+  describe('MSE tap (Safari: window.__vjamMse)', () => {
+    let video, frames, origRaf, origAudioContext, ctxCount, layerPreset;
+
+    const frame = { beat: true, bpm: 124, strength: 0.6, rms: 0.2, bass: 0.7, mid: 0.4, treble: 0.3 };
+
+    // createMediaElementSource まで持つ AudioContext(作られた回数を数える)
+    class CountingAudioContext extends AudioContext {
+      constructor() { super(); ctxCount++; this.destination = {}; }
+      createMediaElementSource() { return { connect: vi.fn(), disconnect: vi.fn() }; }
+      resume() { this.state = 'running'; return Promise.resolve(); }
+      close() { this.state = 'closed'; return Promise.resolve(); }
+    }
+
+    function tick(timestamp) {
+      const cb = frames.pop();
+      frames.length = 0;
+      cb(timestamp);
+    }
+
+    function startLoop() {
+      engine.active = true;
+      engine.activeLayers.set('fake', { preset: layerPreset, container: document.createElement('div') });
+      engine._startLoop();
+    }
+
+    beforeEach(() => {
+      frames = [];
+      ctxCount = 0;
+      origRaf = requestAnimationFrame.getMockImplementation();
+      requestAnimationFrame.mockImplementation((cb) => { frames.push(cb); return frames.length; });
+      origAudioContext = globalThis.AudioContext;
+      globalThis.AudioContext = CountingAudioContext;
+      video = document.createElement('video');
+      Object.defineProperty(video, 'paused', { value: false, configurable: true });
+      Object.defineProperty(video, 'currentTime', { value: 12.3, configurable: true });
+      document.body.appendChild(video);
+      layerPreset = { updateAudio: vi.fn(), onBeat: vi.fn(), destroy: vi.fn() };
+      window.__vjamMse = { frameAt: vi.fn(() => ({ ...frame })) };
+    });
+
+    afterEach(() => {
+      engine.activeLayers.clear();
+      delete window.__vjamMse;
+      video.remove();
+      globalThis.AudioContext = origAudioContext;
+      requestAnimationFrame.mockImplementation(origRaf);
+    });
+
+    it('feeds MSE frames at the playback position to layers', () => {
+      startLoop();
+      tick(1000);
+      expect(window.__vjamMse.frameAt).toHaveBeenCalledWith(12.3);
+      expect(layerPreset.updateAudio).toHaveBeenCalledWith(frame);
+      expect(layerPreset.onBeat).toHaveBeenCalledWith(0.6);
+    });
+
+    it('takes priority over the analyser and _externalAudioData', () => {
+      const analyser = { disconnect: vi.fn(), getFloatTimeDomainData: vi.fn(), getFloatFrequencyData: vi.fn() };
+      engine._videoAudioAnalyser = analyser;
+      engine._videoAudioTimeData = new Float32Array(4);
+      engine._videoAudioFreqData = new Float32Array(4);
+      const ext = { beat: false, bpm: 90, strength: 0, rms: 0.01, bass: 0, mid: 0, treble: 0 };
+      engine._externalAudioData = ext;
+      startLoop();
+      tick(1000);
+      expect(layerPreset.updateAudio).toHaveBeenCalledWith(frame);
+      expect(analyser.getFloatTimeDomainData).not.toHaveBeenCalled();
+      expect(engine._externalAudioData).toBe(ext);
+    });
+
+    it('disconnects an existing analyser while MSE data is available', () => {
+      const analyser = { disconnect: vi.fn() };
+      const source = { disconnect: vi.fn() };
+      engine._videoAudioAnalyser = analyser;
+      engine._videoAudioSource = source;
+      engine._videoAudioTimeData = new Float32Array(4);
+      startLoop();
+      tick(1000);
+      expect(analyser.disconnect).toHaveBeenCalled();
+      expect(engine._videoAudioAnalyser).toBeNull();
+      expect(source.disconnect).not.toHaveBeenCalled(); // source→destination は維持
+    });
+
+    it('applies audio sensitivity', () => {
+      engine.handleMessage({ action: 'setAudioSensitivity', sensitivity: 2 });
+      startLoop();
+      tick(1000);
+      expect(layerPreset.updateAudio).toHaveBeenCalledWith({ beat: true, bpm: 124, strength: 1, rms: 0.4, bass: 1, mid: 0.8, treble: 0.6 });
+    });
+
+    it('falls back to _externalAudioData when frameAt has no data', () => {
+      window.__vjamMse.frameAt = vi.fn(() => null);
+      const ext = { beat: false, bpm: 90, strength: 0, rms: 0.01, bass: 0, mid: 0, treble: 0 };
+      engine._externalAudioData = ext;
+      startLoop();
+      tick(1000);
+      expect(layerPreset.updateAudio).toHaveBeenCalledWith(ext);
+      expect(engine._externalAudioData).toBeNull();
+    });
+
+    it('does not read MSE while the media is paused', () => {
+      Object.defineProperty(video, 'paused', { value: true, configurable: true });
+      startLoop();
+      tick(1000);
+      expect(window.__vjamMse.frameAt).not.toHaveBeenCalled();
+      expect(layerPreset.updateAudio).not.toHaveBeenCalled();
+    });
+
+    it('prefers the playing media element', () => {
+      const other = document.createElement('video');
+      Object.defineProperty(other, 'paused', { value: true, configurable: true });
+      Object.defineProperty(other, 'currentTime', { value: 99, configurable: true });
+      document.body.insertBefore(other, document.body.firstChild);
+      startLoop();
+      tick(1000);
+      expect(window.__vjamMse.frameAt).toHaveBeenCalledWith(12.3);
+      other.remove();
+    });
+
+    it('does not read audio when audio is disabled', () => {
+      engine.handleMessage({ action: 'setAudioEnabled', enabled: false });
+      startLoop();
+      tick(1000);
+      expect(window.__vjamMse.frameAt).not.toHaveBeenCalled();
+    });
+
+    it('never creates createMediaElementSource on Safari', () => {
+      engine._startVideoAudio();
+      expect(ctxCount).toBe(0);
+      expect(engine._videoAudioCtx).toBeNull();
+      expect(engine._mediaObserver).toBeFalsy();
+      engine._connectMediaElement(video);
+      expect(ctxCount).toBe(0);
+      expect(engine._videoAudioCtx).toBeNull();
+    });
+
+    it('does not start the media observer on Safari when no media exists yet', () => {
+      video.remove();
+      engine.handleMessage({ action: 'startVideoAudio' });
+      expect(engine._mediaObserver).toBeFalsy();
+      expect(ctxCount).toBe(0);
+    });
+
+    it('keeps Chrome behavior without __vjamMse (connects the media, reads the analyser)', () => {
+      delete window.__vjamMse;
+      engine._startVideoAudio();
+      expect(ctxCount).toBe(1);
+      expect(engine._videoAudioMedia).toBe(video);
+      expect(engine._videoAudioAnalyser).not.toBeNull();
+      startLoop();
+      tick(1000);
+      expect(layerPreset.updateAudio).toHaveBeenCalledTimes(1);
+      expect(layerPreset.updateAudio.mock.calls[0][0].bpm).toBe(120);
+    });
+  });
 });
