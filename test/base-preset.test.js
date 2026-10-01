@@ -39,4 +39,46 @@ describe('BasePreset', () => {
   it('should handle destroy when p5 is already null', () => {
     expect(() => preset.destroy()).not.toThrow();
   });
+
+  // VJam 本体の BasePreset と同じ: static paramDefs の default を params に入れる
+  describe('paramDefs', () => {
+    it('hydrates params from paramDefs defaults', () => {
+      class P extends BasePreset {
+        static paramDefs = [
+          { key: 'speed', default: 1.5 },
+          { key: 'count', default: 0 },
+        ];
+      }
+      expect(new P().params).toEqual({ speed: 1.5, count: 0 });
+    });
+
+    it('skips defs without key or default', () => {
+      class P extends BasePreset {
+        static paramDefs = [null, { default: 3 }, { key: 'noDefault' }, { key: 'size', default: 2 }];
+      }
+      expect(new P().params).toEqual({ size: 2 });
+    });
+
+    it('lets the subclass constructor override the defaults', () => {
+      class P extends BasePreset {
+        static paramDefs = [{ key: 'speed', default: 1 }, { key: 'size', default: 2 }];
+        constructor() {
+          super();
+          this.params.speed = 3;
+        }
+      }
+      expect(new P().params).toEqual({ speed: 3, size: 2 });
+    });
+
+    it('does nothing for presets without paramDefs', () => {
+      class P extends BasePreset {
+        constructor() {
+          super();
+          this.params = { layers: 5 };
+        }
+      }
+      expect(new P().params).toEqual({ layers: 5 });
+      expect(new (class extends BasePreset {})().params).toEqual({});
+    });
+  });
 });

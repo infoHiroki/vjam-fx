@@ -1392,6 +1392,22 @@ describe('VJamFXEngine', () => {
         engine.toggleFilter('sepia');
         expect(engine.overlay.style.filter).toBe(rndCss);
       });
+
+      // デフォルトプールの filters には「なし」として 'none' が入っている(#7)
+      it('treats none in the pool as no filter', () => {
+        engine.setFilter('sepia', true);
+        engine._randomizeFilter({ filters: ['none'] }, true);
+        expect(engine.activeFilters.size).toBe(0);
+        expect(engine.overlay.style.filter).toBe('none');
+      });
+
+      it('keeps manual filter buttons working when the Rnd filter is none', () => {
+        engine._randomizeFilter({ filters: ['none'] }, true);
+        engine.toggleFilter('sepia');
+        expect(engine.overlay.style.filter).toBe('sepia(1)');
+        engine.toggleFilter('sepia');
+        expect(engine.overlay.style.filter).toBe('none');
+      });
     });
 
     describe('Rnd blend', () => {
