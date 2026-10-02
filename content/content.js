@@ -127,6 +127,106 @@
     return !!(renderer && renderer.isP3D);
   }
 
+  // --- iPhone: フルスクリーンの代わりに画面いっぱい表示(#51) ---
+  // iPhone の Safari には要素のフルスクリーンが無く、video.webkitEnterFullscreen は iPhone 専用のプレーヤーに切り替わって
+  // ページの上のもの(エフェクト)が見えなくなる。そこでは video を画面いっぱいに広げて、エフェクトを重ねたままにする
+
+  const FILL_ENTER_METHODS = ['webkitEnterFullscreen', 'webkitEnterFullScreen']; // 後ろは古い綴り(同じもの)
+  const FILL_Z = '2147483646'; // overlay の 1 つ下
+  // 画面いっぱいの video に !important で掛けるもの。戻すときは 1 つずつ元の値に戻すので、margin などは個別のプロパティで持つ
+  const FILL_VIDEO_STYLES = [
+    ['display', 'block'], ['visibility', 'visible'], ['position', 'fixed'],
+    ['top', '0'], ['left', '0'], ['right', 'auto'], ['bottom', 'auto'], ['width', '100vw'], ['height', '100dvh'],
+    ['min-width', '0'], ['min-height', '0'], ['max-width', 'none'], ['max-height', 'none'],
+    ['margin-top', '0'], ['margin-right', '0'], ['margin-bottom', '0'], ['margin-left', '0'],
+    ['transform', 'none'], ['translate', 'none'], ['rotate', 'none'], ['scale', 'none'],
+    ['object-fit', 'contain'], ['background-color', 'black'], ['z-index', FILL_Z],
+  ];
+  // 祖先にこれがあると position: fixed の基準がその祖先になって画面いっぱいにならないので、画面いっぱいの間だけ外す
+  const FILL_ANCESTOR_TRAPS = [
+    ['transform', 'none'], ['translate', 'none'], ['rotate', 'none'], ['scale', 'none'], ['perspective', 'none'],
+    ['filter', 'none'], ['backdrop-filter', 'none'], ['-webkit-backdrop-filter', 'none'], ['contain', 'none'], ['will-change', 'auto'],
+  ];
+  // 標準のコントロールの全画面ボタンで入った iPhone 専用のプレーヤーは、入る遷移が終わるまで抜けられない。抜けるまで呼び直す
+  const FILL_EXIT_RETRY_MS = 100;
+  const FILL_EXIT_TRIES = 30;
+  // 抜けると少し後に動画が止まる(pause)。その間に止まったら再生し直す
+  const FILL_RESUME_MS = 2000;
+
+  // 要素のフルスクリーンが無く、video の webkitEnterFullscreen だけがある(iPhone の Safari)。iPad・Chrome は false
+  function needsVideoFill() {
+    const E = window.Element && Element.prototype;
+    const V = window.HTMLVideoElement && HTMLVideoElement.prototype;
+    return !!(E && V && !E.requestFullscreen && !E.webkitRequestFullscreen && typeof V.webkitEnterFullscreen === 'function');
+  }
+
+  // 描画上の親(slot に入っている要素は slot、shadow root の直下はホスト)
+  function layoutParent(el) {
+    return el.assignedSlot || el.parentElement || (el.parentNode && el.parentNode.host) || null;
+  }
+
+  // 祖先 el で外すもの: 画面いっぱいを止めるもの(FILL_ANCESTOR_TRAPS)と、重なり順を閉じ込めるもの(z-index・fixed / sticky)。
+  // 重なり順は z-index を FILL_Z に上げる(低い z-index の祖先の中にあると、ページのほかの要素が動画の上に来る)
+  function fillAncestorStyles(el) {
+    const cs = getComputedStyle(el);
+    const out = [];
+    for (let i = 0; i < FILL_ANCESTOR_TRAPS.length; i++) {
+      const value = cs.getPropertyValue(FILL_ANCESTOR_TRAPS[i][0]);
+      if (value && value !== FILL_ANCESTOR_TRAPS[i][1]) out.push(FILL_ANCESTOR_TRAPS[i]);
+    }
+    if (cs.position === 'fixed' || cs.position === 'sticky' || (cs.zIndex && cs.zIndex !== 'auto')) out.push(['z-index', FILL_Z]);
+    return out;
+  }
+
+  // el の inline の style に styles([プロパティ, 値])を !important で掛け、戻す関数を返す。
+  // 戻すとき、ページが style を触っていなければ元の style をそのまま戻す(元から style 属性が無ければ属性ごと消す)。
+  // 掛けている間にページが style を書き換えたら(プレーヤーが向きの変化で width を書くなど)、掛けたプロパティならその値を戻す値にして
+  // 掛け直す。そのときは戻すときも掛けたプロパティだけを戻す値(!important の有無も)に戻し、ページが書いたほかのものは残す
+  function pinStyle(el, styles) {
+    const original = el.hasAttribute('style') ? el.style.cssText : null;
+    const saved = {};
+    const pinned = {}; // 掛けた直後に読み戻した値(ブラウザが整えた形)。これと違えばページが書き換えた
+    let ours = ''; // 掛け終えたときの cssText
+    let touched = false;
+    const apply = () => {
+      for (let i = 0; i < styles.length; i++) {
+        const prop = styles[i][0];
+        const value = el.style.getPropertyValue(prop);
+        const priority = el.style.getPropertyPriority(prop);
+        if (pinned[prop] && pinned[prop][0] === value && pinned[prop][1] === priority) continue;
+        saved[prop] = [value, priority];
+        el.style.setProperty(prop, styles[i][1], 'important');
+        pinned[prop] = [el.style.getPropertyValue(prop), el.style.getPropertyPriority(prop)];
+      }
+      ours = el.style.cssText;
+    };
+    apply();
+    const observer = new MutationObserver(() => {
+      if (el.style.cssText === ours) return; // 自分で掛けた分
+      touched = true;
+      apply();
+    });
+    observer.observe(el, { attributes: true, attributeFilter: ['style'] });
+    // WebKit は CSSOM で変えた style を属性へ遅れて書き戻す。書き戻す前に属性を消すと、後から空の style="" ができるので、読んで書き戻させてから消す
+    const removeAttr = () => {
+      el.getAttribute('style');
+      el.removeAttribute('style');
+    };
+    return () => {
+      observer.disconnect();
+      if (!touched && el.style.cssText === ours) {
+        if (original === null) removeAttr();
+        else el.style.cssText = original;
+        return;
+      }
+      for (const prop in saved) {
+        if (saved[prop][0]) el.style.setProperty(prop, saved[prop][0], saved[prop][1]);
+        else el.style.removeProperty(prop);
+      }
+      if (original === null && !el.style.cssText) removeAttr();
+    };
+  }
+
   class VJamFXEngine {
     constructor() {
       this.active = false;
@@ -138,6 +238,10 @@
       this.overlay = null; // ホストの div(document.body の直下)
       this._stage = null; // overlay の shadow root の中の入れ物。レイヤーとテキストのキャンバスはここに入れる
       this._savedRootBg = null; // createOverlay で html に Canvas を入れる前のインラインの値(入れていなければ null)
+      // iPhone の画面いっぱい表示(#51)。_fillHooks は overlay がある間の差し替え、_fill は画面いっぱいにしている video
+      this._fillHooks = null;
+      this._fill = null;
+      this._fillExitTimer = null;
       this.audioEnabled = true;
       this._externalAudioData = null;
       this._rafId = null;
@@ -585,12 +689,14 @@
       document.body.appendChild(overlay);
       this.overlay = overlay;
       this._stage = stage;
+      this._startVideoFill();
 
       return overlay;
     }
 
     _removeOverlay() {
       if (!this.overlay) return;
+      this._stopVideoFill();
       this._cancelDip();
       this.overlay.remove();
       this.overlay = null;
@@ -603,6 +709,138 @@
       const root = document.documentElement;
       if (root.style.backgroundColor.toLowerCase() === 'canvas') root.style.backgroundColor = this._savedRootBg;
       this._savedRootBg = null;
+    }
+
+    // --- iPhone: 画面いっぱい表示(#51) ---
+
+    // overlay を作ったとき(iPhone だけ): ページの JS の webkitEnterFullscreen を画面いっぱい表示に差し替え(元は取っておく)、
+    // 標準のコントロールの全画面ボタン(JS からは止められない)は webkitbeginfullscreen で拾う
+    _startVideoFill() {
+      if (this._fillHooks || !needsVideoFill()) return;
+      const self = this;
+      const proto = HTMLVideoElement.prototype;
+      const hooks = { methods: [], onBegin: null };
+      for (let i = 0; i < FILL_ENTER_METHODS.length; i++) {
+        const name = FILL_ENTER_METHODS[i];
+        const original = proto[name];
+        if (typeof original !== 'function') continue;
+        // ページがこれをさらに包んでいて戻せなかったときは、外したあと元のメソッドに通す
+        const patched = function() {
+          if (self._fillHooks === hooks) self._fillVideo(this);
+          else return original.apply(this, arguments);
+        };
+        proto[name] = patched;
+        hooks.methods.push({ name: name, original: original, patched: patched });
+      }
+      // webkitbeginfullscreen は泡立たないので capture で拾う
+      hooks.onBegin = (e) => {
+        const video = e.target;
+        if (video && video.nodeName === 'VIDEO') this._leaveNativeFullscreen(video, !video.paused);
+      };
+      document.addEventListener('webkitbeginfullscreen', hooks.onBegin, true);
+      this._fillHooks = hooks;
+    }
+
+    // overlay を外すとき: 画面いっぱい表示をやめて、差し替えを全部戻す
+    _stopVideoFill() {
+      this._exitVideoFill();
+      clearTimeout(this._fillExitTimer);
+      this._fillExitTimer = null;
+      const hooks = this._fillHooks;
+      if (!hooks) return;
+      this._fillHooks = null;
+      const proto = HTMLVideoElement.prototype;
+      for (let i = 0; i < hooks.methods.length; i++) {
+        const m = hooks.methods[i];
+        if (proto[m.name] === m.patched) proto[m.name] = m.original;
+      }
+      document.removeEventListener('webkitbeginfullscreen', hooks.onBegin, true);
+    }
+
+    // iPhone 専用のプレーヤーに入った(標準のボタン・差し替える前に取られた元のメソッド)。すぐ抜けて画面いっぱい表示にする。
+    // 入る遷移の間は抜けられないので、抜けるまで呼び直す。抜けると動画が止まるので、再生中だったら続ける
+    _leaveNativeFullscreen(video, playing) {
+      clearTimeout(this._fillExitTimer);
+      let tries = 0;
+      const tryExit = () => {
+        this._fillExitTimer = null;
+        if (!this._fillHooks) return;
+        if (video.webkitDisplayingFullscreen) video.webkitExitFullscreen();
+        if (video.webkitDisplayingFullscreen) {
+          if (++tries < FILL_EXIT_TRIES) this._fillExitTimer = setTimeout(tryExit, FILL_EXIT_RETRY_MS);
+          return;
+        }
+        this._fillVideo(video);
+        if (playing) this._keepPlaying(video);
+      };
+      tryExit();
+    }
+
+    // 抜けたあとの pause(FILL_RESUME_MS の間に 1 回)で再生し直す。もう止まっていたらすぐ再生
+    _keepPlaying(video) {
+      const play = () => {
+        const p = video.play();
+        if (p && p.catch) p.catch(() => {});
+      };
+      if (video.paused) play();
+      video.addEventListener('pause', play, { once: true });
+      setTimeout(() => video.removeEventListener('pause', play), FILL_RESUME_MS);
+    }
+
+    // video を画面いっぱいに(エフェクトはその上)。別の video が画面いっぱいなら、それは戻す
+    _fillVideo(video) {
+      if (!this._fillHooks || !this.overlay || !video.isConnected) return;
+      if (this._fill) {
+        if (this._fill.video === video) return;
+        this._exitVideoFill();
+      }
+      const restores = [pinStyle(video, FILL_VIDEO_STYLES)];
+      for (let el = layoutParent(video); el; el = layoutParent(el)) {
+        const styles = fillAncestorStyles(el);
+        if (styles.length) restores.push(pinStyle(el, styles));
+      }
+      this._fill = { video: video, restores: restores, button: this._addFillExitButton() };
+    }
+
+    // 画面いっぱい表示をやめる(×・エンジンを OFF)。video と祖先の inline の style を元に戻す
+    _exitVideoFill() {
+      const fill = this._fill;
+      if (!fill) return;
+      this._fill = null;
+      for (let i = fill.restores.length - 1; i >= 0; i--) fill.restores[i]();
+      if (fill.button) fill.button.remove();
+    }
+
+    // 抜ける「×」。エフェクトの右上(shadow root の中で stage の外。dip で消えない)。細い線の SVG、押せる大きさは 44px。
+    // ホストは pointer-events: none なので、ボタンだけ押せるようにする
+    _addFillExitButton() {
+      const shadow = this.overlay && this.overlay.shadowRoot;
+      if (!shadow) return null;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('data-vjam-fill-exit', '');
+      button.setAttribute('aria-label', 'Exit full view');
+      button.style.cssText = 'position:absolute;top:8px;right:8px;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:50%;'
+        + 'background-color:rgba(0,0,0,0.4);color:#fff;display:flex;align-items:center;justify-content:center;'
+        + 'pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent;';
+      // ノッチを避ける(viewport-fit=cover のページだけ値が入る)。読めないブラウザでは上の 8px のまま
+      button.style.setProperty('top', 'calc(env(safe-area-inset-top, 0px) + 8px)');
+      button.style.setProperty('right', 'calc(env(safe-area-inset-right, 0px) + 8px)');
+      const NS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(NS, 'svg');
+      const attrs = { width: '20', height: '20', viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round' };
+      for (const k in attrs) svg.setAttribute(k, attrs[k]);
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', 'M4 4L16 16M16 4L4 16');
+      svg.appendChild(path);
+      button.appendChild(svg);
+      // ページのクリックの処理(プレーヤーのコントロールの出し入れなど)には渡さない
+      button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._exitVideoFill();
+      });
+      shadow.appendChild(button);
+      return button;
     }
 
     // smooth: Rnd / Auto の切り替え。dip で暗くしている間に掛ける(手動のボタンはすぐ掛ける)
