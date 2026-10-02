@@ -13,7 +13,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - p5.js (2D graphics)
 - Chrome Extension Manifest V3
 - Service Worker (状態永続化)
-- Vitest + jsdom (testing, 2019 tests) + Playwright e2e (`tests/e2e/`, 24)
+- Vitest + jsdom (testing, 2029 tests) + Playwright e2e (`tests/e2e/`, 28)
 
 ## Architecture
 - **Popup**: `popup/` — UI controller, injects via `chrome.scripting.executeScript`
@@ -47,6 +47,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - p5.js injected first as classic script, then engine
 - ブレンド: 排他トグル3つ（Lighten/Diff/Exclusion）＋デフォルトscreen、Auto対応
 - フィルタ: 重ね掛けトグル8つ、Auto対応
+- オーバーレイの中身(レイヤー・キャンバス・テキスト)は Shadow DOM の中。ホストの位置・z-index などは `!important` で固定(動画サイトのフルサイズ表示が、プレイヤー以外を `right:100000px !important` で画面外へ飛ばすため)。p5 の隠しキャンバスは MutationObserver で表に出す(`<style>` は CSP で止まるので使わない)
 - 背景未指定（html・body とも透明で画像なし）のページは、overlay を作るとき html に `Canvas` を入れて合成の相手を作る（無いと黒キャンバスがページを覆う。外すとき元に戻す）
 - ライトページ自動検出(body→html背景) → 既定screenは描画だけdifferenceに置換（`blendMode`はscreenのまま＝popup/SWに漏らさない）、ランダムblendはdifference/exclusionのみ
 - Popup非同期操作: `_busy`フラグ + `_pendingStart`/`_pendingStop`で排他制御（last-action-wins）
@@ -89,8 +90,8 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 
 ## Testing
 ```bash
-npm test          # vitest run (2019 tests)
-npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(24)
+npm test          # vitest run (2029 tests)
+npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(28)
 npm run test:watch
 ```
 
