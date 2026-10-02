@@ -4,7 +4,7 @@
  */
 import { test, expect } from '@playwright/test';
 import {
-  startSite, launchWithExtension, openPopup, readState, readCanvases, waitLayersFadedIn, tapAudio, isAudioPlaying, diffScore,
+  startSite, launchWithExtension, openPopup, openManual, readState, readCanvases, waitLayersFadedIn, tapAudio, isAudioPlaying, diffScore,
 } from './helpers.js';
 
 // スクショ差分(RGB 平均 0〜255)のしきい値。エフェクト無しのノイズは 0.004 前後(audio の時刻表示)。
@@ -64,11 +64,12 @@ test.describe.serial('ダークページ → ライトページ遷移', () => {
     baseline = await page.screenshot();
   });
 
-  test('popup が対象タブを掴む(Cannot run が出ない)', async () => {
+  test('popup が対象タブを掴む(重ねられないページの表示が出ない)', async () => {
     popup = await openPopup(ext, site.base);
     collectLogs(popup, 'popup', logs);
     await expect(popup.locator('#btn-next')).toBeVisible();
-    await expect(popup.locator('.popup')).not.toContainText('Cannot run');
+    await expect(popup.locator('#blocked')).toBeHidden();
+    await expect(popup.locator('.popup')).not.toHaveClass(/\bis-blocked\b/);
   });
 
   test('プリセット一覧ができる', async () => {
@@ -123,6 +124,7 @@ test.describe.serial('ダークページ → ライトページ遷移', () => {
   });
 
   test('blend ボタンが効く', async () => {
+    await openManual(popup);
     await popup.locator('#blend-grid button[data-blend="difference"]').click();
     await expect.poll(async () => (await readState(page)).overlayBlend).toBe('difference');
     expect((await readState(page)).blend).toBe('difference');
@@ -165,6 +167,7 @@ test.describe.serial('ダークページ → ライトページ遷移', () => {
     await popup.close();
     popup = await openPopup(ext, site.base);
     collectLogs(popup, 'popup', logs);
+    await openManual(popup);
     await popup.click('#btn-reset');
     await expect.poll(async () => {
       const s = await readState(page);
@@ -232,6 +235,7 @@ test.describe.serial('背景未指定のライトページ', () => {
   // 背景が透明だと mix-blend-mode の相手が無く、黒いキャンバスがそのまま覆う(#13)。
   // Next はランダムで透けるプリセットだと見逃すので、背景を黒で塗りつぶす radar で確かめる
   test('黒に潰れない(本文が読める明るさが残る)', async () => {
+    await openManual(popup);
     await popup.click('#btn-reset');
     await expect.poll(async () => (await readState(page)).layers.length).toBe(0);
     await popup.locator('#preset-list input[value="radar"]').check();
@@ -349,6 +353,7 @@ test.describe.serial('ブレンドの見た目', () => {
 
     // 不透明な背景を塗るプリセットを 2 枚重ねて、キャンバス同士・ページとの両方で difference が効く状態にする
     popup = await openPopup(ext, site.base);
+    await openManual(popup);
     await popup.locator('#preset-list input[value="radar"]').check();
     await expect.poll(async () => (await readState(page)).layers, { timeout: 15_000 }).toEqual(['radar']);
     await popup.locator('#preset-list input[value="neon-tunnel"]').check();

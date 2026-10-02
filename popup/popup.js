@@ -423,6 +423,13 @@ const DEFAULT_SETTINGS = {
 
 const SENSITIVITY_MAP = { lo: 0.5, mid: 1.0, hi: 2.0 };
 
+const PRESET_NAMES = new Map(ALL_PRESETS.map(p => [p.id, p.name]));
+const STAGE_MAX_LAYERS = 5; // ステージに出すレイヤー名の数(エンジンの上限と同じ)
+const LIVE_POLL_MS = 1000; // popup が開いている間、レイヤー名と BPM をエンジンから読み直す間隔
+const BPM_MISSES_TO_HIDE = 3; // tabCapture の音はフレームごとに使い切られて読めない回があるので、続けて読めなかったときだけ BPM を消す
+const MANUAL_OPEN_KEY = 'vjamfx_manual_open'; // 手動を開いているか(次に開いたときも同じ)
+const BLOCKED_MESSAGE = "This page can't be overlaid";
+
 class PopupController {
   constructor() {
     this.presets = ALL_PRESETS; // 手動の一覧(全部)
@@ -449,17 +456,24 @@ class PopupController {
     this.scenes = new Array(12).fill(null); // 12 scene slots
     this.textState = null; // { text, autoText }
     this.sceneSaveMode = false;
+    this._live = null; // エンジンから読んだ { layers, bpm }(ステージの表示用。popup の状態には入れない)
+    this._bpm = 0;
+    this._bpmMisses = 0;
+    this._livePollTimer = null;
   }
 
   async init() {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tabs] = await Promise.all([
+      chrome.tabs.query({ active: true, currentWindow: true }),
+      this._loadManualOpen(),
+    ]);
     if (tabs.length > 0) {
       this._tabId = tabs[0].id;
       this._tabUrl = tabs[0].url || '';
     }
 
     if (this._isRestrictedPage()) {
-      this._showError('Cannot run on this page');
+      this._showError(BLOCKED_MESSAGE);
       return;
     }
 
@@ -470,6 +484,9 @@ class PopupController {
     this._buildPresetList();
     await this._syncState();
     this._bindEvents();
+    this._updateOpacityUI(); // OFF のときも今の値(既定 80%)を出す
+    this._renderStage();
+    this._startLivePoll();
   }
 
   _isRestrictedPage() {
@@ -478,15 +495,40 @@ class PopupController {
       || url.startsWith('edge://') || url.startsWith('about:') || url.startsWith('devtools://');
   }
 
+  // 重ねられないページ: ロゴ・マーク・ひとことだけ出す(ほかの操作は CSS で隠す)
   _showError(msg) {
     const popup = document.querySelector('.popup');
-    if (popup) {
-      popup.textContent = '';
-      const div = document.createElement('div');
-      div.style.cssText = 'padding:20px;text-align:center;color:#888';
-      div.textContent = msg;
-      popup.appendChild(div);
-    }
+    if (popup) popup.classList.add('is-blocked');
+    const msgEl = document.getElementById('blocked-msg');
+    if (msgEl) msgEl.textContent = msg;
+    const blocked = document.getElementById('blocked');
+    if (blocked) blocked.hidden = false;
+  }
+
+  // 手動の開け閉め。開いているかは storage に覚えて、次に開いたときも同じにする
+  async _loadManualOpen() {
+    let open = false;
+    try {
+      const result = await chrome.storage.local.get(MANUAL_OPEN_KEY);
+      open = !!(result && result[MANUAL_OPEN_KEY]);
+    } catch (e) { /* storage not available */ }
+    this._setManualOpen(open);
+  }
+
+  _setManualOpen(open) {
+    const section = document.getElementById('manual-section');
+    if (section) section.hidden = !open;
+    const btn = document.getElementById('btn-manual');
+    if (btn) btn.setAttribute('aria-expanded', String(open));
+  }
+
+  async _toggleManual() {
+    const section = document.getElementById('manual-section');
+    const open = !!(section && section.hidden);
+    this._setManualOpen(open);
+    try {
+      await chrome.storage.local.set({ [MANUAL_OPEN_KEY]: open });
+    } catch (e) { /* storage not available */ }
   }
 
   _buildPresetList() {
@@ -596,8 +638,7 @@ class PopupController {
       btn.classList.toggle('active', this.selectedBlendMode !== 'screen' && btn.dataset.blend === this.selectedBlendMode);
     });
 
-    const opacitySlider = document.getElementById('opacity-slider');
-    if (opacitySlider) opacitySlider.value = Math.round(this.opacity * 100);
+    this._updateOpacityUI();
 
     const audioBtn = document.getElementById('audio-toggle');
     if (audioBtn) {
@@ -609,13 +650,7 @@ class PopupController {
       btn.classList.toggle('active', this.activeFilters.has(btn.dataset.filter));
     });
 
-    const autoBtn = document.getElementById('btn-auto-cycle');
-    if (autoBtn) autoBtn.classList.toggle('active', this.autoCycleActive);
-
-    const autoBlendBtn = document.getElementById('auto-blend');
-    if (autoBlendBtn) autoBlendBtn.classList.toggle('active', this.autoBlend);
-    const autoFiltersBtn = document.getElementById('auto-filters');
-    if (autoFiltersBtn) autoFiltersBtn.classList.toggle('active', this.autoFilters);
+    this._updateAutoUI();
 
     // Lock buttons
     for (const key of ['effect', 'blend', 'filter']) {
@@ -637,14 +672,122 @@ class PopupController {
       }
     }
 
-    this._updateLayerCount();
+    this._renderStage();
   }
 
-  _updateLayerCount() {
-    const el = document.getElementById('layer-count');
-    if (!el) return;
-    const count = this.activeLayers.size;
-    el.textContent = count > 0 ? `${count} layer${count > 1 ? 's' : ''}` : '';
+  // Auto / Rnd のボタン(Rnd はチップと手動の中の両方)とステージ
+  _updateAutoUI() {
+    const autoBtn = document.getElementById('btn-auto-cycle');
+    if (autoBtn) {
+      autoBtn.classList.toggle('active', this.autoCycleActive);
+      const label = autoBtn.querySelector('.label');
+      if (label) label.textContent = this.autoCycleActive ? 'Stop Auto' : 'Auto';
+    }
+    document.querySelectorAll('#auto-blend, [data-rnd="blend"]').forEach(b => b.classList.toggle('active', this.autoBlend));
+    document.querySelectorAll('#auto-filters, [data-rnd="filters"]').forEach(b => b.classList.toggle('active', this.autoFilters));
+    this._renderStage();
+  }
+
+  _updateOpacityUI() {
+    const pct = Math.round(this.opacity * 100);
+    const slider = document.getElementById('opacity-slider');
+    if (slider) {
+      slider.value = pct;
+      slider.style.setProperty('--v', `${pct}%`);
+    }
+    const value = document.getElementById('opacity-value');
+    if (value) value.textContent = `${pct}%`;
+  }
+
+  // いま流れているもの: AUTO / MANUAL / OFF、BPM と拍の点、出ているレイヤーの名前(最大 5)。
+  // 名前と BPM はエンジンから読めた分(_pollLive)、読む前は popup のレイヤー
+  _renderStage() {
+    const mode = !this.isActive ? 'off' : this.autoCycleActive ? 'auto' : 'manual';
+    const stage = document.getElementById('stage');
+    if (stage) stage.dataset.mode = mode;
+    const modeEl = document.getElementById('stage-mode');
+    if (modeEl) modeEl.textContent = mode.toUpperCase();
+
+    const hint = document.getElementById('off-hint');
+    if (hint) {
+      hint.hidden = this.isActive;
+      hint.textContent = this.settings.autoOnStart
+        ? 'Switch on to start Auto with the music.'
+        : 'Switch on to start the effects.';
+    }
+
+    const bpm = this.isActive ? this._bpm : 0;
+    const bpmEl = document.getElementById('stage-bpm');
+    if (bpmEl) {
+      bpmEl.hidden = !(bpm > 0);
+      bpmEl.textContent = bpm > 0 ? `${bpm} BPM` : '';
+    }
+    for (const id of ['stage-beat', 'stage-meter']) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.classList.toggle('pulse', bpm > 0);
+      el.style.animationDuration = bpm > 0 ? `${60 / bpm}s` : '';
+    }
+
+    const list = document.getElementById('layer-names');
+    if (list) {
+      const ids = !this.isActive ? [] : this._live ? this._live.layers : [...this.activeLayers];
+      list.textContent = '';
+      ids.slice(0, STAGE_MAX_LAYERS).forEach((id, i) => {
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.className = 'nm';
+        name.textContent = PRESET_NAMES.get(id) || id;
+        const num = document.createElement('span');
+        num.className = 'ly';
+        num.textContent = String(i + 1);
+        li.append(name, num);
+        list.appendChild(li);
+      });
+    }
+  }
+
+  _startLivePoll() {
+    if (this._livePollTimer) return;
+    this._pollLive();
+    this._livePollTimer = setInterval(() => this._pollLive(), LIVE_POLL_MS);
+  }
+
+  // 出ているレイヤーと BPM を、今ある executeScript の経路でエンジンから読む。Auto / Rnd の ON / OFF は popup のフラグのまま
+  async _pollLive() {
+    if (!this._tabId || this._polling) return;
+    if (!this.isActive) {
+      this._live = null;
+      this._bpm = 0;
+      this._renderStage();
+      return;
+    }
+    this._polling = true;
+    let live = null;
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: this._tabId },
+        world: 'MAIN',
+        func: () => {
+          const e = window._vjamFxEngine;
+          if (!e || !e.active) return null;
+          let bpm = e.audioEnabled !== false && typeof e._tempoBpm === 'function' ? e._tempoBpm() : 0;
+          // <video> / <audio> の analyser は拍を拾う前から初期値(120)を返すので、しばらく拍が来ていなければ出さない
+          if (!(e._mseBpm > 0) && e._videoAudioAnalyser && performance.now() / 1000 - e._videoAudioLastBeatTime > 4) bpm = 0;
+          return { layers: e.getActiveLayerNames(), bpm: Math.round(bpm) || 0 };
+        },
+      });
+      if (result && Array.isArray(result.layers)) live = result;
+    } catch (e) { /* タブが閉じた・読めないページ */ }
+    this._polling = false;
+    this._live = this.isActive ? live : null;
+    if (live && live.bpm > 0) {
+      this._bpm = live.bpm;
+      this._bpmMisses = 0;
+    } else if (++this._bpmMisses >= BPM_MISSES_TO_HIDE) {
+      this._bpm = 0;
+    }
+    this._renderStage();
   }
 
   async _loadSettings() {
@@ -707,6 +850,13 @@ class PopupController {
     }
     const resetBtn = document.getElementById('btn-heavy-reset');
     if (resetBtn) resetBtn.disabled = names.length === 0;
+    // フッター: 0 のときは出さない(戻すのは設定の Restore)
+    const skipped = document.getElementById('heavy-skipped');
+    if (skipped) {
+      skipped.hidden = names.length === 0;
+      skipped.textContent = `${names.length} skipped`;
+      skipped.title = names.join(', ');
+    }
   }
 
   // 戻す: 覚えた重いものを全部消して、エンジンにも忘れさせる。Auto 中なら戻したものも回す
@@ -878,12 +1028,15 @@ class PopupController {
       allTabsBtn.textContent = this.settings.allTabs ? 'ON' : 'OFF';
       allTabsBtn.classList.toggle('on', !!this.settings.allTabs);
     }
+    const allTabsChip = document.getElementById('chip-all-tabs');
+    if (allTabsChip) allTabsChip.classList.toggle('active', !!this.settings.allTabs);
     const fadeEl = document.getElementById('setting-fade');
     if (fadeEl) fadeEl.value = String(this.settings.fadeDuration);
     const cycleEl = document.getElementById('setting-cycle');
     if (cycleEl) cycleEl.value = String(this.settings.barsPerCycle);
     const sensEl = document.getElementById('setting-sensitivity');
     if (sensEl) sensEl.value = this.settings.sensitivity;
+    this._renderStage(); // OFF のひとことは Auto start の設定で変わる
   }
 
   async _saveState() {
@@ -962,12 +1115,12 @@ class PopupController {
       autoStartEl.addEventListener('change', () => {
         this.settings.autoOnStart = autoStartEl.value !== 'off';
         this._saveSettings();
+        this._renderStage();
       });
     }
 
-    // Settings: 全タブで ON。ほかのタブに入るにはホスト権限が要るので、ON にするクリックの中で 1 回だけ求める(断られたら OFF のまま)
-    const allTabsBtn = document.getElementById('setting-all-tabs');
-    if (allTabsBtn) {
+    // 全タブで ON(設定のボタンと、いつもの画面のチップ)。ほかのタブに入るにはホスト権限が要るので、ON にするクリックの中で 1 回だけ求める(断られたら OFF のまま)
+    document.querySelectorAll('#setting-all-tabs, #chip-all-tabs').forEach(allTabsBtn => {
       allTabsBtn.addEventListener('click', async () => {
         if (!this.settings.allTabs) {
           let granted = false;
@@ -985,7 +1138,11 @@ class PopupController {
         // 今のタブが ON なら、その状態をほかのタブへ持っていくものとして SW に渡す
         if (this.settings.allTabs && this.isActive) this._saveState();
       });
-    }
+    });
+
+    // 手動を開く・畳む
+    const manualBtn = document.getElementById('btn-manual');
+    if (manualBtn) manualBtn.addEventListener('click', () => this._toggleManual());
 
     // Settings: この端末で重いので外したもの → 戻す
     const heavyResetBtn = document.getElementById('btn-heavy-reset');
@@ -1056,7 +1213,7 @@ class PopupController {
       scenesToggleBtn.addEventListener('click', () => {
         const isOpen = scenesSection.style.display !== 'none';
         scenesSection.style.display = isOpen ? 'none' : '';
-        scenesToggleBtn.textContent = isOpen ? '\u25BC' : '\u25B2';
+        scenesToggleBtn.setAttribute('aria-expanded', String(!isOpen));
       });
     }
 
@@ -1119,6 +1276,7 @@ class PopupController {
         this.isActive = true;
         const toggle = document.getElementById('toggle');
         if (toggle) toggle.checked = true;
+        this._renderStage();
         await this._injectCore();
       }
       await this._sendCommand({ action: 'textAutoStart', text: text });
@@ -1186,11 +1344,9 @@ class PopupController {
         }
         if (this.autoCycleActive) {
           this.autoCycleActive = false;
-          const autoBtn = document.getElementById('btn-auto-cycle');
-          if (autoBtn) autoBtn.classList.remove('active');
           this._sendCommand({ action: 'stopAutoCycle' });
         }
-        this._updateLayerCount();
+        this._updateAutoUI();
         this._saveState();
       });
     }
@@ -1222,6 +1378,7 @@ class PopupController {
       let opacityThrottleTimer = null;
       opacitySlider.addEventListener('input', (e) => {
         this.opacity = parseInt(e.target.value, 10) / 100;
+        this._updateOpacityUI();
         if (opacityThrottleTimer) return;
         opacityThrottleTimer = setTimeout(() => {
           opacityThrottleTimer = null;
@@ -1299,16 +1456,10 @@ class PopupController {
         document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         document.querySelectorAll('.blend-btn').forEach(btn => btn.classList.remove('active'));
-        const opacitySlider = document.getElementById('opacity-slider');
-        if (opacitySlider) opacitySlider.value = 80;
+        this._updateOpacityUI();
         const audioBtn = document.getElementById('audio-toggle');
         if (audioBtn) { audioBtn.textContent = 'ON'; audioBtn.classList.add('on'); }
-        const autoBtn = document.getElementById('btn-auto-cycle');
-        if (autoBtn) autoBtn.classList.remove('active');
-        const autoBlendBtn = document.getElementById('auto-blend');
-        if (autoBlendBtn) autoBlendBtn.classList.remove('active');
-        const autoFiltersBtn = document.getElementById('auto-filters');
-        if (autoFiltersBtn) autoFiltersBtn.classList.remove('active');
+        this._updateAutoUI();
         // Reset lock UI
         for (const key of ['effect', 'blend', 'filter']) {
           const lockBtn = document.getElementById('lock-' + key);
@@ -1321,7 +1472,6 @@ class PopupController {
         if (btnTextToggle) { btnTextToggle.classList.remove('active'); btnTextToggle.textContent = 'GO'; }
         // Reset settings UI
         this._updateSettingsUI();
-        this._updateLayerCount();
         this._saveState();
 
       });
@@ -1338,6 +1488,7 @@ class PopupController {
           this.isActive = true;
           const toggle = document.getElementById('toggle');
           if (toggle) toggle.checked = true;
+          this._renderStage();
           await this._injectCore();
         }
         // 今のレイヤーをフェードアウトして、選んだ 1〜3 本をフェードイン(ロックしたものはエンジンが残す)
@@ -1360,12 +1511,8 @@ class PopupController {
         document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
           cb.checked = this.activeLayers.has(cb.value);
         });
-        this._updateLayerCount();
-        if (this.autoCycleActive) {
-          this.autoCycleActive = false;
-          const autoBtn = document.getElementById('btn-auto-cycle');
-          if (autoBtn) autoBtn.classList.remove('active');
-        }
+        this.autoCycleActive = false;
+        this._updateAutoUI();
         // Re-start standalone Rnd if active (kill stops engine-side timers)
         if (this.autoBlend || this.autoFilters) {
           await this._sendCommand(this._autoFXCommand());
@@ -1387,15 +1534,13 @@ class PopupController {
       btnAutoCycle.addEventListener('click', async () => {
         if (this._busy) return;
         this.autoCycleActive = !this.autoCycleActive;
-        btnAutoCycle.classList.toggle('active', this.autoCycleActive);
         if (this.autoCycleActive) {
           // Auto ON → also enable Auto Blend + Auto Filter
           this.autoBlend = true;
           this.autoFilters = true;
-          const autoBlendBtn = document.getElementById('auto-blend');
-          if (autoBlendBtn) autoBlendBtn.classList.add('active');
-          const autoFiltersBtn = document.getElementById('auto-filters');
-          if (autoFiltersBtn) autoFiltersBtn.classList.add('active');
+        }
+        this._updateAutoUI();
+        if (this.autoCycleActive) {
           // Rnd ON → ブレンド/フィルターボタンのactive解除（ランダムに委ねる）
           document.querySelectorAll('.blend-btn').forEach(b => b.classList.remove('active'));
           document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -1410,7 +1555,6 @@ class PopupController {
           await this._sendCommand(this._autoCycleCommand());
           // Clear preset checkboxes — auto-cycle manages presets automatically
           document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-          this._updateLayerCount();
         } else {
           await this._sendCommand({ action: 'stopAutoCycle' });
           // Blend Random / Filter Random が残っていれば独立動作を継続
@@ -1440,47 +1584,29 @@ class PopupController {
       });
     }
 
-    // Auto-blend toggle
-    const autoBlendBtn = document.getElementById('auto-blend');
-    if (autoBlendBtn) {
-      autoBlendBtn.addEventListener('click', async () => {
-        this.autoBlend = !this.autoBlend;
-        autoBlendBtn.classList.toggle('active', this.autoBlend);
-        // Rnd ON → ブレンドボタンのactive解除（ランダムに委ねる）
-        if (this.autoBlend) {
-          document.querySelectorAll('.blend-btn').forEach(b => b.classList.remove('active'));
-        }
-        if (this.autoCycleActive) {
-          await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
-        } else if (this.autoBlend || this.autoFilters) {
-          await this._sendCommand(this._autoFXCommand());
-        } else {
-          await this._sendCommand({ action: 'stopAutoFX' });
-        }
-        this._saveState();
+    // Blend Rnd / Filter Rnd(いつもの画面のチップと、手動の Blend / Filters の Rnd は同じもの)
+    const bindRnd = (selector, flag, manualButtons) => {
+      document.querySelectorAll(selector).forEach(btn => {
+        btn.addEventListener('click', async () => {
+          this[flag] = !this[flag];
+          // Rnd ON → 手で選んだボタンの active 解除(ランダムに委ねる)
+          if (this[flag]) {
+            document.querySelectorAll(manualButtons).forEach(b => b.classList.remove('active'));
+          }
+          this._updateAutoUI();
+          if (this.autoCycleActive) {
+            await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
+          } else if (this.autoBlend || this.autoFilters) {
+            await this._sendCommand(this._autoFXCommand());
+          } else {
+            await this._sendCommand({ action: 'stopAutoFX' });
+          }
+          this._saveState();
+        });
       });
-    }
-
-    // Auto-filters toggle
-    const autoFiltersBtn = document.getElementById('auto-filters');
-    if (autoFiltersBtn) {
-      autoFiltersBtn.addEventListener('click', async () => {
-        this.autoFilters = !this.autoFilters;
-        autoFiltersBtn.classList.toggle('active', this.autoFilters);
-        // Rnd ON → フィルターボタンのactive解除（ランダムに委ねる）
-        if (this.autoFilters) {
-          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        }
-        if (this.autoCycleActive) {
-          await this._sendCommand({ action: 'updateAutoCycleOptions', autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks });
-        } else if (this.autoBlend || this.autoFilters) {
-          await this._sendCommand(this._autoFXCommand());
-        } else {
-          await this._sendCommand({ action: 'stopAutoFX' });
-        }
-        this._saveState();
-      });
-    }
+    };
+    bindRnd('#auto-blend, [data-rnd="blend"]', 'autoBlend', '.blend-btn');
+    bindRnd('#auto-filters, [data-rnd="filters"]', 'autoFilters', '.filter-btn');
   }
 
   /**
@@ -1555,16 +1681,10 @@ class PopupController {
     this.autoCycleActive = true;
     this.autoBlend = true;
     this.autoFilters = true;
-    const autoBtn = document.getElementById('btn-auto-cycle');
-    if (autoBtn) autoBtn.classList.add('active');
-    const autoBlendBtn = document.getElementById('auto-blend');
-    if (autoBlendBtn) autoBlendBtn.classList.add('active');
-    const autoFiltersBtn = document.getElementById('auto-filters');
-    if (autoFiltersBtn) autoFiltersBtn.classList.add('active');
     document.querySelectorAll('.blend-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-    this._updateLayerCount();
+    this._updateAutoUI();
   }
 
   // skipFirstAutoTick: 始めたレイヤーを最初の場面として見せ、Auto の切り替えは次のサイクルから
@@ -1583,6 +1703,7 @@ class PopupController {
 
     try {
       this.isActive = true;
+      this._renderStage();
 
       await this._injectCore();
 
@@ -1632,6 +1753,7 @@ class PopupController {
       this._coreInjected = false;
       const toggle = document.getElementById('toggle');
       if (toggle) toggle.checked = false;
+      this._renderStage();
       console.warn('VJam FX: Failed to inject', e);
     } finally {
       this._busy = false;
@@ -1653,6 +1775,9 @@ class PopupController {
       this.isActive = false;
       this._coreInjected = false;
       this._injectedPresets.clear();
+      this._live = null;
+      this._bpm = 0;
+      this._renderStage();
       await this._saveState();
     } finally {
       this._busy = false;
@@ -1698,7 +1823,7 @@ class PopupController {
       document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
         cb.checked = this.activeLayers.has(cb.value);
       });
-      this._updateLayerCount();
+      this._renderStage();
     } catch (e) {
       console.warn('VJam FX: Failed to send command', e);
     }

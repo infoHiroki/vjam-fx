@@ -141,19 +141,24 @@ export async function launchWithExtension({ headless = true, files } = {}) {
 
 // popup は別の popup ウィンドウで開く(対象タブをアクティブのままにして rAF を止めない)。
 // about:blank で開いてから init script で chrome.tabs.query を対象タブに向け、popup.html に移動する。
-// init() はエンジンの状態を読んでからボタンにイベントを付けるので、付け終わるまで待ってから返す
-export async function openPopup(ext, base) {
+// init() はエンジンの状態を読んでからボタンにイベントを付けるので、付け終わるまで待ってから返す。
+// tab: 対象タブの代わりにこのタブを返す({ id, url })。chrome:// などは拡張から URL が見えないので、重ねられないページはこれで開く
+// (イベントを付けないページなので、読み込みだけ待つ)
+export async function openPopup(ext, base, { tab } = {}) {
   const [popup] = await Promise.all([
     ext.context.waitForEvent('page'),
     ext.sw.evaluate(() => chrome.windows.create({ url: 'about:blank', type: 'popup', width: 320, height: 760 })),
   ]);
-  await popup.addInitScript((target) => {
+  await popup.addInitScript(({ target, fakeTab }) => {
     if (typeof chrome === 'undefined' || !chrome.tabs || location.protocol !== 'chrome-extension:') return;
     const query = chrome.tabs.query.bind(chrome.tabs);
     chrome.tabs.query = (opts, cb) => {
-      const r = opts && opts.active && opts.currentWindow
-        ? query({}).then((tabs) => tabs.filter((t) => t.url && t.url.startsWith(target)))
-        : query(opts);
+      let r;
+      if (opts && opts.active && opts.currentWindow) {
+        r = fakeTab ? Promise.resolve([fakeTab]) : query({}).then((tabs) => tabs.filter((t) => t.url && t.url.startsWith(target)));
+      } else {
+        r = query(opts);
+      }
       return cb ? r.then(cb) : r;
     };
     // _bindEvents() は同期で全部付けるので、#btn-reset に click が付いたら準備完了
@@ -162,10 +167,17 @@ export async function openPopup(ext, base) {
       if (type === 'click' && this.id === 'btn-reset') window.__vjPopupReady = true;
       return add.call(this, type, ...rest);
     };
-  }, base);
+  }, { target: base, fakeTab: tab || null });
   await popup.goto(`chrome-extension://${ext.extId}/popup/popup.html`);
-  await popup.waitForFunction(() => window.__vjPopupReady === true);
+  if (!tab) await popup.waitForFunction(() => window.__vjPopupReady === true);
   return popup;
+}
+
+// 手動(Effect・Filters・Blend・Scenes・Text・Reset・Audio)を開く。開いているかは覚えているので、閉じているときだけ押す
+export async function openManual(popup) {
+  const section = popup.locator('#manual-section');
+  if (!(await section.isVisible())) await popup.click('#btn-manual');
+  await section.waitFor({ state: 'visible' });
 }
 
 // --- ページ内のエンジンを覗く ---

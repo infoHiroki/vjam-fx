@@ -9,11 +9,12 @@
 <body>
   <div class="popup">
     <header class="header">
-      <h1>VJam FX</h1>
+      <img class="logo" src="lockup.png" alt="VJam FX">
       <div class="header-right">
-        <span id="layer-count" class="layer-count"></span>
-        <button id="btn-settings" class="settings-btn" title="Settings">&#9881;</button>
-        <label class="toggle-switch">
+        <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings">
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+        <label class="toggle-switch" title="ON / OFF">
           <input type="checkbox" id="toggle">
           <span class="slider"></span>
         </label>
@@ -30,7 +31,7 @@
       </div>
       <div class="setting-row" title="Also turn ON in every tab you switch to">
         <label>All tabs</label>
-        <button id="setting-all-tabs" class="audio-btn" style="padding:2px 8px;font-size:11px">OFF</button>
+        <button id="setting-all-tabs" class="audio-btn">OFF</button>
       </div>
       <div class="setting-row">
         <label>Fade</label>
@@ -62,81 +63,119 @@
       <!-- この端末で重いので外したもの(Next / Auto が選ばない)。Restore で全部戻す -->
       <div class="setting-row" title="Presets too heavy for this device. Next / Auto skip them">
         <label>Too heavy</label>
-        <span style="margin-left:auto;margin-right:8px;font-size:11px;color:#aaa"><span id="heavy-count">0</span> skipped</span>
-        <button id="btn-heavy-reset" class="audio-btn" style="padding:2px 8px;font-size:11px" disabled>Restore</button>
+        <span class="heavy-note"><span id="heavy-count">0</span> skipped</span>
+        <button id="btn-heavy-reset" class="mini-btn" disabled>Restore</button>
       </div>
     </div>
 
-    <div class="action-hero">
-      <button id="btn-auto-cycle" class="hero-btn" title="Auto cycle presets with beat sync">&#9654; Auto</button>
-    </div>
-    <div class="action-bar">
-      <button id="btn-reset" class="action-btn reset" title="Reset all">Reset</button>
-      <button id="btn-next" class="action-btn" title="Random preset + FX">Next</button>
-    </div>
+    <div class="main">
+      <!-- いま流れているもの。名前と BPM は popup が開いている間エンジンから読み直す -->
+      <section id="stage" class="stage" data-mode="off">
+        <div class="mode">
+          <span id="stage-mode" class="big">OFF</span>
+          <span id="stage-bpm" class="bpm" hidden></span>
+          <span id="stage-beat" class="beat"></span>
+        </div>
+        <div id="stage-meter" class="meter"></div>
+        <ol id="layer-names" class="now"></ol>
+      </section>
+      <p id="off-hint" class="hint"></p>
 
-    <div class="section-label"><span>Effect</span><button id="lock-effect" class="auto-toggle lock-toggle" title="Lock presets">Lock</button></div>
-    <input type="text" id="preset-search" class="preset-search" placeholder="Search presets...">
-    <div class="preset-list" id="preset-list">
-      <!-- Presets injected by popup.js -->
-    </div>
+      <div class="actions">
+        <button id="btn-next" class="btn primary" title="Random preset + FX">
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4l10 8-10 8z"/><path d="M19 5v14"/></svg>Next
+        </button>
+        <button id="btn-auto-cycle" class="btn" title="Auto cycle presets with beat sync">
+          <svg class="ic ic-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4l14 8-14 8z"/></svg>
+          <svg class="ic ic-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+          <span class="label">Auto</span>
+        </button>
+      </div>
 
-    <div class="section-label"><span>Filters</span><button id="lock-filter" class="auto-toggle lock-toggle" title="Lock filters">Lock</button><button id="auto-filters" class="auto-toggle" title="Randomize filters">Rnd</button></div>
-    <!-- VJam 本体と同じ 5 個(brightness / sepia / blur はボタンだけ出さない。エンジンは保存済みのシーン・状態のために対応したまま) -->
-    <div class="filter-grid" id="filter-grid" style="grid-template-columns:repeat(5,1fr)">
-      <button class="filter-btn" data-filter="invert">Invert</button>
-      <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
-      <button class="filter-btn" data-filter="saturate">Saturate</button>
-      <button class="filter-btn" data-filter="grayscale">Gray</button>
-      <button class="filter-btn" data-filter="contrast">Contrast</button>
-    </div>
+      <div class="chips">
+        <button id="auto-blend" class="chip" data-rnd="blend" title="Randomize blend mode"><i></i>Blend Rnd</button>
+        <button id="auto-filters" class="chip" data-rnd="filters" title="Randomize filters"><i></i>Filter Rnd</button>
+        <button id="chip-all-tabs" class="chip" title="Also turn ON in every tab you switch to"><i></i>All tabs</button>
+      </div>
 
-    <div class="section-label"><span>Blend</span><button id="lock-blend" class="auto-toggle lock-toggle" title="Lock blend mode">Lock</button><button id="auto-blend" class="auto-toggle" title="Randomize blend mode">Rnd</button></div>
-    <div class="blend-grid" id="blend-grid">
-      <button class="blend-btn" data-blend="lighten">Lighten</button>
-      <button class="blend-btn" data-blend="difference">Diff</button>
-      <button class="blend-btn" data-blend="exclusion">Exclusion</button>
-      <button class="blend-btn" data-blend="color-dodge">Dodge</button>
-    </div>
+      <div class="opacity-row">
+        <label for="opacity-slider">Opacity</label>
+        <input type="range" id="opacity-slider" min="0" max="100" value="80" class="opacity-slider">
+        <span id="opacity-value" class="opacity-value">80%</span>
+      </div>
 
-    <div class="section-label"><span>Scenes</span><button id="btn-scene-save" class="scene-save-btn" title="Save mode">Save</button><button id="btn-scenes-toggle" class="settings-btn" title="Toggle scenes" style="font-size:12px">&#9660;</button></div>
-    <div id="scenes-section" class="scenes-section">
-      <div class="scene-grid" id="scene-grid">
-        <div class="scene-slot" data-slot="0"><button class="scene-btn" data-slot="0">1</button><button class="scene-del" data-slot="0">&times;</button></div>
-        <div class="scene-slot" data-slot="1"><button class="scene-btn" data-slot="1">2</button><button class="scene-del" data-slot="1">&times;</button></div>
-        <div class="scene-slot" data-slot="2"><button class="scene-btn" data-slot="2">3</button><button class="scene-del" data-slot="2">&times;</button></div>
-        <div class="scene-slot" data-slot="3"><button class="scene-btn" data-slot="3">4</button><button class="scene-del" data-slot="3">&times;</button></div>
-        <div class="scene-slot" data-slot="4"><button class="scene-btn" data-slot="4">5</button><button class="scene-del" data-slot="4">&times;</button></div>
-        <div class="scene-slot" data-slot="5"><button class="scene-btn" data-slot="5">6</button><button class="scene-del" data-slot="5">&times;</button></div>
-        <div class="scene-slot" data-slot="6"><button class="scene-btn" data-slot="6">7</button><button class="scene-del" data-slot="6">&times;</button></div>
-        <div class="scene-slot" data-slot="7"><button class="scene-btn" data-slot="7">8</button><button class="scene-del" data-slot="7">&times;</button></div>
-        <div class="scene-slot" data-slot="8"><button class="scene-btn" data-slot="8">9</button><button class="scene-del" data-slot="8">&times;</button></div>
-        <div class="scene-slot" data-slot="9"><button class="scene-btn" data-slot="9">10</button><button class="scene-del" data-slot="9">&times;</button></div>
-        <div class="scene-slot" data-slot="10"><button class="scene-btn" data-slot="10">11</button><button class="scene-del" data-slot="10">&times;</button></div>
-        <div class="scene-slot" data-slot="11"><button class="scene-btn" data-slot="11">12</button><button class="scene-del" data-slot="11">&times;</button></div>
+      <button id="btn-manual" class="disclosure" aria-expanded="false" aria-controls="manual-section">
+        <span>Manual</span>
+        <svg class="ic chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+
+      <div id="manual-section" class="manual" hidden>
+        <div class="section-label"><span>Effect</span><button id="lock-effect" class="auto-toggle lock-toggle" title="Lock presets">Lock</button></div>
+        <input type="text" id="preset-search" class="preset-search" placeholder="Search presets...">
+        <div class="preset-list" id="preset-list">
+          <!-- Presets injected by popup.js -->
+        </div>
+
+        <div class="section-label"><span>Filters</span><button id="lock-filter" class="auto-toggle lock-toggle" title="Lock filters">Lock</button><button class="auto-toggle rnd-toggle" data-rnd="filters" title="Randomize filters"><i></i>Rnd</button></div>
+        <!-- VJam 本体と同じ 5 個(brightness / sepia / blur はボタンだけ出さない。エンジンは保存済みのシーン・状態のために対応したまま) -->
+        <div class="filter-grid" id="filter-grid">
+          <button class="filter-btn" data-filter="invert">Invert</button>
+          <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
+          <button class="filter-btn" data-filter="saturate">Saturate</button>
+          <button class="filter-btn" data-filter="grayscale">Gray</button>
+          <button class="filter-btn" data-filter="contrast">Contrast</button>
+        </div>
+
+        <div class="section-label"><span>Blend</span><button id="lock-blend" class="auto-toggle lock-toggle" title="Lock blend mode">Lock</button><button class="auto-toggle rnd-toggle" data-rnd="blend" title="Randomize blend mode"><i></i>Rnd</button></div>
+        <div class="blend-grid" id="blend-grid">
+          <button class="blend-btn" data-blend="lighten">Lighten</button>
+          <button class="blend-btn" data-blend="difference">Diff</button>
+          <button class="blend-btn" data-blend="exclusion">Exclusion</button>
+          <button class="blend-btn" data-blend="color-dodge">Dodge</button>
+        </div>
+
+        <div class="section-label"><span>Scenes</span><button id="btn-scene-save" class="scene-save-btn" title="Save mode">Save</button><button id="btn-scenes-toggle" class="icon-btn small" title="Toggle scenes" aria-expanded="true" aria-controls="scenes-section"><svg class="ic chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button></div>
+        <div id="scenes-section" class="scenes-section">
+          <div class="scene-grid" id="scene-grid">
+            <div class="scene-slot" data-slot="0"><button class="scene-btn" data-slot="0">1</button><button class="scene-del" data-slot="0" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="1"><button class="scene-btn" data-slot="1">2</button><button class="scene-del" data-slot="1" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="2"><button class="scene-btn" data-slot="2">3</button><button class="scene-del" data-slot="2" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="3"><button class="scene-btn" data-slot="3">4</button><button class="scene-del" data-slot="3" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="4"><button class="scene-btn" data-slot="4">5</button><button class="scene-del" data-slot="4" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="5"><button class="scene-btn" data-slot="5">6</button><button class="scene-del" data-slot="5" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="6"><button class="scene-btn" data-slot="6">7</button><button class="scene-del" data-slot="6" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="7"><button class="scene-btn" data-slot="7">8</button><button class="scene-del" data-slot="7" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="8"><button class="scene-btn" data-slot="8">9</button><button class="scene-del" data-slot="8" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="9"><button class="scene-btn" data-slot="9">10</button><button class="scene-del" data-slot="9" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="10"><button class="scene-btn" data-slot="10">11</button><button class="scene-del" data-slot="10" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+            <div class="scene-slot" data-slot="11"><button class="scene-btn" data-slot="11">12</button><button class="scene-del" data-slot="11" title="Clear"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button></div>
+          </div>
+        </div>
+
+        <div class="section-label"><span>Text</span></div>
+        <div id="text-section" class="text-section">
+          <input type="text" id="text-input" class="text-input" placeholder="Enter text..." maxlength="200">
+          <button id="btn-text-toggle" class="action-btn">GO</button>
+        </div>
+
+        <div class="manual-foot">
+          <button id="btn-reset" class="action-btn reset" title="Reset all">Reset</button>
+          <div class="audio-row">
+            <label>Audio</label>
+            <button id="audio-toggle" class="audio-btn on">ON</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="section-label"><span>Text</span></div>
-    <div id="text-section" class="text-section">
-      <div class="setting-row">
-        <input type="text" id="text-input" class="text-input" placeholder="Enter text..." maxlength="200">
-        <button id="btn-text-toggle" class="action-btn" style="min-width:40px">GO</button>
-      </div>
-    </div>
-
-    <div class="controls">
-      <div class="control-row">
-        <label>Opacity</label>
-        <input type="range" id="opacity-slider" min="0" max="100" value="100" class="opacity-slider">
-      </div>
-      <div class="control-row">
-        <label>Audio</label>
-        <button id="audio-toggle" class="audio-btn on">ON</button>
-      </div>
+    <!-- chrome:// やストアなど、重ねられないページ -->
+    <div id="blocked" class="blocked" hidden>
+      <img class="mark" src="mark.png" alt="">
+      <p id="blocked-msg"></p>
     </div>
 
     <footer class="footer">
+      <span id="heavy-skipped" class="skipped" hidden></span>
       <a id="vjam-link" href="https://vjam.vercel.app?utm_source=vjam-fx&utm_medium=extension&utm_campaign=popup-cta" target="_blank" rel="noopener">
         <span id="cta-text">Want more? Try VJam Full →</span>
       </a>
