@@ -53,7 +53,7 @@
   // 落とし中でも描画が 30fps に収まっていれば下がらない。下がるのは描画 1 回が 1 フレームに収まらないときだけ(しきい値は 30 の 8 割)
   // レイヤーを足した・外したら、フェードが終わって HEAVY_SETTLE_MS たつまで数えない。
   // 端末に覚えるのは、外したあとの HEAVY_SECONDS 秒が HEAVY_FPS 以上に戻ったとき(本当に軽くなったとき)だけ。
-  // 戻らなければページ自体が重い(外したレイヤーは無実)ので、入れ替えだけで終わる
+  // 戻らなければページ自体が重い(外したレイヤーは無実)ので、入れ替えだけで終わり、そのページ(このエンジン)ではもう飛ばさない
   const HEAVY_FPS = 24;
   const HEAVY_SECONDS = 3;
   const HEAVY_SETTLE_MS = 2000;
@@ -138,6 +138,7 @@
       this._effectLock = false; // エフェクトのロック(Auto / Next が渡す)。ロック中は入れ替えない
       this._pendingPreset = null; // SW に読み込みを頼んだ入れ替え先
       this._heavyPending = null; // 外したあと、本当に軽くなったかを見ているもの { name, fps, replacement, samples }
+      this._heavySkipOff = false; // 外しても軽くならなかった(ページ自体が重い)。このエンジンではもう自動で飛ばさない(OFF でも戻さない)
       this._autoResting = false; // Auto の休み中
 
       // MSE タップの BPM(Auto / Rnd の間隔用。取れていなければ 0)
@@ -905,6 +906,7 @@
     // 1 秒ごとの fps を見て、HEAVY_FPS を HEAVY_SECONDS 秒続けて割ったら _skipHeavy。
     // タブが裏・フェード中(とその後)・dip 中・Auto の休み中は数えず、続けて割った秒数も数え直す
     _trackHeavy(now) {
+      if (this._heavySkipOff) return;
       if (this._heavyHoldMs > 0) {
         this._heavyHoldUntil = Math.max(this._heavyHoldUntil, now + this._heavyHoldMs);
         this._heavyHoldMs = 0;
@@ -929,6 +931,7 @@
       m.start = now;
       m.frames = 0;
       if (this._heavyPending) this._confirmHeavy(fps);
+      if (this._heavySkipOff) return;
       if (fps >= HEAVY_FPS) {
         // 描く時間は、割り続けている間の分だけで比べる
         m.low = 0;
@@ -976,7 +979,8 @@
     }
 
     // 外したあとの HEAVY_SECONDS 秒(フェードが終わって HEAVY_SETTLE_MS たってから続けて)の平均が HEAVY_FPS 以上なら、
-    // SW に知らせて端末に覚えてもらう(bridge 経由)。割ったままならページ自体が重いので覚えない(このページでも選び直してよい)
+    // SW に知らせて端末に覚えてもらう(bridge 経由)。割ったままならページ自体が重いので覚えない(このページでも選び直してよい)。
+    // そのときは、外しても軽くならないので、このエンジンではもう飛ばさない(入れ替え続けない)
     _confirmHeavy(fps) {
       const pending = this._heavyPending;
       pending.samples.push(fps);
@@ -985,6 +989,8 @@
       const avg = pending.samples.reduce((sum, v) => sum + v, 0) / pending.samples.length;
       if (avg < HEAVY_FPS) {
         this._heavyPresets.delete(pending.name);
+        this._heavySkipOff = true;
+        this._heavyMeter = null;
         return;
       }
       window.postMessage({

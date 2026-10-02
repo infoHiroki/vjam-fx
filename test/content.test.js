@@ -2585,7 +2585,33 @@ describe('VJamFXEngine', () => {
         expect(engine._heavyPresets.has(NAMES[0])).toBe(false);
         run(20, 30);
         expect(heavyPosts()).toEqual([]);
-        expect(engine._heavyPresets.size).toBeLessThanOrEqual(1); // 確かめている途中の 1 本だけ
+        expect(engine._heavyPresets.size).toBe(0);
+      });
+
+      it('stops skipping in this page (this engine) once a skip did not make it lighter', () => {
+        engine.crossfade([NAMES[0]], { poolPresets: NAMES });
+        run(20, 5.1);
+        const [replacement] = engine.getActiveLayerNames();
+        run(20, 5.1); // 外しても重いまま → 覚えず、ここで飛ばすのをやめる(同じ秒で次を外さない)
+        expect(engine._heavySkipOff).toBe(true);
+        expect(skips.map(m => m.name)).toEqual([NAMES[0]]);
+        run(20, 30);
+        expect(engine.getActiveLayerNames()).toEqual([replacement]);
+        expect(engine._heavyMeter).toBeNull(); // 測るのもやめる
+        // Next で入れ替えても、OFF → ON でも、このエンジンでは飛ばさない
+        engine.crossfade([NAMES[2]], { poolPresets: NAMES });
+        run(20, 30);
+        engine.stop();
+        engine.active = true;
+        engine.crossfade([NAMES[3]], { poolPresets: NAMES });
+        run(20, 30);
+        expect(engine.getActiveLayerNames()).toEqual([NAMES[3]]);
+        expect(skips).toHaveLength(1);
+        expect(heavyPosts()).toEqual([]);
+        // 新しいページ(新しいエンジン)ではまた飛ばす
+        const fresh = new VJamFXEngine();
+        expect(fresh._heavySkipOff).toBe(false);
+        fresh.destroy();
       });
 
       it('decides on the average of the 3 s (one slow second is fine, two are not)', () => {
@@ -2848,6 +2874,8 @@ describe('VJamFXEngine', () => {
             engine._stopAutoCycle();
             window.dispatchEvent(new MessageEvent('message', { data: { source: 'vjam-fx-bridge', type: 'presetInjected', name: 'late-x' } }));
             expect(engine.activeLayers.has('late-x')).toBe(false);
+            // 次の回のために、外したものの確かめ(重いまま → 飛ばすのをやめる)を始めない
+            engine._heavyPending = null;
             engine._heavyPresets.clear();
           }
         } finally {
