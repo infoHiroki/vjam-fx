@@ -776,4 +776,176 @@ describe('PopupController', () => {
       delete window._vjamFxEngine;
     });
   });
+
+  // トグル ON で Auto を始める(#29)。設定 ON(既定)なら Auto・Blend Rnd・Filter Rnd を ON で始める
+  describe('auto on start', () => {
+    const sentCommands = () => chrome.scripting.executeScript.mock.calls
+      .map(c => c[0].args && c[0].args[0])
+      .filter(m => m && m.action);
+    const actions = () => sentCommands().map(m => m.action);
+    // 始めたレイヤー: 1 本目は start、2 本目からは _sendAddLayer(args がプリセット ID)
+    const startedLayers = () => chrome.scripting.executeScript.mock.calls.flatMap(c => {
+      const a = c[0].args && c[0].args[0];
+      if (typeof a === 'string') return [a];
+      return a && (a.action === 'start' || a.action === 'addLayer') ? [a.preset] : [];
+    });
+    const isActive = (id) => document.getElementById(id).classList.contains('active');
+
+    let toggle;
+
+    beforeEach(() => {
+      container.querySelector('.popup').insertAdjacentHTML('beforeend', `
+        <select id="setting-auto-start"><option value="on">ON</option><option value="off">OFF</option></select>
+        <button id="btn-auto-cycle"></button>
+        <button id="auto-blend"></button>
+        <button id="auto-filters"></button>
+        <button id="btn-next"></button>
+        <button class="blend-btn" data-blend="difference"></button>
+      `);
+      controller._buildPresetList();
+      controller.poolPresets = controller.presets.filter(p => p.id === 'rain' || p.id === 'radar');
+      controller.pool = { filters: ['saturate(2)'], blends: ['screen', 'difference'] };
+      controller._bindEvents();
+      toggle = document.getElementById('toggle');
+    });
+
+    const setToggle = async (on) => {
+      toggle.checked = on;
+      toggle.dispatchEvent(new Event('change'));
+      await vi.waitFor(() => expect(controller._busy).toBe(false));
+    };
+
+    it('is ON by default (also when saved settings predate it)', async () => {
+      expect(controller.settings.autoOnStart).toBe(true);
+      chrome.storage.local.get.mockResolvedValueOnce({ vjamfx_settings: { fadeDuration: 3 } });
+      await controller._loadSettings();
+      expect(controller.settings.autoOnStart).toBe(true);
+      expect(document.getElementById('setting-auto-start').value).toBe('on');
+    });
+
+    it('saves the setting from the settings panel', () => {
+      const el = document.getElementById('setting-auto-start');
+      el.value = 'off';
+      el.dispatchEvent(new Event('change'));
+      expect(controller.settings.autoOnStart).toBe(false);
+      expect(chrome.storage.local.set).toHaveBeenCalledWith({ vjamfx_settings: expect.objectContaining({ autoOnStart: false }) });
+    });
+
+    it('setting ON: toggle ON starts 1-3 pool presets (not neon-tunnel) and Auto + Rnd with the pool', async () => {
+      // 前に手で選んでいた表示(ランダムに委ねるので外れる)
+      document.querySelector('.blend-btn').classList.add('active');
+      await setToggle(true);
+
+      const picked = startedLayers();
+      expect(picked.length).toBeGreaterThanOrEqual(1);
+      expect(picked.length).toBeLessThanOrEqual(2); // プールが 2 本
+      for (const id of picked) expect(['rain', 'radar']).toContain(id);
+      expect([...controller.activeLayers].sort()).toEqual([...picked].sort());
+
+      const cmd = sentCommands().find(m => m.action === 'startAutoCycle');
+      expect(cmd).toBeDefined();
+      expect(cmd.presets.sort()).toEqual(['radar', 'rain']);
+      expect(cmd.pool).toEqual(controller.pool);
+      expect(cmd.autoBlend).toBe(true);
+      expect(cmd.autoFilters).toBe(true);
+      // 選んだレイヤーを最初の場面として見せる(すぐ差し替えない)
+      expect(cmd.skipFirstTick).toBe(true);
+      expect(actions().indexOf('start')).toBeLessThan(actions().indexOf('startAutoCycle'));
+
+      expect(controller.isActive).toBe(true);
+      expect(controller.autoCycleActive).toBe(true);
+      expect(controller.autoBlend).toBe(true);
+      expect(controller.autoFilters).toBe(true);
+      // 見た目は Auto ボタンを押したときと同じ
+      expect(isActive('btn-auto-cycle')).toBe(true);
+      expect(isActive('auto-blend')).toBe(true);
+      expect(isActive('auto-filters')).toBe(true);
+      expect(document.querySelector('.blend-btn').classList.contains('active')).toBe(false);
+      expect(document.querySelectorAll('#preset-list input:checked').length).toBe(0);
+
+      // SW にも Auto / Rnd で保存(ページ遷移の後も回す)
+      const saved = chrome.runtime.sendMessage.mock.calls.map(c => c[0]).filter(m => m.type === 'setState').pop();
+      expect(saved.state.autoCyclePresets.sort()).toEqual(['radar', 'rain']);
+      expect(saved.state.autoBlend).toBe(true);
+      expect(saved.state.autoFilters).toBe(true);
+    });
+
+    it('setting ON: starts with the layers already selected', async () => {
+      controller.activeLayers.add('kaleidoscope');
+      await setToggle(true);
+      const picked = startedLayers();
+      expect(picked).toEqual(['kaleidoscope']);
+      expect(actions()).toContain('startAutoCycle');
+    });
+
+    it('setting OFF: toggle ON works as before (neon-tunnel, no Auto / Rnd)', async () => {
+      const el = document.getElementById('setting-auto-start');
+      el.value = 'off';
+      el.dispatchEvent(new Event('change'));
+      await setToggle(true);
+
+      const picked = startedLayers();
+      expect(picked).toEqual(['neon-tunnel']);
+      expect(actions()).not.toContain('startAutoCycle');
+      expect(actions()).not.toContain('startAutoFX');
+      expect(controller.isActive).toBe(true);
+      expect(controller.autoCycleActive).toBe(false);
+      expect(controller.autoBlend).toBe(false);
+      expect(controller.autoFilters).toBe(false);
+      expect(isActive('btn-auto-cycle')).toBe(false);
+      expect(isActive('auto-blend')).toBe(false);
+      expect(isActive('auto-filters')).toBe(false);
+    });
+
+    it('checking a preset while OFF starts only that preset (Auto starts from the toggle only)', async () => {
+      const cb = document.querySelector('#preset-list input[value="rain"]');
+      cb.checked = true;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+      await vi.waitFor(() => expect(controller._busy).toBe(false));
+
+      expect(sentCommands().find(m => m.action === 'start').preset).toBe('rain');
+      expect(actions()).not.toContain('startAutoCycle');
+      expect(controller.autoCycleActive).toBe(false);
+    });
+
+    it('does not turn Auto / Rnd back on after the user turned them off while running', async () => {
+      await setToggle(true);
+
+      // 手で Filter Rnd と Auto を切る
+      document.getElementById('auto-filters').click();
+      await vi.waitFor(() => expect(actions()).toContain('updateAutoCycleOptions'));
+      document.getElementById('btn-auto-cycle').click();
+      // Auto を切ると、残っている Blend Rnd が単独で回り出す
+      await vi.waitFor(() => expect(actions()).toContain('startAutoFX'));
+      expect(actions()).toContain('stopAutoCycle');
+      expect(controller.autoCycleActive).toBe(false);
+      expect(controller.autoFilters).toBe(false);
+
+      // その後の Next は、残っている Blend Rnd だけを続ける
+      chrome.scripting.executeScript.mockClear();
+      document.getElementById('btn-next').click();
+      await vi.waitFor(() => expect(actions()).toContain('startAutoFX'));
+      await vi.waitFor(() => expect(controller._busy).toBe(false));
+      expect(actions()).not.toContain('startAutoCycle');
+      expect(sentCommands().find(m => m.action === 'startAutoFX')).toMatchObject({ autoBlend: true, autoFilters: false });
+      expect(controller.autoCycleActive).toBe(false);
+      expect(controller.autoBlend).toBe(true);
+      expect(controller.autoFilters).toBe(false);
+      expect(isActive('btn-auto-cycle')).toBe(false);
+      expect(isActive('auto-filters')).toBe(false);
+    });
+
+    it('toggle OFF → ON starts Auto + Rnd again (each ON is a new session)', async () => {
+      await setToggle(true);
+      document.getElementById('btn-auto-cycle').click();
+      await vi.waitFor(() => expect(actions()).toContain('startAutoFX'));
+      await setToggle(false);
+
+      chrome.scripting.executeScript.mockClear();
+      await setToggle(true);
+      const cmd = sentCommands().find(m => m.action === 'startAutoCycle');
+      expect(cmd).toMatchObject({ autoBlend: true, autoFilters: true, skipFirstTick: true });
+      expect(isActive('btn-auto-cycle')).toBe(true);
+    });
+  });
 });
