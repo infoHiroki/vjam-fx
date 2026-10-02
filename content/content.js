@@ -99,7 +99,8 @@
       this.isLightPage = false;
       this.currentPreset = null;
       this.currentPresetName = null;
-      this.overlay = null;
+      this.overlay = null; // ホストの div(document.body の直下)
+      this._stage = null; // overlay の shadow root の中の入れ物。レイヤーとテキストのキャンバスはここに入れる
       this._savedRootBg = null; // createOverlay で html に Canvas を入れる前のインラインの値(入れていなければ null)
       this.audioEnabled = true;
       this._externalAudioData = null;
@@ -499,18 +500,43 @@
       const overlay = document.createElement('div');
       overlay.setAttribute('data-vjam-fx', 'overlay');
       // 位置と重なり順は !important で固定する。サイトの CSS に潰されないように
-      // (動画サイトの「フルサイズ」表示で、プレイヤー以外の z-index を 0 !important にするものがある)
+      // (動画サイトの「フルサイズ」表示で、プレイヤー以外を z-index: 0 / right: 100000px にして画面の外へ飛ばすものがある)
+      // opacity / mix-blend-mode / filter は実行中に変えるので固定しない
       const pinned = [
-        ['position', 'fixed'], ['top', '0'], ['left', '0'], ['width', '100vw'], ['height', '100vh'],
-        ['z-index', '2147483647'], ['pointer-events', 'none'],
+        ['display', 'block'], ['visibility', 'visible'], ['position', 'fixed'],
+        ['top', '0'], ['left', '0'], ['right', 'auto'], ['bottom', 'auto'], ['width', '100vw'], ['height', '100vh'],
+        ['margin', '0'], ['transform', 'none'], ['z-index', '2147483647'], ['pointer-events', 'none'],
       ];
       for (let i = 0; i < pinned.length; i++) overlay.style.setProperty(pinned[i][0], pinned[i][1], 'important');
       overlay.style.mixBlendMode = this._effectiveBlendMode();
 
+      // 中身(レイヤーの div・キャンバス・テキスト)は Shadow DOM に入れる。ページの CSS は shadow root の中に届かない
+      const shadow = overlay.attachShadow({ mode: 'open' });
+      const stage = document.createElement('div');
+      stage.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
+      shadow.appendChild(stage);
+      // p5 は setup の後、document の canvas だけを探して visibility: hidden を外す(shadow root の中は見えない)ので、同じことをここでする
+      // (<style> はページの CSP で止まることがあるので使わない。setup がページの load 待ちで後になっても拾えるよう、入ってきた時に外す)
+      new MutationObserver(() => {
+        const hidden = stage.querySelectorAll('canvas[data-hidden="true"]');
+        for (let i = 0; i < hidden.length; i++) {
+          hidden[i].style.visibility = '';
+          delete hidden[i].dataset.hidden;
+        }
+      }).observe(stage, { childList: true, subtree: true });
+
       document.body.appendChild(overlay);
       this.overlay = overlay;
+      this._stage = stage;
 
       return overlay;
+    }
+
+    _removeOverlay() {
+      if (!this.overlay) return;
+      this.overlay.remove();
+      this.overlay = null;
+      this._stage = null;
     }
 
     // createOverlay で html に入れた Canvas を、元のインラインの値に戻す(その後ページが書き換えていたら触らない)
@@ -527,7 +553,7 @@
       if (this.overlay) {
         mode = this._effectiveBlendMode();
         this.overlay.style.mixBlendMode = mode;
-        const canvases = this.overlay.querySelectorAll('canvas');
+        const canvases = this._stage.querySelectorAll('canvas');
         for (let i = 0; i < canvases.length; i++) {
           canvases[i].style.mixBlendMode = mode;
         }
@@ -597,7 +623,7 @@
       layerDiv.setAttribute('data-vjam-layer', presetName);
       const fadeSec = this._fadeDuration > 0 ? this._fadeDuration + 's' : '0s';
       layerDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity ' + fadeSec + ' linear;';
-      this.overlay.appendChild(layerDiv);
+      this._stage.appendChild(layerDiv);
 
       const PresetClass = window.VJamFX.presets[presetName];
       let preset;
@@ -792,10 +818,7 @@
       if (this._textOverlay) { this._textOverlay.destroy(); this._textOverlay = null; }
       this.stop();
 
-      if (this.overlay) {
-        this.overlay.remove();
-        this.overlay = null;
-      }
+      this._removeOverlay();
       this._restoreRootBackground();
 
       if (this._onBridgeMessage) {
@@ -1079,10 +1102,7 @@
           break;
         case 'stop':
           this.stop();
-          if (this.overlay) {
-            this.overlay.remove();
-            this.overlay = null;
-          }
+          this._removeOverlay();
           this._restoreRootBackground();
           this.activeFilters.clear();
           this._rndFilter = '';
@@ -1189,7 +1209,7 @@
       if (this._textOverlay) return;
       if (!window.VJamFX || !window.VJamFX.TextOverlay) return;
       this.createOverlay();
-      this._textOverlay = new window.VJamFX.TextOverlay(this.overlay);
+      this._textOverlay = new window.VJamFX.TextOverlay(this._stage);
       this._textOverlay.init();
     }
   }
