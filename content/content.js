@@ -40,6 +40,9 @@
   const FILTER_CHANGE_RATE = 0.6;
   const REST_MS = 500;
 
+  // Rnd / Auto で blend・filter を変えるときの dip: オーバーレイ全体をこの時間で 0 へ下げ、変えてから同じ時間で戻す
+  const DIP_MS = 300;
+
   // 45fps を 2 秒続けて割ったら p5 を 30fps に落とす
   const LOW_FPS = 45;
   const LOW_FPS_SECONDS = 2;
@@ -144,6 +147,10 @@
       // Settings
       this._fadeDuration = 1.5; // seconds for layer fade in/out
       this._audioSensitivity = 1.0; // multiplier for audio levels
+
+      // dip の段階(_dip 参照)。下げている間は _dipDownTimer、戻している間は _dipUpTimer
+      this._dipDownTimer = null;
+      this._dipUpTimer = null;
 
       this._onBridgeMessage = null;
       this._onFullscreenChange = null;
@@ -534,6 +541,7 @@
 
     _removeOverlay() {
       if (!this.overlay) return;
+      this._cancelDip();
       this.overlay.remove();
       this.overlay = null;
       this._stage = null;
@@ -547,17 +555,61 @@
       this._savedRootBg = null;
     }
 
-    setBlendMode(mode) {
+    // smooth: Rnd / Auto の切り替え。dip で暗くしている間に掛ける(手動のボタンはすぐ掛ける)
+    setBlendMode(mode, smooth) {
       if (!VALID_BLEND_MODES.includes(mode)) return;
       this.blendMode = mode;
-      if (this.overlay) {
-        mode = this._effectiveBlendMode();
-        this.overlay.style.mixBlendMode = mode;
-        const canvases = this._stage.querySelectorAll('canvas');
-        for (let i = 0; i < canvases.length; i++) {
-          canvases[i].style.mixBlendMode = mode;
-        }
+      if (!smooth || !this._dip()) this._applyBlendMode();
+    }
+
+    _applyBlendMode() {
+      if (!this.overlay) return;
+      const mode = this._effectiveBlendMode();
+      this.overlay.style.mixBlendMode = mode;
+      const canvases = this._stage.querySelectorAll('canvas');
+      for (let i = 0; i < canvases.length; i++) {
+        canvases[i].style.mixBlendMode = mode;
       }
+    }
+
+    // Rnd / Auto の blend・filter の切り替えを目立たせない(dip): オーバーレイの中身(shadow root の入れ物)を DIP_MS で 0 まで下げ、
+    // 下がりきったら今の blend / filter を CSS に掛けて、DIP_MS で戻す。人が設定した不透明度(ホストの opacity)には触らない。
+    // 下げている途中に来た切り替えは同じ dip に乗る。フェード時間 0・オーバーレイが無いときは dip しない(false。呼び出し側がすぐ掛ける)
+    _dip() {
+      if (!(this._fadeDuration > 0) || !this._stage) return false;
+      if (this._dipDownTimer) return true;
+      clearTimeout(this._dipUpTimer);
+      this._dipUpTimer = null;
+      const stage = this._stage;
+      stage.style.transition = 'opacity ' + DIP_MS + 'ms linear';
+      stage.style.opacity = '0';
+      this._dipDownTimer = setTimeout(() => {
+        this._dipDownTimer = null;
+        this._applyBlendMode();
+        this._applyFilters();
+        stage.style.opacity = '1';
+        this._dipUpTimer = setTimeout(() => {
+          this._dipUpTimer = null;
+          stage.style.transition = '';
+          stage.style.opacity = '';
+        }, DIP_MS);
+      }, DIP_MS);
+      return true;
+    }
+
+    // dip をやめて、今の blend / filter をすぐ掛ける(kill・オーバーレイを外すとき)
+    _cancelDip() {
+      if (!this._dipDownTimer && !this._dipUpTimer) return;
+      clearTimeout(this._dipDownTimer);
+      clearTimeout(this._dipUpTimer);
+      this._dipDownTimer = null;
+      this._dipUpTimer = null;
+      if (this._stage) {
+        this._stage.style.transition = '';
+        this._stage.style.opacity = '';
+      }
+      this._applyBlendMode();
+      this._applyFilters();
     }
 
     // 実際に CSS に掛ける blend。既定の screen はライトページでは見えないので difference で描く
@@ -576,18 +628,18 @@
       return pickOne(modes);
     }
 
-    // Rnd の blend。force でなければ 90% で変える
+    // Rnd の blend。force でなければ 90% で変える。dip で掛ける
     _randomizeBlend(pool, force) {
       if (!force && Math.random() >= BLEND_CHANGE_RATE) return;
-      this.setBlendMode(this._randomBlendMode(pool));
+      this.setBlendMode(this._randomBlendMode(pool), true);
     }
 
-    // Rnd の filter。プールから 1 つだけ選んで掛ける(重ね掛けしない)。force でなければ 60% で変え、それ以外は「なし」も含めて維持
+    // Rnd の filter。プールから 1 つだけ選んで掛ける(重ね掛けしない)。force でなければ 60% で変え、それ以外は「なし」も含めて維持。dip で掛ける
     _randomizeFilter(pool, force) {
       if (!force && Math.random() >= FILTER_CHANGE_RATE) return;
       this.activeFilters.clear();
       this._rndFilter = pickOne(poolFilters(pool));
-      this._applyFilters();
+      if (!this._dip()) this._applyFilters();
     }
 
     setOpacity(value) {
@@ -861,10 +913,11 @@
       this._applyFilters();
     }
 
-    clearFilters() {
+    // smooth: Auto の休みで戻すとき(dip で掛ける)
+    clearFilters(smooth) {
       this.activeFilters.clear();
       this._rndFilter = '';
-      this._applyFilters();
+      if (!smooth || !this._dip()) this._applyFilters();
     }
 
     _applyFilters() {
@@ -879,6 +932,7 @@
      */
     kill(options) {
       var locks = (options && options.locks) || {};
+      this._cancelDip();
       // Immediately destroy all layers (no fade) unless effect locked
       if (!locks.effect) {
         for (const [, layer] of this.activeLayers) {
@@ -898,6 +952,33 @@
       this.setOpacity(1.0);
       this._stopAutoCycle();
       this._stopAutoFX();
+    }
+
+    /**
+     * Next: 今のレイヤーをフェードアウトして、presetNames をフェードインする(kill + start のフェード版)。
+     * ロックしていない filter は外し、blend は options.blendMode(無ければ screen)にする。どちらもすぐ掛ける(押した反応)。
+     * 不透明度は人が設定した値のまま。Auto / Rnd のタイマーは止める(popup が必要なら送り直す)
+     */
+    crossfade(presetNames, options) {
+      const locks = (options && options.locks) || {};
+      this._stopAutoCycle();
+      this._stopAutoFX();
+      if (!locks.filter) this.clearFilters();
+      if (!locks.blend) this.setBlendMode((options && options.blendMode) || 'screen');
+      if (locks.effect) return;
+
+      for (const name of [...this.activeLayers.keys()]) this._removeLayer(name);
+      this.currentPreset = null;
+      this.currentPresetName = null;
+      if (!presetNames || presetNames.length === 0) return;
+
+      this._ensureListeners();
+      for (const name of presetNames) this._addLayer(name);
+      this.currentPresetName = presetNames[0];
+      const first = this.activeLayers.get(presetNames[0]);
+      if (first) this.currentPreset = first.preset;
+      this.active = true;
+      this._startLoop();
     }
 
     /**
@@ -936,7 +1017,7 @@
 
     // --- Auto-Cycle ---
     // 拍で数えて切り替える(barsPerCycle 拍、既定 16)。拍が取れないときは時間の fallback(同じ拍数ぶん、4〜15 秒)。
-    // 4〜6 回に 1 回は休む(外して 0.5 秒後に切り替え)
+    // 4〜6 回に 1 回は休む(フェードアウトして、消えてから 0.5 秒後に切り替え)
 
     startAutoCycle(presetNames, intervalMs, options) {
       this._stopAutoCycle();
@@ -978,28 +1059,42 @@
         this._scheduleAutoCycle();
         return;
       }
-      // 休み: 外して 0.5 秒後に普通の切り替え(その間の拍では切り替えない)
+      // 休み(その間の拍では切り替えない)
       this._autoSwitchCount = 0;
       this._autoRestAt = 4 + Math.floor(Math.random() * 3);
-      this._autoCycleRest();
-      clearTimeout(this._autoCycleTimer);
       this._autoCycleBeats = -Infinity;
-      const timerId = setTimeout(() => {
-        if (this._autoCycleTimer !== timerId) return;
-        this._autoCycleTick();
-        this._scheduleAutoCycle();
-      }, REST_MS);
-      this._autoCycleTimer = timerId;
+      this._autoCycleRest();
     }
 
-    // 休み: ロックされていないレイヤーを外し、Rnd が回している blend / filter を既定(screen / なし)に戻す
+    // 休み: ロックされていないレイヤーをフェードアウトし、消えたら Rnd が回している blend / filter を既定(screen / なし)に戻す。
+    // その 0.5 秒後に普通の切り替え(次のセットがフェードイン)。エフェクトのロック中はレイヤーが残るので、待たずに dip で戻す
     _autoCycleRest() {
       const locks = this._autoCycleLocks || {};
       if (!locks.effect) {
         for (const name of [...this.activeLayers.keys()]) this._removeLayer(name);
       }
-      if (this._autoBlend && !locks.blend) this.setBlendMode('screen');
-      if (this._autoFilters && !locks.filter) this.clearFilters();
+      this._autoCycleLater(locks.effect ? 0 : this._fadeDuration * 1000, () => {
+        if (this._autoBlend && !locks.blend) this.setBlendMode('screen', locks.effect);
+        if (this._autoFilters && !locks.filter) this.clearFilters(locks.effect);
+        this._autoCycleLater(REST_MS, () => {
+          this._autoCycleTick();
+          this._scheduleAutoCycle();
+        });
+      });
+    }
+
+    // Auto のタイマーで ms 後に fn(0 ならすぐ)。その前に Auto を止めたら(_stopAutoCycle)呼ばない
+    _autoCycleLater(ms, fn) {
+      clearTimeout(this._autoCycleTimer);
+      if (!(ms > 0)) {
+        fn();
+        return;
+      }
+      const timerId = setTimeout(() => {
+        if (this._autoCycleTimer !== timerId) return;
+        fn();
+      }, ms);
+      this._autoCycleTimer = timerId;
     }
 
     updateAutoCycleOptions(options) {
@@ -1142,6 +1237,9 @@
           break;
         case 'kill':
           this.kill({ locks: msg.locks });
+          break;
+        case 'crossfade':
+          this.crossfade(msg.presets, { blendMode: msg.blendMode, locks: msg.locks });
           break;
         case 'randomizeFX':
           this.randomizeFX({ skipBlend: !!msg.skipBlend, pool: msg.pool });

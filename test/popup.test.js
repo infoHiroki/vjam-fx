@@ -671,10 +671,61 @@ describe('PopupController', () => {
         await new Promise(r => setTimeout(r, 0));
         await vi.waitFor(() => expect(controller._busy).toBe(false));
       }
-      const picked = sentCommands().filter(m => m.action === 'start' || m.action === 'addLayer').map(m => m.preset);
+      const picked = sentCommands().filter(m => m.action === 'crossfade').flatMap(m => m.presets);
       expect(picked.length).toBeGreaterThan(0);
       expect(new Set(picked)).toEqual(new Set(['rain']));
       expect([...controller.activeLayers]).toEqual(['rain']);
+    });
+
+    // Next はエンジンでクロスフェードする(#38)。kill で一瞬で消さない
+    it('Next crossfades in the engine (no kill)', async () => {
+      const btn = document.createElement('button');
+      btn.id = 'btn-next';
+      container.querySelector('.popup').appendChild(btn);
+      controller._bindEvents();
+      controller.isActive = true;
+      controller._coreInjected = true;
+      controller.poolPresets = controller.presets.filter(p => p.id === 'rain' || p.id === 'radar');
+      controller.selectedBlendMode = 'lighten';
+
+      btn.click();
+      await vi.waitFor(() => expect(controller._busy).toBe(false));
+      const actions = sentCommands().map(m => m.action);
+      expect(actions).not.toContain('kill');
+      expect(actions).not.toContain('start');
+      const cmd = sentCommands().find(m => m.action === 'crossfade');
+      expect(cmd.presets.length).toBeGreaterThanOrEqual(1);
+      for (const id of cmd.presets) expect(['rain', 'radar']).toContain(id);
+      expect(cmd.blendMode).toBe('lighten');
+      expect(cmd.locks).toEqual(controller.locks);
+      expect([...controller.activeLayers].sort()).toEqual(cmd.presets.slice().sort());
+      // 入れるプリセットは crossfade の前に inject しておく
+      const calls = chrome.scripting.executeScript.mock.calls;
+      const lastInject = calls.map(c => c[0].files && c[0].files[0]).lastIndexOf(`content/presets/${cmd.presets[cmd.presets.length - 1]}.js`);
+      const crossfadeAt = calls.findIndex(c => c[0].args && c[0].args[0] && c[0].args[0].action === 'crossfade');
+      expect(lastInject).toBeGreaterThanOrEqual(0);
+      expect(lastInject).toBeLessThan(crossfadeAt);
+    });
+
+    it('Next with the effect lock keeps the layers (crossfade with no presets)', async () => {
+      const btn = document.createElement('button');
+      btn.id = 'btn-next';
+      container.querySelector('.popup').appendChild(btn);
+      controller._bindEvents();
+      controller.isActive = true;
+      controller._coreInjected = true;
+      controller.locks = { effect: true, blend: false, filter: false };
+      controller.activeLayers = new Set(['neon-tunnel']);
+
+      btn.click();
+      await vi.waitFor(() => expect(controller._busy).toBe(false));
+      const cmd = sentCommands().find(m => m.action === 'crossfade');
+      expect(cmd).toMatchObject({ presets: [], locks: { effect: true } });
+      expect([...controller.activeLayers]).toEqual(['neon-tunnel']);
+      const injected = chrome.scripting.executeScript.mock.calls
+        .map(c => c[0].files && c[0].files[0])
+        .filter(f => f && f.startsWith('content/presets/'));
+      expect(injected).toEqual([]);
     });
 
     it('Auto sends the pool presets and the pool to the engine', async () => {

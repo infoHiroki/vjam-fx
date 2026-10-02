@@ -1108,19 +1108,14 @@ class PopupController {
           if (toggle) toggle.checked = true;
           await this._injectCore();
         }
-        // Kill with locks so engine preserves locked state
-        await this._sendCommand({ action: 'kill', locks: this.locks });
+        // 今のレイヤーをフェードアウトして、選んだ 1〜3 本をフェードイン(ロックしたものはエンジンが残す)
+        const chosen = this.locks.effect ? [] : this._randomPoolPresets();
+        // Only inject chosen presets (not all 204)
+        for (const p of chosen) {
+          await this._injectPreset(p.id);
+        }
+        await this._sendCommand({ action: 'crossfade', presets: chosen.map(p => p.id), blendMode: this.selectedBlendMode, locks: this.locks });
         if (!this.locks.effect) {
-          const chosen = this._randomPoolPresets();
-          // Only inject chosen presets (not all 204)
-          for (const p of chosen) {
-            await this._injectPreset(p.id);
-          }
-          const first = chosen[0];
-          await this._sendCommand({ action: 'start', preset: first.id, blendMode: this.selectedBlendMode });
-          for (let i = 1; i < chosen.length; i++) {
-            await this._sendCommand({ action: 'addLayer', preset: chosen[i].id });
-          }
           this.activeLayers.clear();
           for (const p of chosen) this.activeLayers.add(p.id);
         }
