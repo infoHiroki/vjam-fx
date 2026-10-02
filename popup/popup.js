@@ -238,6 +238,7 @@ const FILTER_NAMES = ['invert', 'hue-rotate', 'grayscale', 'saturate', 'brightne
 const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
 
 const DEFAULT_SETTINGS = {
+  autoOnStart: true, // トグル ON で Auto / Rnd を始める
   fadeDuration: 1.5,
   barsPerCycle: 16, // Auto が切り替える拍数
   sensitivity: 'mid',
@@ -496,6 +497,14 @@ class PopupController {
     return { action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters, pool: this.pool };
   }
 
+  // Next の選び方: プールからランダムに 1〜3 本
+  _randomPoolPresets() {
+    const count = 1 + Math.floor(Math.random() * Math.min(3, this.poolPresets.length));
+    const shuffled = this.poolPresets.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
+    return shuffled.slice(0, count);
+  }
+
   async _loadScenes() {
     try {
       const result = await chrome.storage.local.get('vjamfx_scenes');
@@ -614,6 +623,8 @@ class PopupController {
   }
 
   _updateSettingsUI() {
+    const autoStartEl = document.getElementById('setting-auto-start');
+    if (autoStartEl) autoStartEl.value = this.settings.autoOnStart ? 'on' : 'off';
     const fadeEl = document.getElementById('setting-fade');
     if (fadeEl) fadeEl.value = String(this.settings.fadeDuration);
     const cycleEl = document.getElementById('setting-cycle');
@@ -689,6 +700,15 @@ class PopupController {
         const isOpen = settingsSection.style.display !== 'none';
         settingsSection.style.display = isOpen ? 'none' : '';
         settingsBtn.classList.toggle('active', !isOpen);
+      });
+    }
+
+    // Settings: トグル ON で Auto を始める(次の ON から効く)
+    const autoStartEl = document.getElementById('setting-auto-start');
+    if (autoStartEl) {
+      autoStartEl.addEventListener('change', () => {
+        this.settings.autoOnStart = autoStartEl.value !== 'off';
+        this._saveSettings();
       });
     }
 
@@ -852,7 +872,12 @@ class PopupController {
     if (toggle) {
       toggle.addEventListener('change', (e) => {
         if (e.target.checked) {
-          this._startAll();
+          if (this.settings.autoOnStart) {
+            this._prepareAutoStart();
+            this._startAll({ skipFirstAutoTick: true });
+          } else {
+            this._startAll();
+          }
         } else {
           this._stopAll();
         }
@@ -1037,10 +1062,7 @@ class PopupController {
         // Kill with locks so engine preserves locked state
         await this._sendCommand({ action: 'kill', locks: this.locks });
         if (!this.locks.effect) {
-          const count = 1 + Math.floor(Math.random() * Math.min(3, this.poolPresets.length));
-          const shuffled = this.poolPresets.slice();
-          for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
-          const chosen = shuffled.slice(0, count);
+          const chosen = this._randomPoolPresets();
           // Only inject chosen presets (not all 204)
           for (const p of chosen) {
             await this._injectPreset(p.id);
@@ -1246,7 +1268,29 @@ class PopupController {
     }
   }
 
-  async _startAll() {
+  // トグル ON で Auto を始める(設定 ON のとき)。Auto・Blend Rnd・Filter Rnd を ON にし、見た目は Auto ボタンを押したときと同じ。
+  // レイヤーが無ければ Next と同じくプールから選ぶ。トグル ON のときだけ呼ぶので、動いている間に手で切ったものは戻さない
+  _prepareAutoStart() {
+    if (this.activeLayers.size === 0) {
+      for (const p of this._randomPoolPresets()) this.activeLayers.add(p.id);
+    }
+    this.autoCycleActive = true;
+    this.autoBlend = true;
+    this.autoFilters = true;
+    const autoBtn = document.getElementById('btn-auto-cycle');
+    if (autoBtn) autoBtn.classList.add('active');
+    const autoBlendBtn = document.getElementById('auto-blend');
+    if (autoBlendBtn) autoBlendBtn.classList.add('active');
+    const autoFiltersBtn = document.getElementById('auto-filters');
+    if (autoFiltersBtn) autoFiltersBtn.classList.add('active');
+    document.querySelectorAll('.blend-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+    this._updateLayerCount();
+  }
+
+  // skipFirstAutoTick: 始めたレイヤーを最初の場面として見せ、Auto の切り替えは次のサイクルから
+  async _startAll({ skipFirstAutoTick = false } = {}) {
     if (!this._tabId) return;
     if (this._busy) { this._pendingStart = true; this._pendingStop = false; return; }
     this._busy = true;
@@ -1296,7 +1340,7 @@ class PopupController {
       // Re-start Auto/Rnd if active
       if (this.autoCycleActive) {
         await this._injectAllPresets();
-        await this._sendCommand(this._autoCycleCommand());
+        await this._sendCommand(this._autoCycleCommand(skipFirstAutoTick ? { skipFirstTick: true } : undefined));
       } else if (this.autoBlend || this.autoFilters) {
         await this._sendCommand(this._autoFXCommand());
       }
