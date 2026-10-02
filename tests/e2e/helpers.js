@@ -49,6 +49,22 @@ const PAGES = {
     '<h1>Page 2 (light)</h1><p>Light page for navigation restore + light-page detection.</p>'),
   '/page3.html': html('VJam FX Test (no bg)', '',
     '<h1>Page 3 (no background set)</h1><p>Like most sites: body/html transparent, browser default white.</p>'),
+  // 動画サイトの「フルサイズ」表示と同じ CSS:プレイヤー以外の要素を全部 x = -100000 へ飛ばす(#26)
+  '/fullsize.html': html('VJam FX Test (full-size player)', 'background:#111;color:#ddd;',
+    `<style>body[data-mgp-smm] :not(div[data-smm-container], div[data-smm-container] *) {
+  position: fixed !important; right: 100000px !important; left: unset !important;
+  bottom: unset !important; z-index: 0 !important; }</style>
+<div data-smm-container style="width:640px;height:360px;background:#246;color:#fff"><h1>player</h1></div>
+<h1 id="flung">Flung off-screen by the site CSS</h1>
+<script>document.body.setAttribute('data-mgp-smm', '')</script>`),
+  // CSP が厳しいページ(CSP は下の CSP_PAGES)。インラインの <style> / <script> は止まるので書かない
+  '/csp.html': `<!doctype html><html><head><meta charset="utf-8"><title>VJam FX Test (strict CSP)</title></head>
+<body><h1>Strict CSP page</h1><p>style-src 'self': inline &lt;style&gt; is blocked, CSSOM is not.</p>
+<audio id="a" src="beat.wav" loop autoplay controls></audio></body></html>`,
+};
+
+const CSP_PAGES = {
+  '/csp.html': "default-src 'self'; style-src 'self'",
 };
 
 export async function startSite() {
@@ -59,7 +75,9 @@ export async function startSite() {
       res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': wav.length });
       res.end(wav);
     } else if (PAGES[url]) {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      const headers = { 'Content-Type': 'text/html; charset=utf-8' };
+      if (CSP_PAGES[url]) headers['Content-Security-Policy'] = CSP_PAGES[url];
+      res.writeHead(200, headers);
       res.end(PAGES[url]);
     } else if (url === '/favicon.ico') {
       res.writeHead(204);
@@ -161,11 +179,43 @@ export function readState(page) {
       filters: [...e.activeFilters],
       analyser: !!e._videoAudioAnalyser,
       overlay: !!(e.overlay && document.contains(e.overlay)),
-      canvases: e.overlay ? e.overlay.querySelectorAll('canvas').length : 0,
+      // 中身は overlay の shadow root の中(ホストの light DOM は空)
+      shadow: !!(e.overlay && e.overlay.shadowRoot),
+      lightChildren: e.overlay ? e.overlay.children.length : 0,
+      canvases: e.overlay && e.overlay.shadowRoot ? e.overlay.shadowRoot.querySelectorAll('canvas').length : 0,
       isLight: e.isLightPage,
       overlayFilter: e.overlay ? e.overlay.style.filter : null,
       overlayBlend: e.overlay ? e.overlay.style.mixBlendMode : null,
     };
+  });
+}
+
+// shadow root の中の、表示されているキャンバス(createGraphics の裏バッファは display: none)の位置と見え方
+export function readCanvases(page) {
+  return page.evaluate(() => {
+    const e = window._vjamFxEngine;
+    const root = e && e.overlay && e.overlay.shadowRoot;
+    if (!root) return [];
+    return [...root.querySelectorAll('canvas')]
+      .filter((c) => getComputedStyle(c).display !== 'none')
+      .map((c) => {
+        const r = c.getBoundingClientRect();
+        const cs = getComputedStyle(c);
+        return {
+          left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+          visibility: cs.visibility, blend: cs.mixBlendMode,
+        };
+      });
+  });
+}
+
+// レイヤーのフェードイン(既定 1.5 秒)が終わるまで待つ
+export function waitLayersFadedIn(page) {
+  return page.waitForFunction(() => {
+    const e = window._vjamFxEngine;
+    const layers = e && e.overlay && e.overlay.shadowRoot
+      ? [...e.overlay.shadowRoot.querySelectorAll('[data-vjam-layer]')] : [];
+    return layers.length > 0 && layers.every((el) => getComputedStyle(el).opacity === '1');
   });
 }
 

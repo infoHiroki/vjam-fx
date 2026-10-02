@@ -48,9 +48,13 @@ describe('VJamFXEngine', () => {
         engine.createOverlay();
         const calls = spy.mock.calls.map(c => c.join('|'));
         for (const c of ['position|fixed|important', 'top|0|important', 'left|0|important', 'width|100vw|important',
-          'height|100vh|important', 'z-index|2147483647|important', 'pointer-events|none|important']) {
+          'height|100vh|important', 'z-index|2147483647|important', 'pointer-events|none|important',
+          'display|block|important', 'visibility|visible|important', 'transform|none|important',
+          'right|auto|important', 'bottom|auto|important', 'margin|0|important']) {
           expect(calls).toContain(c);
         }
+        // 実行中に変えるものは固定しない
+        expect(calls.filter(c => /^(opacity|mix-blend-mode|filter)\|.*\|important$/.test(c))).toEqual([]);
       } finally {
         spy.mockRestore();
       }
@@ -233,6 +237,172 @@ describe('VJamFXEngine', () => {
       engine.createOverlay();
       const overlays = document.querySelectorAll('[data-vjam-fx]');
       expect(overlays.length).toBe(1);
+    });
+  });
+
+  // 中身を Shadow DOM に入れて、ページの CSS に巻き込まれないようにする(#26)
+  describe('Shadow DOM', () => {
+    // setup で container にキャンバスを 1 枚入れるプリセット(p5 のモックはキャンバスを作らないので)
+    beforeEach(() => {
+      window.VJamFX.presets['canvas-preset'] = class {
+        setup(container) {
+          const c = document.createElement('canvas');
+          c.style.cssText = 'display:block;width:100%;height:100%;';
+          container.appendChild(c);
+        }
+        destroy() {}
+      };
+    });
+
+    afterEach(() => {
+      delete window.VJamFX.presets['canvas-preset'];
+      document.querySelectorAll('style[data-test-site-css]').forEach(el => el.remove());
+      document.querySelectorAll('[data-test-page-el]').forEach(el => el.remove());
+      document.body.removeAttribute('data-x');
+    });
+
+    it('creates layers and canvases inside an open shadow root on the overlay', () => {
+      engine._addLayer('canvas-preset');
+      const root = engine.overlay.shadowRoot;
+      expect(root).not.toBeNull();
+      expect(root.mode).toBe('open');
+      const layerDiv = root.querySelector('[data-vjam-layer="canvas-preset"]');
+      expect(layerDiv).not.toBeNull();
+      expect(layerDiv.querySelector('canvas')).not.toBeNull();
+      // ホストの light DOM には何も入れない(入れても描かれない)
+      expect(engine.overlay.children.length).toBe(0);
+      expect(document.querySelector('[data-vjam-layer]')).toBeNull();
+      expect(document.querySelector('canvas')).toBeNull();
+    });
+
+    it('applies the blend mode to canvases inside the shadow root', () => {
+      engine._addLayer('canvas-preset');
+      engine.setBlendMode('difference');
+      const canvas = engine.overlay.shadowRoot.querySelector('canvas');
+      expect(engine.overlay.style.mixBlendMode).toBe('difference');
+      expect(canvas.style.mixBlendMode).toBe('difference');
+    });
+
+    it('creates the text overlay canvas inside the shadow root', () => {
+      const ro = globalThis.ResizeObserver;
+      globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+      const ctxSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+      try {
+        eval(readFileSync(resolve(__dirname, '../content/text-overlay.js'), 'utf-8'));
+        engine.handleMessage({ action: 'textSetParams', params: {} });
+        const container = engine._textOverlay.container;
+        expect(container.getRootNode()).toBe(engine.overlay.shadowRoot);
+        expect(engine._textOverlay.canvas.getRootNode()).toBe(engine.overlay.shadowRoot);
+        expect(engine.overlay.children.length).toBe(0);
+      } finally {
+        engine.destroy();
+        delete window.VJamFX.TextOverlay;
+        ctxSpy.mockRestore();
+        globalThis.ResizeObserver = ro;
+      }
+    });
+
+    it('keeps layers and canvases in place under site CSS that flings every element off-screen', () => {
+      // 動画サイトの「フルサイズ」表示が入れる CSS(プレイヤー以外を x = -100000 へ飛ばす)
+      const css = document.createElement('style');
+      css.setAttribute('data-test-site-css', '');
+      css.textContent = 'body[data-x] :not(div[data-keep], div[data-keep] *) {'
+        + ' position: fixed !important; right: 100000px !important; left: unset !important;'
+        + ' bottom: unset !important; z-index: 0 !important; }';
+      document.head.appendChild(css);
+      const pageEl = document.createElement('p');
+      pageEl.setAttribute('data-test-page-el', '');
+      document.body.appendChild(pageEl);
+
+      engine._addLayer('canvas-preset');
+      document.body.setAttribute('data-x', '');
+
+      // ページの要素は飛ばされる(この CSS が jsdom で効いていることの確認)
+      expect(getComputedStyle(pageEl).right).toBe('100000px');
+      expect(getComputedStyle(pageEl).zIndex).toBe('0');
+
+      const root = engine.overlay.shadowRoot;
+      const layerDiv = root.querySelector('[data-vjam-layer="canvas-preset"]');
+      const canvas = layerDiv.querySelector('canvas');
+      for (const el of [layerDiv, canvas]) {
+        const cs = getComputedStyle(el);
+        expect(cs.right).not.toBe('100000px');
+        expect(cs.left).not.toBe('unset');
+        expect(cs.bottom).not.toBe('unset');
+        expect(cs.zIndex).not.toBe('0');
+        expect(cs.position).not.toBe('fixed');
+      }
+      expect(getComputedStyle(layerDiv).position).toBe('absolute');
+      expect(getComputedStyle(layerDiv).left).toBe('0px');
+    });
+
+    // p5 は setup 中に作ったキャンバスを visibility: hidden にし、setup の後に document の canvas から探して戻す。
+    // shadow root の中は探されないので、エンジンが戻す
+    describe('p5 hidden canvas', () => {
+      function addHiddenCanvas(container) {
+        const c = document.createElement('canvas');
+        c.dataset.hidden = true;
+        c.style.visibility = 'hidden';
+        container.appendChild(c);
+        return c;
+      }
+
+      afterEach(() => {
+        delete window.VJamFX.presets['p5-like'];
+      });
+
+      it('unhides a canvas p5 left hidden during setup', async () => {
+        let canvas;
+        window.VJamFX.presets['p5-like'] = class {
+          setup(container) { canvas = addHiddenCanvas(container); }
+          destroy() {}
+        };
+        engine._addLayer('p5-like');
+        await Promise.resolve();
+        expect(canvas.getRootNode()).toBe(engine.overlay.shadowRoot);
+        expect(canvas.style.visibility).toBe('');
+        expect(canvas.hasAttribute('data-hidden')).toBe(false);
+      });
+
+      it('unhides a canvas created later (p5 waits for the page load event)', async () => {
+        let later;
+        window.VJamFX.presets['p5-like'] = class {
+          setup(container) { later = () => addHiddenCanvas(container); }
+          destroy() {}
+        };
+        engine._addLayer('p5-like');
+        await Promise.resolve();
+        const canvas = later();
+        await Promise.resolve();
+        expect(canvas.style.visibility).toBe('');
+        expect(canvas.hasAttribute('data-hidden')).toBe(false);
+      });
+    });
+
+    it('removes the shadow contents with the overlay on stop', () => {
+      engine.startPreset('canvas-preset');
+      engine.handleMessage({ action: 'stop' });
+      expect(engine.overlay).toBeNull();
+      expect(engine._stage).toBeNull();
+      // 次の start で作り直す
+      engine.startPreset('canvas-preset');
+      expect(engine.overlay.shadowRoot.querySelector('[data-vjam-layer="canvas-preset"] canvas')).not.toBeNull();
+    });
+
+    it('moves the whole shadow tree with the host on fullscreen', () => {
+      engine._addLayer('canvas-preset');
+      const fsEl = document.createElement('div');
+      document.body.appendChild(fsEl);
+      try {
+        Object.defineProperty(document, 'fullscreenElement', { value: fsEl, configurable: true });
+        document.dispatchEvent(new Event('fullscreenchange'));
+        expect(fsEl.contains(engine.overlay)).toBe(true);
+        expect(engine.overlay.shadowRoot.querySelector('[data-vjam-layer="canvas-preset"] canvas')).not.toBeNull();
+      } finally {
+        Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+        document.dispatchEvent(new Event('fullscreenchange'));
+        fsEl.remove();
+      }
     });
   });
 
@@ -646,7 +816,7 @@ describe('VJamFXEngine', () => {
     it('should start layer with opacity 0 and transition', () => {
       engine.createOverlay();
       engine._addLayer('neon-tunnel');
-      const layerDiv = document.querySelector('[data-vjam-layer="neon-tunnel"]');
+      const layerDiv = engine.overlay.shadowRoot.querySelector('[data-vjam-layer="neon-tunnel"]');
       // Starts with opacity 0 (rAF mock doesn't actually trigger callback)
       expect(layerDiv.style.opacity).toBe('0');
       expect(layerDiv.style.transition).toContain('opacity');
@@ -902,7 +1072,7 @@ describe('VJamFXEngine', () => {
       // Create a fake second layer that throws on destroy
       const badDiv = document.createElement('div');
       badDiv.setAttribute('data-vjam-layer', 'bad-layer');
-      engine.overlay.appendChild(badDiv);
+      engine._stage.appendChild(badDiv);
       engine.activeLayers.set('bad-layer', {
         preset: { destroy: () => { throw new Error('boom'); } },
         container: badDiv,
@@ -916,8 +1086,8 @@ describe('VJamFXEngine', () => {
       engine.createOverlay();
       const div1 = document.createElement('div');
       const div2 = document.createElement('div');
-      engine.overlay.appendChild(div1);
-      engine.overlay.appendChild(div2);
+      engine._stage.appendChild(div1);
+      engine._stage.appendChild(div2);
       engine.activeLayers.set('err1', { preset: { destroy: () => { throw new Error('e1'); } }, container: div1 });
       engine.activeLayers.set('err2', { preset: { destroy: () => { throw new Error('e2'); } }, container: div2 });
 
@@ -933,7 +1103,7 @@ describe('VJamFXEngine', () => {
 
       const badDiv = document.createElement('div');
       badDiv.setAttribute('data-vjam-layer', 'bad-layer');
-      engine.overlay.appendChild(badDiv);
+      engine._stage.appendChild(badDiv);
       engine.activeLayers.set('bad-layer', {
         preset: { destroy: () => { throw new Error('boom'); } },
         container: badDiv,
@@ -949,7 +1119,7 @@ describe('VJamFXEngine', () => {
       engine.setFilter('invert', true);
 
       const badDiv = document.createElement('div');
-      engine.overlay.appendChild(badDiv);
+      engine._stage.appendChild(badDiv);
       engine.activeLayers.set('err', { preset: { destroy: () => { throw new Error('boom'); } }, container: badDiv });
 
       engine.kill({});
@@ -968,7 +1138,7 @@ describe('VJamFXEngine', () => {
 
       expect(() => engine._addLayer('throw-preset')).not.toThrow();
       expect(engine.activeLayers.has('throw-preset')).toBe(false);
-      expect(document.querySelector('[data-vjam-layer="throw-preset"]')).toBeNull();
+      expect(engine.overlay.shadowRoot.querySelector('[data-vjam-layer="throw-preset"]')).toBeNull();
 
       delete window.VJamFX.presets['throw-preset'];
     });
@@ -981,7 +1151,7 @@ describe('VJamFXEngine', () => {
 
       engine._addLayer('setup-fail');
       expect(engine.activeLayers.has('setup-fail')).toBe(false);
-      expect(document.querySelector('[data-vjam-layer="setup-fail"]')).toBeNull();
+      expect(engine.overlay.shadowRoot.querySelector('[data-vjam-layer="setup-fail"]')).toBeNull();
 
       delete window.VJamFX.presets['setup-fail'];
     });
@@ -1687,7 +1857,7 @@ describe('VJamFXEngine', () => {
         engine._maxLayers = 3;
         for (const name of NAMES.slice(0, 5)) engine._addLayer(name);
         expect(engine.getActiveLayerNames()).toEqual(NAMES.slice(2, 5));
-        expect(engine.overlay.querySelectorAll('[data-vjam-layer]').length).toBe(3);
+        expect(engine.overlay.shadowRoot.querySelectorAll('[data-vjam-layer]').length).toBe(3);
       });
     });
 
