@@ -104,6 +104,12 @@
     return true;
   }
 
+  // p5 の WEBGL で描くプリセット(setup がページの load 待ちでまだのものは分からないので false)
+  function isWebglPreset(preset) {
+    const renderer = preset && preset.p5 && preset.p5._renderer;
+    return !!(renderer && renderer.isP3D);
+  }
+
   class VJamFXEngine {
     constructor() {
       this.active = false;
@@ -715,8 +721,19 @@
         return;
       }
 
-      // Apply blend mode to new canvas
-      const canvas = layerDiv.querySelector('canvas');
+      // WEBGL の p5 は、先に作った既定の 2D キャンバスを document.getElementById で探して外す。shadow root の中では見つからずに残り、
+      // WebGL のキャンバスがその下にずれる(blend もそちらに掛かる)ので、ここで外す(同じ id の、p5 が描いていない方)
+      const webgl = isWebglPreset(preset);
+      const main = webgl ? preset.p5.canvas : null;
+      if (main && main.id) {
+        const left = layerDiv.querySelectorAll('canvas');
+        for (let i = 0; i < left.length; i++) {
+          if (left[i] !== main && left[i].id === main.id) left[i].remove();
+        }
+      }
+
+      // Apply blend mode to new canvas(WebGL は p5 が描いているキャンバス)
+      const canvas = main || layerDiv.querySelector('canvas');
       if (canvas) {
         canvas.style.mixBlendMode = this._effectiveBlendMode();
       }
@@ -726,6 +743,7 @@
       this._timeLayer(layer);
       this.activeLayers.set(presetName, layer);
       this._holdHeavyCheck();
+      if (webgl) this._removeOtherWebglLayers(presetName);
 
       // レイヤー上限(iPad / iPhone は 3、それ以外は 5)。超えたら古いものから外す
       while (this.activeLayers.size > this._maxLayers) {
@@ -735,6 +753,19 @@
       // Fade in on next frame
       requestAnimationFrame(() => { layerDiv.style.opacity = '1'; });
 
+    }
+
+    // WebGL のレイヤーは同時に 1 枚まで(#42): keep のほかの WebGL のレイヤーをフェードで外す。
+    // ページあたりの WebGL コンテキストの数には上限があり、iPad では 1 枚でも重い
+    _removeOtherWebglLayers(keep) {
+      for (const [name, layer] of [...this.activeLayers]) {
+        if (name === keep || !isWebglPreset(layer.preset)) continue;
+        this._removeLayer(name);
+        if (this.currentPresetName === name) {
+          this.currentPreset = null;
+          this.currentPresetName = null;
+        }
+      }
     }
 
     _removeLayer(presetName) {
