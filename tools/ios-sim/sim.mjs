@@ -52,11 +52,14 @@ export async function openPage({ send, ev }, url) {
   await sleep(4000);
 }
 
-// エンジンとプリセットを入れて、レイヤーを足す
+// エンジンとプリセットを入れて、1 つ目で start(描画と音のループが回り、タップの frameAt を呼ぶ)・残りはレイヤーを足す
 export async function startEngine({ ev }, presets) {
   const core = 'window.VJamFX = window.VJamFX || { presets: {} };\n' + readFileSync(`${B}/lib/p5.min.js`, 'utf8') + '\n' +
     readFileSync(`${B}/content/base-preset.js`, 'utf8') + '\n' + readFileSync(`${B}/content/content.js`, 'utf8') + '\n' +
     presets.map(n => readFileSync(`${B}/content/presets/${n}.js`, 'utf8')).join('\n') + `\n;'core'`;
   console.log('inject:', await ev(core).catch(e => 'ERR ' + e.message));
-  console.log('start:', await ev(`(() => { const e = window._vjamFxEngine; for (const n of ${JSON.stringify(presets)}) e.handleMessage({ action: 'addLayer', preset: n }); return e.getActiveLayerNames(); })()`));
+  console.log('start:', await ev(`(() => { const e = window._vjamFxEngine, p = ${JSON.stringify(presets)};
+    e.handleMessage({ action: 'start', preset: p[0] });
+    for (const n of p.slice(1)) e.handleMessage({ action: 'addLayer', preset: n });
+    return e.getActiveLayerNames(); })()`));
 }

@@ -3,6 +3,7 @@
  * document_start / MAIN world で読み込む。MediaSource の音声 SourceBuffer に append されるデータの
  * コピーを取り(元のデータは変えずにそのまま渡す)、デコードして 20ms ごとの音量を再生時刻で持つ。
  * MediaSource を使わない Safari 標準の HLS(<video src="....m3u8">)は、再生リストと区切りを自分で取って同じように解析する。
+ * エンジンが frameAt を呼んでいない間は、MediaSource の区切りはデコードせずに取っておき、HLS は通信しない。
  * 先読みした音から BPM とビートのグリッドを出し、window.__vjamMse.frameAt(time) で返す。
  * 再生時刻を読む本編のメディアは window.__vjamMse.media() で返す。
  * エンジンの内部には触らない(エンジンが frameAt を呼ぶ)。
@@ -21,12 +22,14 @@
   var ON_DECAY = 0.94;           // オンセットの最大値の減衰(1 秒あたり)
   var MAX_PENDING = 8e6;         // 組み直し待ちのバイト数の上限
   var MAX_BINS = 90000;          // 30 分。超えたら再生位置から遠い bin を捨てる
-  var HLS_IDLE = 2000;           // 直近これだけ(ms)frameAt が呼ばれていなければ HLS の通信をしない
+  var IDLE = 2000;               // 直近これだけ(ms)frameAt が呼ばれていなければ使われていない(デコードも HLS の通信もしない)
   var HLS_EVERY = 500;           // frameAt から HLS を見に行く間隔(ms)
   var HLS_BEHIND = 2;            // 取りに行く区切りは [再生位置 - 2 秒, 再生位置 + 15 秒] にかかるものだけ
   var HLS_AHEAD = 15;
-  // fMP4 の断片がこれより小さい(低遅延配信の 0.数秒の断片)ときは、たまるまでまとめてデコード。テストからは _lib.config で変える
-  var CONFIG = { mp4MinBatch: 16000 };
+  // mp4MinBatch: fMP4 の断片がこれより小さい(低遅延配信の 0.数秒の断片)ときは、たまるまでまとめてデコード
+  // maxHeld: 使われていない間に取っておく区切りの合計バイト数の上限(超えたら古いものから捨てる)
+  // テストからは _lib.config で変える
+  var CONFIG = { mp4MinBatch: 16000, maxHeld: 8e6 };
   var EMPTY = new Uint8Array(0);
 
   // ---- bytes ----
@@ -388,6 +391,17 @@
     return { master: false, live: live, encrypted: encrypted, segs: segs };
   }
 
+  // 取っておいた区切り [{ time, end }] から次にデコードするもの → index(無ければ -1)
+  // 再生位置 t にかかるもの・その先を早い順に、それが無ければ少し前を近い順に(end は次の区切りの頭。まだ無ければ Infinity)
+  function pickHeld(list, t) {
+    var best = -1;
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i], b = list[best], ahead = s.end > t;
+      if (!b || (ahead !== (b.end > t) ? ahead : ahead ? s.time < b.time : s.time > b.time)) best = i;
+    }
+    return best;
+  }
+
   // [t - HLS_BEHIND, t + HLS_AHEAD] にかかる区切りで needed(seg) のもの → index(無ければ -1)
   // 今の位置から先を順に優先し、それが無ければ少し前のもの
   function pickSegment(segs, t, needed) {
@@ -697,14 +711,20 @@
   var analyzer = createAnalyzer();
   var stats = {
     appends: 0, segments: 0, decoded: 0, failed: 0, resyncs: 0, lastErr: '', bpm: 0, mode: '',
-    hlsBytes: 0, hlsSegments: 0,
+    held: 0, hlsBytes: 0, hlsSegments: 0,
   };
   var gen = 0, dctx = null;
+  var lastUse = -Infinity;  // 最後に frameAt が呼ばれた時刻(ms)
+  var playPos = NaN;        // 最後に frameAt に来た再生位置(秒)
+  var held = [], heldBytes = 0, draining = false; // 使われていない間の区切り [{ data, time, end }](来た順)
 
-  // 動画が切り替わった:解析を捨てる(デコード中の古いデータも gen で捨てる)
+  function inUse() { return Date.now() - lastUse < IDLE; }
+
+  // 動画が切り替わった:解析と取っておいた区切りを捨てる(デコード中の古いデータも gen で捨てる)
   function resetAnalysis() {
     gen++;
     analyzer.reset();
+    held = []; heldBytes = 0; stats.held = 0;
   }
 
   // デコードして start(秒)からの bin に入れる。終わったら resolve(失敗しても reject しない)
@@ -730,6 +750,32 @@
     }
   }
 
+  // 使われていない間:デコードせずに取っておく。合計が上限を超えたら古いものから捨てる
+  function hold(seg) {
+    held.push(seg); heldBytes += seg.data.length;
+    while (heldBytes > CONFIG.maxHeld) heldBytes -= held.shift().data.length;
+    stats.held = held.length;
+  }
+
+  // SourceBuffer.remove(start, end) に合わせて捨てる
+  function dropHeld(start, end) {
+    held = held.filter(function(s) {
+      if (s.time < start || s.time >= end) return true;
+      heldBytes -= s.data.length;
+      return false;
+    });
+    stats.held = held.length;
+  }
+
+  // 使い始めたら、取っておいた区切りを再生位置に近いものから 1 つずつデコード。使われなくなったら止める(残りは取っておく)
+  function drain() {
+    if (draining || !held.length || !inUse()) return;
+    var s = held.splice(pickHeld(held, playPos), 1)[0];
+    heldBytes -= s.data.length; stats.held = held.length;
+    draining = true;
+    decode(s.data, s.time).then(function() { draining = false; drain(); });
+  }
+
   function createSplitter(type) {
     if (/webm/i.test(type)) return createWebmSplitter();
     if (/mp4/i.test(type)) return createMp4Splitter({ minBytes: CONFIG.mp4MinBatch });
@@ -739,6 +785,7 @@
   function hookSourceBuffer(sb, type) {
     var splitter = createSplitter(type);
     var origAppend = sb.appendBuffer, origAbort = sb.abort, origRemove = sb.remove, origChangeType = sb.changeType;
+    var prev = null; // 前の区切り(次の区切りの頭をその終わりにする)
 
     sb.appendBuffer = function(data) {
       try {
@@ -751,7 +798,10 @@
           for (var i = 0; i < segs.length; i++) {
             if (!isFinite(segs[i].time)) continue;
             stats.segments++;
-            decode(segs[i].data, segs[i].time + offset);
+            var seg = { data: segs[i].data, time: segs[i].time + offset, end: Infinity };
+            if (prev) prev.end = seg.time > prev.time ? seg.time : prev.time; // 戻った(シーク)ら前の終わりは分からない
+            prev = seg;
+            if (inUse()) decode(seg.data, seg.time); else hold(seg);
           }
         }
       } catch (e) { stats.lastErr = 'append: ' + (e.message || e); }
@@ -766,7 +816,7 @@
     };
 
     sb.remove = function(start, end) {
-      try { analyzer.removeRange(start, end); } catch (e) { /* ignore */ }
+      try { analyzer.removeRange(start, end); dropHeld(start, end); } catch (e) { /* ignore */ }
       return origRemove.apply(this, arguments);
     };
 
@@ -873,7 +923,7 @@
   var M3U = [0x23, 0x45, 0x58, 0x54, 0x4D, 0x33, 0x55]; // "#EXTM3U"
   var BOM = [0xEF, 0xBB, 0xBF];
   var hls = null; // 今の src の状態
-  var lastUse = -Infinity, lastTick = -Infinity;
+  var lastTick = -Infinity;
 
   function hlsFetch(h, url, range) {
     var opts = {};
@@ -992,7 +1042,7 @@
 
   function hlsPump() {
     try {
-      if (!nativeFetch || !(Date.now() - lastUse < HLS_IDLE)) return; // エンジンが使っていない
+      if (!nativeFetch || !inUse()) return; // エンジンが使っていない
       var m = pickMedia();
       if (!m) return; // 一時停止中
       var src = m.currentSrc || '';
@@ -1019,6 +1069,8 @@
     frameAt: function(time) {
       var now = Date.now();
       lastUse = now;
+      if (typeof time === 'number' && isFinite(time)) playPos = time;
+      drain();
       if (now - lastTick >= HLS_EVERY) { lastTick = now; hlsPump(); }
       var f = analyzer.frameAt(time);
       stats.bpm = analyzer.bpm; stats.mode = analyzer.mode;
