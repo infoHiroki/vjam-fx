@@ -239,6 +239,7 @@ const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'colo
 
 const DEFAULT_SETTINGS = {
   autoOnStart: true, // トグル ON で Auto / Rnd を始める
+  allTabs: false, // 全タブで ON(切り替えたタブ・開いたタブにも SW が入れる)
   fadeDuration: 1.5,
   barsPerCycle: 16, // Auto が切り替える拍数
   sensitivity: 'mid',
@@ -358,19 +359,24 @@ class PopupController {
       liveState = result;
     } catch (e) { /* scripting failed */ }
 
+    let savedState = null;
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'getState',
+        tabId: this._tabId,
+      });
+      if (response && response.state && response.state.active) {
+        savedState = response.state;
+      }
+    } catch (e) { /* SW not available */ }
+
+    // エンジンが動いていれば、それに SW の状態(Rnd・不透明度・ロック・テキストなど、エンジンから読まないもの)を足す。
+    // SW が入れたタブ(ページ遷移・全タブで ON)でも、popup を触ったときに Rnd などが落ちないように
     let state = null;
     if (liveState && liveState.active) {
-      state = liveState;
+      state = { ...savedState, ...liveState };
     } else {
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: 'getState',
-          tabId: this._tabId,
-        });
-        if (response && response.state && response.state.active) {
-          state = response.state;
-        }
-      } catch (e) { /* SW not available */ }
+      state = savedState;
     }
 
     if (!state) return;
@@ -625,6 +631,11 @@ class PopupController {
   _updateSettingsUI() {
     const autoStartEl = document.getElementById('setting-auto-start');
     if (autoStartEl) autoStartEl.value = this.settings.autoOnStart ? 'on' : 'off';
+    const allTabsBtn = document.getElementById('setting-all-tabs');
+    if (allTabsBtn) {
+      allTabsBtn.textContent = this.settings.allTabs ? 'ON' : 'OFF';
+      allTabsBtn.classList.toggle('on', !!this.settings.allTabs);
+    }
     const fadeEl = document.getElementById('setting-fade');
     if (fadeEl) fadeEl.value = String(this.settings.fadeDuration);
     const cycleEl = document.getElementById('setting-cycle');
@@ -709,6 +720,28 @@ class PopupController {
       autoStartEl.addEventListener('change', () => {
         this.settings.autoOnStart = autoStartEl.value !== 'off';
         this._saveSettings();
+      });
+    }
+
+    // Settings: 全タブで ON。ほかのタブに入るにはホスト権限が要るので、ON にするクリックの中で 1 回だけ求める(断られたら OFF のまま)
+    const allTabsBtn = document.getElementById('setting-all-tabs');
+    if (allTabsBtn) {
+      allTabsBtn.addEventListener('click', async () => {
+        if (!this.settings.allTabs) {
+          let granted = false;
+          try {
+            granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
+          } catch (e) { /* 許可を求められない(ユーザー操作の外・API が無い) */ }
+          if (!granted) {
+            this._updateSettingsUI();
+            return;
+          }
+        }
+        this.settings.allTabs = !this.settings.allTabs;
+        this._updateSettingsUI();
+        await this._saveSettings();
+        // 今のタブが ON なら、その状態をほかのタブへ持っていくものとして SW に渡す
+        if (this.settings.allTabs && this.isActive) this._saveState();
       });
     }
 

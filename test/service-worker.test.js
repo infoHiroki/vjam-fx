@@ -9,11 +9,13 @@ describe('Service Worker', () => {
   let messageListeners;
   let navigationListeners;
   let tabRemoveListeners;
+  let activatedListeners;
 
   beforeEach(() => {
     messageListeners = [];
     navigationListeners = [];
     tabRemoveListeners = [];
+    activatedListeners = [];
 
     // In-memory store for chrome.storage.session mock
     const sessionStore = {};
@@ -52,6 +54,11 @@ describe('Service Worker', () => {
     chrome.tabs.onRemoved = {
       addListener: vi.fn((cb) => tabRemoveListeners.push(cb)),
     };
+    chrome.tabs.onActivated = {
+      addListener: vi.fn((cb) => activatedListeners.push(cb)),
+    };
+    chrome.tabs.query = vi.fn().mockResolvedValue([]);
+    chrome.storage.local.get = vi.fn().mockResolvedValue({}); // 全タブで ON は既定 OFF
     chrome.tabs.get = vi.fn().mockResolvedValue({ id: 1, url: 'https://example.com' });
     chrome.tabs.sendMessage = vi.fn().mockResolvedValue(undefined);
     chrome.scripting.executeScript.mockClear();
@@ -618,6 +625,288 @@ describe('Service Worker', () => {
 
       // tabs.sendMessage should NOT be called because activeTabAudioTabId was cleared
       expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
+    });
+  });
+  // 全タブで ON(#30): 設定が ON の間、前に出たタブに popup で最後に ON にしていた状態で入れ、裏に回ったタブは止める
+  describe('all tabs', () => {
+    const STATE = {
+      active: true, layers: ['rain', 'radar'], blendMode: 'difference', filters: ['sepia'], opacity: 0.6, audioEnabled: true,
+      autoCyclePresets: ['rain', 'radar'], autoBlend: true, autoFilters: true,
+      pool: { filters: ['saturate(2)'], blends: ['screen', 'difference'] },
+      barsPerCycle: 8, fadeDuration: 3, audioSensitivity: 2.0, locks: { effect: false, blend: false, filter: false }, textState: null,
+    };
+    let tabs; // id → { id, windowId, url, active, status }
+
+    const setTabs = (list) => {
+      tabs = new Map(list.map(t => [t.id, { windowId: 1, active: false, status: 'complete', url: `https://example.com/${t.id}`, ...t }]));
+    };
+    // タブを切り替える(同じウィンドウの前のタブは裏に回る)
+    const activate = (tabId) => {
+      const tab = tabs.get(tabId);
+      for (const t of tabs.values()) if (t.windowId === tab.windowId) t.active = t.id === tabId;
+      return activatedListeners[0]({ tabId, windowId: tab.windowId });
+    };
+    const setAllTabs = (on) => chrome.storage.local.get.mockResolvedValue(on ? { vjamfx_settings: { allTabs: true } } : {});
+    const popupSetState = (tabId, state = STATE) => messageListeners[0]({ type: 'setState', tabId, state }, {}, vi.fn());
+    const popupClearState = (tabId) => messageListeners[0]({ type: 'clearState', tabId }, {}, vi.fn());
+    const callsTo = (tabId) => chrome.scripting.executeScript.mock.calls.map(c => c[0]).filter(c => c.target.tabId === tabId);
+    const injected = (tabId) => callsTo(tabId).some(c => (c.files || []).includes('content/content.js'));
+    // そのタブに送った func を順にフェイクのエンジンで実行し、エンジンに届いたメッセージを返す
+    const engineMessages = (tabId) => {
+      const messages = [];
+      window._vjamFxEngine = { handleMessage: (msg) => messages.push(msg), _textOverlay: null };
+      try {
+        for (const c of callsTo(tabId)) if (c.func) c.func(...(c.args || []));
+      } finally {
+        delete window._vjamFxEngine;
+      }
+      return messages;
+    };
+    const actionsTo = (tabId) => engineMessages(tabId).map(m => m.action);
+    const savedState = async (tabId) => {
+      const sendResponse = vi.fn();
+      messageListeners[0]({ type: 'getState', tabId }, {}, sendResponse);
+      await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+      return sendResponse.mock.calls[0][0].state;
+    };
+    const flush = () => new Promise(r => setTimeout(r, 20));
+
+    beforeEach(() => {
+      // ウィンドウ 1: タブ 1(前)・タブ 2 / ウィンドウ 2: タブ 3(前)
+      setTabs([{ id: 1, active: true }, { id: 2 }, { id: 3, windowId: 2, active: true }]);
+      chrome.tabs.get = vi.fn((id) => (tabs.has(id) ? Promise.resolve({ ...tabs.get(id) }) : Promise.reject(new Error('No tab'))));
+      chrome.tabs.query = vi.fn((q) => Promise.resolve([...tabs.values()]
+        .filter(t => q.windowId === undefined || t.windowId === q.windowId)
+        .map(t => ({ ...t }))));
+      setAllTabs(true);
+    });
+
+    it('registers a tabs.onActivated listener', () => {
+      expect(activatedListeners.length).toBe(1);
+    });
+
+    it('switching to a tab injects the last ON state (layers / pool / Auto / Rnd / blend / filter / opacity / settings)', async () => {
+      popupSetState(1);
+      await activate(2);
+
+      expect(injected(2)).toBe(true);
+      const messages = engineMessages(2);
+      expect(messages.find(m => m.action === 'start')).toMatchObject({ preset: 'rain', blendMode: 'difference' });
+      expect(messages.find(m => m.action === 'addLayer')).toMatchObject({ preset: 'radar' });
+      expect(messages.find(m => m.action === 'setFilter')).toMatchObject({ filter: 'sepia', enabled: true });
+      expect(messages.find(m => m.action === 'setOpacity').opacity).toBe(0.6);
+      expect(messages.find(m => m.action === 'startAutoCycle')).toMatchObject({
+        presets: ['rain', 'radar'], pool: STATE.pool, autoBlend: true, autoFilters: true, barsPerCycle: 8,
+      });
+      expect(messages.find(m => m.action === 'setFadeDuration').duration).toBe(3);
+      expect(messages.find(m => m.action === 'setAudioSensitivity').sensitivity).toBe(2.0);
+      // 入ったタブの状態も残す(そのタブのページ遷移で戻す・バッジ)
+      expect(await savedState(2)).toEqual({ ...STATE, autoInjected: true });
+    });
+
+    it('uses only startVideoAudio for the sound (no tabCapture: it needs a user action)', async () => {
+      popupSetState(1);
+      await activate(2);
+      expect(actionsTo(2)).toContain('startVideoAudio');
+      expect(chrome.tabCapture.getMediaStreamId).not.toHaveBeenCalled();
+    });
+
+    it('stops the tab that went to the background (analyser only, the page keeps playing)', async () => {
+      popupSetState(1);
+      await activate(2);
+      expect(actionsTo(1)).toEqual(['stopVideoAudio', 'stop']);
+      expect(injected(1)).toBe(false);
+      expect(await savedState(1)).toBeNull();
+    });
+
+    it('drops the text overlay of the stopped tab (it is recreated from textState when injected again)', async () => {
+      popupSetState(1);
+      await activate(2);
+      const stopCall = callsTo(1).find(c => c.func);
+      const textOverlay = { destroy: vi.fn() };
+      window._vjamFxEngine = { handleMessage: vi.fn(), _textOverlay: textOverlay };
+      try {
+        stopCall.func();
+        expect(textOverlay.destroy).toHaveBeenCalled();
+        expect(window._vjamFxEngine._textOverlay).toBeNull();
+      } finally {
+        delete window._vjamFxEngine;
+      }
+    });
+
+    it('switching back injects again and stops the other tab', async () => {
+      popupSetState(1);
+      await activate(2);
+      chrome.scripting.executeScript.mockClear();
+      await activate(1);
+
+      expect(injected(1)).toBe(true);
+      expect(actionsTo(2)).toEqual(['stopVideoAudio', 'stop']);
+      expect((await savedState(1)).autoInjected).toBe(true);
+      expect(await savedState(2)).toBeNull();
+    });
+
+    it('stops the background tab that was running from the popup too (also its tabCapture)', async () => {
+      popupSetState(1);
+      messageListeners[0]({ type: 'startTabAudio', tabId: 1 }, {}, vi.fn());
+      await flush();
+      chrome.runtime.getContexts = vi.fn().mockResolvedValue([{ contextType: 'OFFSCREEN_DOCUMENT' }]);
+      await activate(2);
+      await flush();
+      expect(chrome.offscreen.closeDocument).toHaveBeenCalled();
+    });
+
+    it('does not stop the front tab of another window', async () => {
+      popupSetState(3);
+      popupSetState(1);
+      await activate(2);
+      expect(callsTo(3)).toEqual([]);
+      expect((await savedState(3)).active).toBe(true);
+    });
+
+    it('does not inject into a tab that is already running', async () => {
+      popupSetState(1);
+      popupSetState(2);
+      await activate(2);
+      expect(callsTo(2)).toEqual([]);
+    });
+
+    it('does nothing while the setting is OFF', async () => {
+      setAllTabs(false);
+      popupSetState(1);
+      await activate(2);
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+      expect((await savedState(1)).active).toBe(true);
+    });
+
+    it('does nothing before the first ON (no state to carry)', async () => {
+      await activate(2);
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+    });
+
+    it('does not inject into non-http(s) pages (the background tab is still stopped)', async () => {
+      tabs.get(2).url = 'chrome://newtab/';
+      popupSetState(1);
+      await activate(2);
+      expect(injected(2)).toBe(false);
+      expect(await savedState(2)).toBeNull();
+      expect(actionsTo(1)).toContain('stop');
+    });
+
+    it('waits for webNavigation.onCompleted when the tab is still loading', async () => {
+      tabs.get(2).status = 'loading';
+      popupSetState(1);
+      await activate(2);
+      expect(injected(2)).toBe(false);
+
+      tabs.get(2).status = 'complete';
+      await navigationListeners[0]({ tabId: 2, frameId: 0 });
+      expect(injected(2)).toBe(true);
+      expect((await savedState(2)).autoInjected).toBe(true);
+    });
+
+    it('injects when the front tab finishes loading a new page (frameId 0 only)', async () => {
+      popupSetState(1);
+      tabs.get(1).active = false;
+      tabs.get(2).active = true;
+      await navigationListeners[0]({ tabId: 2, frameId: 3 });
+      expect(injected(2)).toBe(false);
+      await navigationListeners[0]({ tabId: 2, frameId: 0 });
+      expect(injected(2)).toBe(true);
+      expect(chrome.tabCapture.getMediaStreamId).not.toHaveBeenCalled();
+    });
+
+    it('does not inject into a background tab that finished loading (and forgets its state)', async () => {
+      popupSetState(2); // 前に ON にしていた裏のタブ
+      await navigationListeners[0]({ tabId: 2, frameId: 0 });
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+      expect(await savedState(2)).toBeNull();
+    });
+
+    it('does not inject a non-http(s) page that finished loading in the front tab', async () => {
+      tabs.get(1).url = 'chrome://extensions/';
+      popupSetState(3);
+      await navigationListeners[0]({ tabId: 1, frameId: 0 });
+      expect(injected(1)).toBe(false);
+      expect(await savedState(1)).toBeNull();
+    });
+
+    it('stops a tab that went to the background while it was being injected', async () => {
+      popupSetState(1);
+      chrome.scripting.executeScript.mockImplementation((opts) => {
+        // エンジンを入れている間に、ユーザーがタブ 1 に戻った
+        if (opts.target.tabId === 2 && (opts.files || []).includes('content/content.js')) {
+          tabs.get(2).active = false;
+          tabs.get(1).active = true;
+        }
+        return Promise.resolve([{ result: true }]);
+      });
+      await activate(2);
+      const actions = actionsTo(2);
+      expect(actions.lastIndexOf('stop')).toBeGreaterThan(actions.indexOf('start'));
+      expect(await savedState(2)).toBeNull();
+    });
+
+    it('turning OFF a running tab in the popup stops everything until the next ON', async () => {
+      popupSetState(3); // 別のウィンドウでも動いている
+      popupSetState(1);
+      popupClearState(1);
+      await flush();
+      expect(actionsTo(3)).toEqual(['stopVideoAudio', 'stop']);
+      expect(await savedState(3)).toBeNull();
+
+      chrome.scripting.executeScript.mockClear();
+      await activate(2);
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+
+      // 次に ON にしたら、また入る
+      popupSetState(2);
+      await activate(1);
+      expect(injected(1)).toBe(true);
+    });
+
+    it('clearState from the popup on a tab that was not running changes nothing', async () => {
+      popupSetState(3);
+      popupClearState(2); // OFF のタブで popup を触った(Lock など)
+      await flush();
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+      await activate(2);
+      expect(injected(2)).toBe(true);
+    });
+
+    it('carries the latest popup state (changes after ON follow too)', async () => {
+      popupSetState(1);
+      popupSetState(1, { ...STATE, layers: ['mandala'], autoCyclePresets: null, blendMode: 'exclusion' });
+      await activate(2);
+      const messages = engineMessages(2);
+      expect(messages.find(m => m.action === 'start')).toMatchObject({ preset: 'mandala', blendMode: 'exclusion' });
+      expect(messages.some(m => m.action === 'startAutoCycle')).toBe(false);
+      expect(messages.find(m => m.action === 'startAutoFX')).toMatchObject({ autoBlend: true, autoFilters: true });
+    });
+
+    it('page navigation in an auto-injected tab restores without tabCapture', async () => {
+      popupSetState(1);
+      await activate(2);
+      chrome.scripting.executeScript.mockClear();
+      await navigationListeners[0]({ tabId: 2, frameId: 0 });
+      expect(injected(2)).toBe(true);
+      expect(actionsTo(2)).toContain('startVideoAudio');
+      expect(chrome.tabCapture.getMediaStreamId).not.toHaveBeenCalled();
+    });
+
+    it('page navigation in the tab turned ON from the popup still uses tabCapture as before', async () => {
+      popupSetState(1);
+      await navigationListeners[0]({ tabId: 1, frameId: 0 });
+      expect(injected(1)).toBe(true);
+      await vi.waitFor(() => expect(chrome.tabCapture.getMediaStreamId).toHaveBeenCalledWith({ targetTabId: 1 }));
+    });
+
+    it('turning the setting OFF: no more injections, the front tab keeps running', async () => {
+      popupSetState(1);
+      setAllTabs(false);
+      await activate(2);
+      expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+      expect((await savedState(1)).active).toBe(true);
     });
   });
 });

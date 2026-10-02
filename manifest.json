@@ -4,6 +4,7 @@
   "version": "1.0.2",
   "description": "Overlay 191 music-reactive VJ visuals on any webpage. Multi-layer, beat detection, auto-cycle, blend modes, text & scenes.",
   "permissions": ["activeTab", "scripting", "webNavigation", "tabCapture", "offscreen", "storage"],
+  "optional_host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background/service-worker.js"
   },

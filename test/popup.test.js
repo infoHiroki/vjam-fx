@@ -948,4 +948,158 @@ describe('PopupController', () => {
       expect(isActive('btn-auto-cycle')).toBe(true);
     });
   });
+  // 全タブで ON(#30): 設定パネルのボタン。ON にするクリックの中で <all_urls> の許可を 1 回だけ求める
+  describe('all tabs setting', () => {
+    let btn;
+    const savedSettings = () => chrome.storage.local.set.mock.calls
+      .map(c => c[0].vjamfx_settings).filter(Boolean).pop();
+    const setStates = () => chrome.runtime.sendMessage.mock.calls.map(c => c[0]).filter(m => m.type === 'setState');
+    const click = async () => {
+      btn.click();
+      await new Promise(r => setTimeout(r, 0));
+    };
+
+    beforeEach(() => {
+      container.querySelector('.popup').insertAdjacentHTML('beforeend', `
+        <button id="setting-all-tabs" class="audio-btn">OFF</button>
+        <button id="btn-reset"></button>
+      `);
+      chrome.permissions = { request: vi.fn().mockResolvedValue(true) };
+      controller._bindEvents();
+      btn = document.getElementById('setting-all-tabs');
+    });
+
+    afterEach(() => {
+      delete chrome.permissions;
+    });
+
+    it('is OFF by default (also when saved settings predate it)', async () => {
+      expect(controller.settings.allTabs).toBe(false);
+      chrome.storage.local.get.mockResolvedValueOnce({ vjamfx_settings: { fadeDuration: 3 } });
+      await controller._loadSettings();
+      expect(controller.settings.allTabs).toBe(false);
+      expect(btn.textContent).toBe('OFF');
+      expect(btn.classList.contains('on')).toBe(false);
+    });
+
+    it('shows the saved ON', async () => {
+      chrome.storage.local.get.mockResolvedValueOnce({ vjamfx_settings: { allTabs: true } });
+      await controller._loadSettings();
+      expect(btn.textContent).toBe('ON');
+      expect(btn.classList.contains('on')).toBe(true);
+    });
+
+    it('asks for <all_urls> in the click and saves ON when granted', async () => {
+      await click();
+      expect(chrome.permissions.request).toHaveBeenCalledTimes(1);
+      expect(chrome.permissions.request).toHaveBeenCalledWith({ origins: ['<all_urls>'] });
+      expect(controller.settings.allTabs).toBe(true);
+      expect(savedSettings()).toMatchObject({ allTabs: true });
+      expect(btn.textContent).toBe('ON');
+      expect(btn.classList.contains('on')).toBe(true);
+    });
+
+    it('stays OFF when the permission is denied', async () => {
+      chrome.permissions.request.mockResolvedValueOnce(false);
+      await click();
+      expect(controller.settings.allTabs).toBe(false);
+      expect(chrome.storage.local.set).not.toHaveBeenCalled();
+      expect(btn.textContent).toBe('OFF');
+    });
+
+    it('stays OFF when the permission cannot be asked (error / no API)', async () => {
+      chrome.permissions.request.mockRejectedValueOnce(new Error('This function must be called during a user gesture'));
+      await click();
+      expect(controller.settings.allTabs).toBe(false);
+      delete chrome.permissions;
+      await click();
+      expect(controller.settings.allTabs).toBe(false);
+      expect(chrome.storage.local.set).not.toHaveBeenCalled();
+      expect(btn.textContent).toBe('OFF');
+    });
+
+    it('turning it ON while running hands the current state to the SW (the state other tabs get)', async () => {
+      controller.isActive = true;
+      controller.activeLayers.add('rain');
+      await click();
+      const saved = setStates().pop();
+      expect(saved.tabId).toBe(1);
+      expect(saved.state).toMatchObject({ active: true, layers: ['rain'] });
+    });
+
+    it('turning it ON while OFF sends no state', async () => {
+      await click();
+      expect(setStates()).toEqual([]);
+    });
+
+    it('a second click turns it OFF without asking', async () => {
+      await click();
+      chrome.permissions.request.mockClear();
+      await click();
+      expect(chrome.permissions.request).not.toHaveBeenCalled();
+      expect(controller.settings.allTabs).toBe(false);
+      expect(savedSettings()).toMatchObject({ allTabs: false });
+      expect(btn.textContent).toBe('OFF');
+    });
+
+    it('Reset turns it OFF with the other settings', async () => {
+      await click();
+      document.getElementById('btn-reset').click();
+      await vi.waitFor(() => expect(savedSettings()).toMatchObject({ allTabs: false }));
+      await vi.waitFor(() => expect(btn.textContent).toBe('OFF'));
+      expect(controller.settings.allTabs).toBe(false);
+    });
+  });
+
+  // SW が入れたタブ(ページ遷移・全タブで ON)で popup を開いたとき、エンジンから読めない分(Rnd・不透明度・ロック)を SW の状態で埋める
+  describe('sync state of a tab the SW injected', () => {
+    const LIVE = { active: true, layers: ['radar'], blendMode: 'screen', filters: ['sepia'], autoCycle: true, isLightPage: false };
+
+    it('takes the layers etc. from the engine and Rnd / opacity / locks / text from the SW', async () => {
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ result: LIVE }]);
+      chrome.runtime.sendMessage.mockResolvedValueOnce({ state: {
+        active: true, layers: ['rain'], blendMode: 'difference', filters: [], opacity: 0.5, audioEnabled: false,
+        autoCyclePresets: ['rain', 'radar'], autoBlend: true, autoFilters: true,
+        locks: { effect: true, blend: false, filter: false }, textState: { text: 'hi', autoText: true }, autoInjected: true,
+      } });
+      await controller._syncState();
+
+      expect(controller.isActive).toBe(true);
+      expect([...controller.activeLayers]).toEqual(['radar']);
+      expect(controller.selectedBlendMode).toBe('screen');
+      expect([...controller.activeFilters]).toEqual(['sepia']);
+      expect(controller.autoCycleActive).toBe(true);
+      expect(controller.autoBlend).toBe(true);
+      expect(controller.autoFilters).toBe(true);
+      expect(controller.opacity).toBe(0.5);
+      expect(controller.audioEnabled).toBe(false);
+      expect(controller.locks.effect).toBe(true);
+      expect(controller.textState).toEqual({ text: 'hi', autoText: true });
+    });
+
+    it('uses the engine alone when the SW has no state', async () => {
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ result: LIVE }]);
+      chrome.runtime.sendMessage.mockResolvedValueOnce({ state: null });
+      await controller._syncState();
+      expect(controller.isActive).toBe(true);
+      expect([...controller.activeLayers]).toEqual(['radar']);
+      expect(controller.autoBlend).toBe(false);
+      expect(controller.opacity).toBe(0.8);
+    });
+
+    it('uses the SW state when the engine is not running (as before)', async () => {
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ result: null }]);
+      chrome.runtime.sendMessage.mockResolvedValueOnce({ state: { active: true, layers: ['rain'], autoBlend: true } });
+      await controller._syncState();
+      expect([...controller.activeLayers]).toEqual(['rain']);
+      expect(controller.autoBlend).toBe(true);
+    });
+
+    it('stays OFF when neither is running', async () => {
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ result: null }]);
+      chrome.runtime.sendMessage.mockResolvedValueOnce({ state: null });
+      await controller._syncState();
+      expect(controller.isActive).toBe(false);
+    });
+  });
 });

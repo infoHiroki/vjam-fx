@@ -39,7 +39,8 @@ function clearState(tabId) {
 }
 
 // Restore in-memory cache from storage.session on SW startup
-chrome.storage.session.get(null).then((all) => {
+// (全タブで ON はタブの一覧を tabState から見るので、読み終わるまで待てるように持っておく)
+const restored = chrome.storage.session.get(null).then((all) => {
   for (const [key, value] of Object.entries(all)) {
     if (key.startsWith('tab_')) {
       const tabId = parseInt(key.slice(4), 10);
@@ -51,6 +52,37 @@ chrome.storage.session.get(null).then((all) => {
 function isInjectableUrl(url) {
   if (!url) return false;
   return url.startsWith('http://') || url.startsWith('https://');
+}
+
+// --- 全タブで ON(popup の設定 vjamfx_settings.allTabs) ---
+// ON の間は、前に出ているタブに、popup で最後に ON にしていた状態で入れる。裏に回ったタブは止める。
+// 持っていく状態は storage.session に置く(ブラウザを閉じたら忘れる。次はどこかで 1 回 ON にしてから)
+const ALL_TABS_STATE_KEY = 'allTabsState';
+
+async function isAllTabsOn() {
+  try {
+    const result = await chrome.storage.local.get('vjamfx_settings');
+    return !!(result.vjamfx_settings && result.vjamfx_settings.allTabs);
+  } catch (e) {
+    return false;
+  }
+}
+
+async function getAllTabsState() {
+  try {
+    const result = await chrome.storage.session.get(ALL_TABS_STATE_KEY);
+    return result[ALL_TABS_STATE_KEY] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setAllTabsState(state) {
+  if (state) {
+    chrome.storage.session.set({ [ALL_TABS_STATE_KEY]: { ...state } }).catch(() => {});
+  } else {
+    chrome.storage.session.remove(ALL_TABS_STATE_KEY).catch(() => {});
+  }
 }
 
 /**
@@ -279,13 +311,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'setState') {
     setState(msg.tabId, msg.state);
     updateBadge(msg.tabId);
+    // 全タブで ON が持っていく状態 = popup で最後に ON にしていた状態
+    if (msg.state && msg.state.active) setAllTabsState(msg.state);
     sendResponse({ ok: true });
   } else if (msg.type === 'getState') {
     getState(msg.tabId).then(state => sendResponse({ state }));
     return true; // async response
   } else if (msg.type === 'clearState') {
+    const wasOn = !!(tabState.get(msg.tabId) || {}).active;
     clearState(msg.tabId);
     updateBadge(msg.tabId);
+    // 動いていたタブを popup で OFF にした = 全部止まる(全タブで ON でも、次に ON にするまでどこにも入れない)
+    if (wasOn) {
+      setAllTabsState(null);
+      stopOtherTabs(msg.tabId).catch(() => {});
+    }
     sendResponse({ ok: true });
   } else if (msg.type === 'startTabAudio') {
     // tabId from popup (explicit) or from content script bridge (sender.tab)
@@ -333,23 +373,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-// Re-inject on navigation complete
-chrome.webNavigation.onCompleted.addListener(async (details) => {
-  if (details.frameId !== 0) return;
+// ページ遷移の復帰(全タブで ON で入れるときもこれを使う)。
+// 音は <video> / <audio> から。tabCapture はユーザーの操作が要るので、自動で入ったタブ(autoInjected)では使わない
+async function restoreTab(tabId, state) {
+  const injected = await injectAndStart(tabId, state);
 
-  const state = await getState(details.tabId);
-  if (!state || !state.active) return;
-
-  // Small delay to ensure page is ready
-  await new Promise(r => setTimeout(r, 300));
-
-  const injected = await injectAndStart(details.tabId, state);
-
-  // Restart video audio capture + tabCapture fallback if audio was enabled
   if (injected && state.audioEnabled !== false) {
     try {
       await chrome.scripting.executeScript({
-        target: { tabId: details.tabId },
+        target: { tabId },
         world: 'MAIN',
         func: () => {
           if (window._vjamFxEngine) {
@@ -359,8 +391,114 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
       });
     } catch (e) { /* ignore */ }
     // Start tabCapture as fallback (content will stop it if media element found)
-    startTabAudio(details.tabId).catch(() => {});
+    if (!state.autoInjected) startTabAudio(tabId).catch(() => {});
   }
+  return injected;
+}
+
+// 全タブで ON: 前に出ているタブに入れる。入れている途中に onActivated と onCompleted が重なっても 1 回だけ
+const followingTabs = new Set();
+
+async function followTab(tabId, allTabsState) {
+  if (followingTabs.has(tabId)) return;
+  followingTabs.add(tabId);
+  try {
+    const state = { ...allTabsState, autoInjected: true };
+    if (!(await restoreTab(tabId, state))) return;
+    setState(tabId, state);
+    updateBadge(tabId);
+    // 入れている間に裏に回っていたら止める
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab || !tab.active) await stopTab(tabId);
+  } finally {
+    followingTabs.delete(tabId);
+  }
+}
+
+// 裏に回ったタブを止める(軽さのため。前に出たら入れ直す)。
+// 音は analyser だけ外す(source→destination は残す=ページの音は鳴り続ける。AudioContext を閉じると要素の音が戻らない)
+async function stopTab(tabId) {
+  clearState(tabId);
+  updateBadge(tabId);
+  if (activeTabAudioTabId === tabId) stopTabAudio(tabId).catch(() => {});
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        const e = window._vjamFxEngine;
+        if (!e) return;
+        e.handleMessage({ action: 'stopVideoAudio' });
+        e.handleMessage({ action: 'stop' });
+        // テキストは stop で外れたオーバーレイの中にあるので作り直させる(入れ直すときに textState から戻る)
+        if (e._textOverlay) { e._textOverlay.destroy(); e._textOverlay = null; }
+      },
+    });
+  } catch (e) { /* tab gone / not injectable */ }
+}
+
+// 全タブで ON の間に OFF にしたら、ほかで動いているタブも止める
+async function stopOtherTabs(tabId) {
+  if (!(await isAllTabsOn())) return;
+  await restored;
+  for (const [id, state] of [...tabState]) {
+    if (id !== tabId && state && state.active) await stopTab(id);
+  }
+}
+
+// Re-inject on navigation complete
+chrome.webNavigation.onCompleted.addListener(async (details) => {
+  if (details.frameId !== 0) return;
+
+  const state = await getState(details.tabId);
+
+  if (await isAllTabsOn()) {
+    const tab = await chrome.tabs.get(details.tabId).catch(() => null);
+    // 裏のタブには入れない(新しいページにはエンジンが無いので、状態も消して前に出たときに入れる)
+    if (!tab || !tab.active) {
+      if (state) {
+        clearState(details.tabId);
+        updateBadge(details.tabId);
+      }
+      return;
+    }
+    if (!state || !state.active) {
+      const allTabsState = await getAllTabsState();
+      if (!allTabsState) return;
+      await new Promise(r => setTimeout(r, 300));
+      await followTab(details.tabId, allTabsState);
+      return;
+    }
+  }
+
+  if (!state || !state.active) return;
+
+  // Small delay to ensure page is ready
+  await new Promise(r => setTimeout(r, 300));
+
+  await restoreTab(details.tabId, state);
+});
+
+// 全タブで ON: タブを切り替えたら、同じウィンドウで裏に回ったタブを止めて、前に出たタブに入れる
+// (別のウィンドウの前のタブは見えているので止めない)
+chrome.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
+  if (!(await isAllTabsOn())) return;
+
+  await restored;
+  const tabs = await chrome.tabs.query({ windowId }).catch(() => []);
+  for (const t of tabs) {
+    const s = tabState.get(t.id);
+    if (t.id !== tabId && s && s.active) await stopTab(t.id);
+  }
+
+  const allTabsState = await getAllTabsState();
+  if (!allTabsState) return;
+  const state = await getState(tabId);
+  if (state && state.active) return; // もう動いている
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  // 読み込み中なら webNavigation.onCompleted で入れる
+  if (!tab || tab.status !== 'complete') return;
+  await followTab(tabId, allTabsState);
 });
 
 // Clean up when tab is closed
