@@ -346,12 +346,17 @@ class PopupController {
         func: () => {
           if (!window._vjamFxEngine) return null;
           const e = window._vjamFxEngine;
+          // Rnd は Auto の中(_autoBlend など)か単独(_autoFXBlend など)。止めても値は残るので、タイマーが動いている方だけ見る
+          const cycling = !!e._autoCycleTimer;
+          const fx = !!e._autoFXTimer;
           return {
             active: e.active,
             layers: e.getActiveLayerNames(),
             blendMode: e.blendMode,
             filters: [...e.activeFilters],
-            autoCycle: !!e._autoCycleTimer,
+            autoCycle: cycling,
+            autoBlend: (cycling && !!e._autoBlend) || (fx && !!e._autoFXBlend),
+            autoFilters: (cycling && !!e._autoFilters) || (fx && !!e._autoFXFilters),
             isLightPage: e.isLightPage,
           };
         },
@@ -370,14 +375,11 @@ class PopupController {
       }
     } catch (e) { /* SW not available */ }
 
-    // エンジンが動いていれば、それに SW の状態(Rnd・不透明度・ロック・テキストなど、エンジンから読まないもの)を足す。
-    // SW が入れたタブ(ページ遷移・全タブで ON)でも、popup を触ったときに Rnd などが落ちないように
-    let state = null;
-    if (liveState && liveState.active) {
-      state = { ...savedState, ...liveState };
-    } else {
-      state = savedState;
-    }
+    // エンジンが動いていれば、それに SW の状態(不透明度・ロック・テキストなど、エンジンから読まないもの)を足す。
+    // SW が入れたタブ(ページ遷移・全タブで ON)でも、popup を触ったときに不透明度などが落ちないように。
+    // Auto / Rnd はエンジンの状態を優先(SW の状態は拡張の更新・再読み込みで消える。エンジンはページに残って回り続ける)
+    const live = !!(liveState && liveState.active);
+    const state = live ? { ...savedState, ...liveState } : savedState;
 
     if (!state) return;
 
@@ -393,7 +395,7 @@ class PopupController {
     if (state.filters) {
       for (const f of state.filters) this.activeFilters.add(f);
     }
-    if (state.autoCycle || (state.autoCyclePresets && state.autoCyclePresets.length > 0)) {
+    if (live ? state.autoCycle : (state.autoCyclePresets && state.autoCyclePresets.length > 0)) {
       this.autoCycleActive = true;
     }
     if (state.autoBlend) this.autoBlend = true;
