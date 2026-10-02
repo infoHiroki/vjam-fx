@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VJam FX 選び直し</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #111317; --panel: #1b1e24; --panel2: #23272f; --line: #333944; --fg: #e8eaee; --dim: #9aa2b1;
+  --yes: #4ade80; --yes-bg: #173a26; --no: #f87171; --no-bg: #4a1d1d; --warn: #f59e0b; --warn-bg: #4a3510; --cand: #a78bfa; --vjam: #38bdf8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, "Hiragino Sans", system-ui, sans-serif;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100vh; height: 100dvh; overflow: hidden; }
+button, select { font: inherit; color: inherit; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+  min-height: 36px; padding: 0 12px; cursor: pointer; touch-action: manipulation; }
+button:hover { border-color: var(--dim); }
+button:disabled { opacity: .35; cursor: default; }
+button.primary { background: var(--yes); color: #062b14; border-color: var(--yes); font-weight: 700; }
+button.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+select { max-width: 100%; }
+kbd { font: 11px/1 ui-monospace, monospace; padding: 2px 4px; border: 1px solid currentColor; border-radius: 4px; opacity: .6; margin-left: 4px; }
+
+.top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.top h1 { font-size: 16px; margin: 0; white-space: nowrap; }
+.top h1 span { color: var(--dim); font-weight: 400; }
+.spacer { flex: 1; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 8px 8px 0; }
+.seg button.on { position: relative; }
+.seg b { font-weight: 400; opacity: .7; margin-left: 4px; }
+@media (max-width: 1180px) { .top h1 { display: none; } }
+#auto.on { background: var(--warn); border-color: var(--warn); color: #241500; font-weight: 700; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; min-height: 0; }
+.stage { position: relative; background: #000; min-height: 0; }
+.stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; background: #fff; }
+#stage-msg { position: absolute; left: 12px; top: 12px; padding: 6px 10px; border-radius: 8px; background: rgba(0, 0, 0, .75); color: #fff; font-size: 13px; max-width: calc(100% - 24px); }
+#paused-badge { position: absolute; right: 12px; top: 12px; padding: 4px 10px; border-radius: 8px; background: var(--warn); color: #241500; font-weight: 700; }
+
+.side { overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px 16px; }
+.side h2 { font-size: 18px; margin: 0; overflow-wrap: anywhere; }
+.side h3 { font-size: 12px; color: var(--dim); font-weight: 600; margin: 14px 0 4px; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; }
+.badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; background: var(--panel2); color: var(--dim); }
+.badge.yes { background: var(--yes-bg); color: var(--yes); }
+.badge.no { background: var(--no-bg); color: var(--no); }
+.badge.undecided { background: var(--panel2); color: var(--fg); }
+.badge.cand { background: #2e2350; color: var(--cand); }
+.badge.vjam { background: #0c2f42; color: var(--vjam); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-variant-numeric: tabular-nums; }
+.kv dt { color: var(--dim); }
+.kv dd { margin: 0; }
+.pass { color: var(--yes); }
+.fail { color: var(--no); }
+.warn { color: var(--warn); font-weight: 700; }
+.note { color: var(--dim); font-size: 12px; margin: 4px 0; }
+.controls { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 8px; align-items: center; }
+.controls label { color: var(--dim); }
+.controls .row { display: contents; }
+.linkish { background: none; border: 0; padding: 0; min-height: 0; color: var(--vjam); text-decoration: underline; cursor: pointer; }
+
+.bottom { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); }
+#progress { font-variant-numeric: tabular-nums; color: var(--dim); }
+#progress strong { color: var(--fg); }
+.keys { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.keys button { min-height: 48px; min-width: 56px; font-size: 15px; padding: 0 10px; }
+.keys button.yes { background: var(--yes-bg); border-color: var(--yes); color: var(--yes); font-weight: 700; min-width: 96px; }
+.keys button.no { background: var(--no-bg); border-color: var(--no); color: var(--no); font-weight: 700; min-width: 96px; }
+.keys button.yes.cur { background: var(--yes); color: #062b14; }
+.keys button.no.cur { background: var(--no); color: #2b0606; }
+
+#toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; max-width: calc(100vw - 32px); }
+#toast.show { opacity: 1; }
+
+/* タッチの端末(iPad)ではキーの表示を出さない */
+@media (pointer: coarse) { kbd { display: none; } }
+/* 縦の iPad・狭い画面: 横の情報はプレビューの下へ */
+@media (max-width: 820px) {
+  .main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr); }
+  .side { border-left: 0; border-top: 1px solid var(--line); }
+  .keys { margin-left: 0; }
+  .keys button { min-width: 0; flex: 1; padding: 0 8px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>VJam FX <span>選び直し</span></h1>
+  <span class="seg" id="tabs">
+    <button data-v="presets">プリセット<b id="count-presets"></b></button><button data-v="combos">Filter・Blend<b id="count-combos"></b></button>
+  </span>
+  <span class="seg" id="view"></span>
+  <span class="spacer"></span>
+  <button id="auto" title="採用中のプールでエンジンの Auto を回す(A)">▶ Auto で見る<kbd>A</kbd></button>
+  <button id="copy">コピー</button>
+  <button id="export" class="primary">書き出し</button>
+</header>
+
+<div class="main">
+  <div class="stage">
+    <iframe id="frame" title="ライブプレビュー"></iframe>
+    <div id="stage-msg" hidden></div>
+    <div id="paused-badge" hidden>一時停止中</div>
+  </div>
+  <aside class="side">
+    <div id="info"></div>
+    <h3>プレビュー</h3>
+    <div class="controls">
+      <label>ページ</label><span class="seg" id="theme"><button data-v="light">白</button><button data-v="dark">暗</button></span>
+      <span class="row" id="blend-row"><label for="blend">Blend</label><select id="blend"></select></span>
+      <span class="row" id="filter-row"><label for="filter">Filter</label><select id="filter"></select></span>
+      <label for="audio">音</label><select id="audio"></select>
+    </div>
+    <p class="note" id="audio-note"></p>
+    <div id="live"></div>
+    <h3>判定</h3>
+    <p class="note">手で付けた判定はこのブラウザに保存している(ブラウザごとに別)。
+      <button id="reset" class="linkish" title="手で付けた判定を全部消して、今の default-pool.json の状態に戻す">最初に戻す</button></p>
+  </aside>
+</div>
+
+<footer class="bottom">
+  <div id="progress"></div>
+  <div class="keys">
+    <button id="prev" title="前(←)">‹ 前<kbd>←</kbd></button>
+    <button id="no" class="no" title="ボツ(N / 0)">✗ ボツ<kbd>N</kbd></button>
+    <button id="yes" class="yes" title="採用(Y / 1)">✓ 採用<kbd>Y</kbd></button>
+    <button id="next" title="次(→)">次 ›<kbd>→</kbd></button>
+    <button id="theme-btn" title="白・暗(D)">白・暗<kbd>D</kbd></button>
+    <button id="pause" title="一時停止(Space)">⏸ 停止<kbd>Space</kbd></button>
+  </div>
+</footer>
+
+<div id="toast"></div>
+<script type="module" src="review/app.js"></script>
+</body>
+</html>
