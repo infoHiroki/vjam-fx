@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { startSite, launchWithExtension, openPopup, readState, readAuto, readCanvases, waitLayersFadedIn, isAudioPlaying, diffScore } from './helpers.js';
+import { startSite, launchWithExtension, openPopup, openManual, readState, readAuto, readCanvases, waitLayersFadedIn, isAudioPlaying, diffScore } from './helpers.js';
 
 // カテゴリがばらけるように(Immersive / Audio Reactive / Patterns / Particles / Space / Grid & Tech)
 const PICKED = ['tunnel-shader', 'cymatics', 'stained-glass-rose', '3d-particles', 'supernova', 'digital-rain-gpu'];
@@ -39,6 +39,7 @@ test.describe.serial('VJam 本体の WebGL のプリセットが popup から動
     baseline = await page.screenshot();
     popup = await openPopup(ext, site.base);
     popup.on('pageerror', (e) => errors.push(`[popup] ${e}`));
+    await openManual(popup);
   });
 
   test.afterAll(async () => {

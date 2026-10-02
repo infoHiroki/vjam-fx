@@ -139,25 +139,31 @@ describe('PopupController', () => {
     });
   });
 
-  describe('layer count display', () => {
-    it('should update layer count text', () => {
-      const el = document.createElement('span');
-      el.id = 'layer-count';
-      container.querySelector('.popup').appendChild(el);
+  // 前のヘッダーの「N layers」(#layer-count)の役目は、ステージのレイヤー名の一覧が持つ(#47)
+  describe('layer names on the stage', () => {
+    const names = () => [...document.querySelectorAll('#layer-names .nm')].map(el => el.textContent);
 
-      controller.activeLayers.add('neon-tunnel');
-      controller.activeLayers.add('rain');
-      controller._updateLayerCount();
-      expect(el.textContent).toBe('2 layers');
+    beforeEach(() => {
+      container.querySelector('.popup').insertAdjacentHTML('beforeend', '<ol id="layer-names"></ol>');
     });
 
-    it('should show empty text for 0 layers', () => {
-      const el = document.createElement('span');
-      el.id = 'layer-count';
-      container.querySelector('.popup').appendChild(el);
+    it('lists the names of the layers while ON', () => {
+      controller.isActive = true;
+      controller.activeLayers.add('neon-tunnel');
+      controller.activeLayers.add('rain');
+      controller._renderStage();
+      expect(names()).toEqual(['Neon Tunnel', 'Rain']);
+      expect([...document.querySelectorAll('#layer-names .ly')].map(el => el.textContent)).toEqual(['1', '2']);
+    });
 
-      controller._updateLayerCount();
-      expect(el.textContent).toBe('');
+    it('is empty with 0 layers and while OFF', () => {
+      controller.isActive = true;
+      controller._renderStage();
+      expect(names()).toEqual([]);
+      controller.activeLayers.add('rain');
+      controller.isActive = false;
+      controller._renderStage();
+      expect(names()).toEqual([]);
     });
   });
 
@@ -1551,6 +1557,351 @@ describe('PopupController', () => {
       await controller._saveState();
       const saved = chrome.runtime.sendMessage.mock.calls.map(c => c[0]).filter(m => m.type === 'setState').pop();
       expect(saved.state.pool.webgl).toEqual(cmd.pool.webgl);
+    });
+  });
+
+  // popup の作り直し(#47): Auto が主役。いつもの画面はステージ・Next / Auto・チップ・Opacity、手動は畳む
+  describe('popup layout (#47)', () => {
+    const html = readFileSync(resolve(__dirname, '../popup/popup.html'), 'utf-8');
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const $ = (id) => document.getElementById(id);
+    const sentCommands = () => chrome.scripting.executeScript.mock.calls
+      .map(c => c[0].args && c[0].args[0])
+      .filter(m => m && m.action);
+
+    // テスト用の DOM を popup.html の中身に差し替える
+    const usePopupHtml = () => {
+      container.innerHTML = doc.body.innerHTML.replace(/<script[\s\S]*?<\/script>/g, '');
+    };
+
+    describe('popup.html', () => {
+      it('has the logo image in the header instead of the text title', () => {
+        const logo = doc.querySelector('.header img.logo');
+        expect(logo.getAttribute('src')).toBe('lockup.png');
+        expect(logo.getAttribute('alt')).toBe('VJam FX');
+        expect(doc.querySelector('h1')).toBeNull();
+        expect(readFileSync(resolve(__dirname, '../popup/lockup.png')).length).toBeGreaterThan(0);
+        expect(readFileSync(resolve(__dirname, '../popup/mark.png')).length).toBeGreaterThan(0);
+      });
+
+      it('keeps the ids the tests and e2e use', () => {
+        for (const id of ['toggle', 'btn-settings', 'settings-section', 'setting-auto-start', 'setting-all-tabs', 'setting-fade',
+          'setting-cycle', 'setting-sensitivity', 'heavy-count', 'btn-heavy-reset', 'btn-next', 'btn-auto-cycle', 'auto-blend',
+          'auto-filters', 'opacity-slider', 'lock-effect', 'preset-search', 'preset-list', 'lock-filter', 'filter-grid', 'lock-blend',
+          'blend-grid', 'btn-scene-save', 'btn-scenes-toggle', 'scenes-section', 'scene-grid', 'text-input', 'btn-text-toggle',
+          'btn-reset', 'audio-toggle', 'vjam-link', 'cta-text']) {
+          expect([id, doc.getElementById(id) != null]).toEqual([id, true]);
+        }
+        expect(doc.querySelector('.toggle-switch #toggle')).not.toBeNull();
+      });
+
+      it('puts the everyday controls outside Manual and the rest inside', () => {
+        const manual = doc.getElementById('manual-section');
+        expect(manual.hasAttribute('hidden')).toBe(true);
+        for (const id of ['stage', 'btn-next', 'btn-auto-cycle', 'auto-blend', 'auto-filters', 'chip-all-tabs', 'opacity-slider', 'btn-manual']) {
+          expect([id, manual.contains(doc.getElementById(id))]).toEqual([id, false]);
+        }
+        for (const id of ['preset-search', 'preset-list', 'lock-effect', 'filter-grid', 'lock-filter', 'blend-grid', 'lock-blend',
+          'btn-scene-save', 'scene-grid', 'text-input', 'btn-reset', 'audio-toggle']) {
+          expect([id, manual.contains(doc.getElementById(id))]).toEqual([id, true]);
+        }
+        // 手動の Filters / Blend にも Rnd(チップと同じもの)
+        expect(manual.querySelector('[data-rnd="filters"]')).not.toBeNull();
+        expect(manual.querySelector('[data-rnd="blend"]')).not.toBeNull();
+      });
+
+      it('draws icons with inline SVG (no emoji / symbol characters)', () => {
+        expect(doc.querySelector('#btn-settings svg')).not.toBeNull();
+        expect(doc.querySelector('#btn-next svg')).not.toBeNull();
+        expect(doc.querySelector('#btn-auto-cycle svg')).not.toBeNull();
+        expect(doc.querySelector('#btn-manual svg')).not.toBeNull();
+        expect(doc.querySelector('.scene-del svg')).not.toBeNull();
+        expect(html).not.toMatch(/&#9881;|&#9654;|&#9660;|&times;|[⚙▶▼▲×]/);
+        for (const svg of doc.querySelectorAll('svg')) expect(svg.classList.contains('ic')).toBe(true);
+      });
+    });
+
+    describe('stage', () => {
+      beforeEach(() => {
+        usePopupHtml();
+      });
+
+      it('shows OFF / MANUAL / AUTO', () => {
+        controller._renderStage();
+        expect($('stage-mode').textContent).toBe('OFF');
+        expect($('stage').dataset.mode).toBe('off');
+        controller.isActive = true;
+        controller._renderStage();
+        expect($('stage-mode').textContent).toBe('MANUAL');
+        controller.autoCycleActive = true;
+        controller._renderStage();
+        expect($('stage-mode').textContent).toBe('AUTO');
+        expect($('stage').dataset.mode).toBe('auto');
+      });
+
+      it('OFF: one line on how to start (depends on Auto start)', () => {
+        controller._renderStage();
+        expect($('off-hint').hidden).toBe(false);
+        expect($('off-hint').textContent).toMatch(/Auto/);
+        controller.settings.autoOnStart = false;
+        controller._renderStage();
+        expect($('off-hint').textContent).not.toMatch(/Auto/);
+        controller.isActive = true;
+        controller._renderStage();
+        expect($('off-hint').hidden).toBe(true);
+      });
+
+      it('BPM: shown only when there is one, and the beat dot pulses at 60 / BPM', () => {
+        controller.isActive = true;
+        controller._renderStage();
+        expect($('stage-bpm').hidden).toBe(true);
+        expect($('stage-beat').classList.contains('pulse')).toBe(false);
+        expect($('stage-beat').style.animationDuration).toBe('');
+
+        controller._bpm = 120;
+        controller._renderStage();
+        expect($('stage-bpm').hidden).toBe(false);
+        expect($('stage-bpm').textContent).toBe('120 BPM');
+        expect($('stage-beat').classList.contains('pulse')).toBe(true);
+        expect($('stage-beat').style.animationDuration).toBe('0.5s');
+        expect($('stage-meter').style.animationDuration).toBe('0.5s');
+
+        controller.isActive = false;
+        controller._renderStage();
+        expect($('stage-bpm').hidden).toBe(true);
+        expect($('stage-beat').classList.contains('pulse')).toBe(false);
+      });
+
+      it('shows at most 5 layer names', () => {
+        controller.isActive = true;
+        controller._live = { layers: ['rain', 'radar', 'neon-tunnel', 'smoke', 'aurora', 'bokeh'], bpm: 0 };
+        controller._renderStage();
+        expect([...document.querySelectorAll('#layer-names .nm')].map(el => el.textContent))
+          .toEqual(['Rain', 'Radar', 'Neon Tunnel', 'Smoke', 'Aurora']);
+      });
+
+      it('Auto button reads Stop Auto while Auto runs', () => {
+        controller._updateAutoUI();
+        expect($('btn-auto-cycle').querySelector('.label').textContent).toBe('Auto');
+        controller.autoCycleActive = true;
+        controller._updateAutoUI();
+        expect($('btn-auto-cycle').querySelector('.label').textContent).toBe('Stop Auto');
+        expect($('btn-auto-cycle').classList.contains('active')).toBe(true);
+      });
+    });
+
+    // 名前と BPM は popup が開いている間、今ある executeScript の経路でエンジンから読み直す
+    describe('reading the engine while open', () => {
+      const poll = async (engine) => {
+        window._vjamFxEngine = engine;
+        chrome.scripting.executeScript.mockImplementationOnce(async ({ func, args }) => [{ result: func(...(args || [])) }]);
+        try {
+          await controller._pollLive();
+        } finally {
+          delete window._vjamFxEngine;
+        }
+      };
+      const engine = (extra) => ({
+        active: true, audioEnabled: true, getActiveLayerNames: () => ['rain', 'radar'], _tempoBpm: () => 0, ...extra,
+      });
+
+      beforeEach(() => {
+        usePopupHtml();
+        controller.isActive = true;
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('shows what the engine is running (Auto changes layers without the popup)', async () => {
+        controller.activeLayers.add('neon-tunnel');
+        await poll(engine({ _tempoBpm: () => 123.6 }));
+        expect([...document.querySelectorAll('#layer-names .nm')].map(el => el.textContent)).toEqual(['Rain', 'Radar']);
+        expect($('stage-bpm').textContent).toBe('124 BPM');
+        // popup の状態(保存・シーン)は変えない
+        expect([...controller.activeLayers]).toEqual(['neon-tunnel']);
+      });
+
+      it('no BPM from the engine: hidden (after a few misses, tabCapture data is read once per frame)', async () => {
+        await poll(engine({ _tempoBpm: () => 128 }));
+        expect($('stage-bpm').hidden).toBe(false);
+        await poll(engine());
+        await poll(engine());
+        expect($('stage-bpm').hidden).toBe(false);
+        await poll(engine());
+        expect($('stage-bpm').hidden).toBe(true);
+        expect($('stage-beat').classList.contains('pulse')).toBe(false);
+      });
+
+      it('the <video> analyser starts at 120 before it hears a beat: not shown until beats come', async () => {
+        const now = performance.now() / 1000;
+        for (let i = 0; i < 3; i++) await poll(engine({ _tempoBpm: () => 120, _videoAudioAnalyser: {}, _videoAudioLastBeatTime: -1 }));
+        expect($('stage-bpm').hidden).toBe(true);
+        await poll(engine({ _tempoBpm: () => 120, _videoAudioAnalyser: {}, _videoAudioLastBeatTime: now }));
+        expect($('stage-bpm').textContent).toBe('120 BPM');
+      });
+
+      it('Audio OFF: no BPM', async () => {
+        for (let i = 0; i < 3; i++) await poll(engine({ audioEnabled: false, _tempoBpm: () => 120 }));
+        expect($('stage-bpm').hidden).toBe(true);
+      });
+
+      it('does not read while OFF', async () => {
+        controller.isActive = false;
+        await controller._pollLive();
+        expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+        expect($('stage-mode').textContent).toBe('OFF');
+      });
+
+      it('reads about once a second while the popup is open', async () => {
+        vi.useFakeTimers();
+        controller._startLivePoll();
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(chrome.scripting.executeScript.mock.calls.length).toBeGreaterThanOrEqual(3);
+        expect(chrome.scripting.executeScript.mock.calls.length).toBeLessThanOrEqual(4);
+        clearInterval(controller._livePollTimer);
+      });
+    });
+
+    describe('Manual', () => {
+      beforeEach(() => {
+        usePopupHtml();
+      });
+
+      it('is folded by default and opens / folds with the row', async () => {
+        await controller._loadManualOpen();
+        expect($('manual-section').hidden).toBe(true);
+        expect($('btn-manual').getAttribute('aria-expanded')).toBe('false');
+        controller._bindEvents();
+        $('btn-manual').click();
+        expect($('manual-section').hidden).toBe(false);
+        expect($('btn-manual').getAttribute('aria-expanded')).toBe('true');
+        expect(chrome.storage.local.set).toHaveBeenCalledWith({ vjamfx_manual_open: true });
+        $('btn-manual').click();
+        expect($('manual-section').hidden).toBe(true);
+        expect(chrome.storage.local.set).toHaveBeenLastCalledWith({ vjamfx_manual_open: false });
+      });
+
+      it('opens the way it was left last time', async () => {
+        chrome.storage.local.get.mockResolvedValueOnce({ vjamfx_manual_open: true });
+        await controller._loadManualOpen();
+        expect(chrome.storage.local.get).toHaveBeenCalledWith('vjamfx_manual_open');
+        expect($('manual-section').hidden).toBe(false);
+      });
+
+      it('is not a setting: Reset keeps it open', async () => {
+        controller._bindEvents();
+        $('btn-manual').click();
+        $('btn-reset').click();
+        await vi.waitFor(() => expect(chrome.storage.local.set).toHaveBeenCalledWith({ vjamfx_settings: expect.anything() }));
+        expect($('manual-section').hidden).toBe(false);
+      });
+
+      it('scenes fold with an SVG chevron (aria-expanded)', () => {
+        controller._bindEvents();
+        $('btn-scenes-toggle').click();
+        expect($('scenes-section').style.display).toBe('none');
+        expect($('btn-scenes-toggle').getAttribute('aria-expanded')).toBe('false');
+        expect($('btn-scenes-toggle').querySelector('svg')).not.toBeNull();
+        $('btn-scenes-toggle').click();
+        expect($('scenes-section').style.display).toBe('');
+        expect($('btn-scenes-toggle').getAttribute('aria-expanded')).toBe('true');
+      });
+    });
+
+    describe('chips', () => {
+      const rnd = (kind) => [...document.querySelectorAll(`[data-rnd="${kind}"]`)].map(b => b.classList.contains('active'));
+
+      beforeEach(() => {
+        usePopupHtml();
+        controller._bindEvents();
+      });
+
+      afterEach(() => {
+        delete chrome.permissions;
+      });
+
+      it('Rnd in Manual and the chip are the same switch', async () => {
+        document.querySelector('#manual-section [data-rnd="blend"]').click();
+        await vi.waitFor(() => expect(sentCommands().map(m => m.action)).toContain('startAutoFX'));
+        expect(controller.autoBlend).toBe(true);
+        expect(rnd('blend')).toEqual([true, true]);
+        expect(rnd('filters')).toEqual([false, false]);
+        $('auto-blend').click();
+        await vi.waitFor(() => expect(sentCommands().map(m => m.action)).toContain('stopAutoFX'));
+        expect(controller.autoBlend).toBe(false);
+        expect(rnd('blend')).toEqual([false, false]);
+      });
+
+      it('Auto turns both Rnd chips on', async () => {
+        $('btn-auto-cycle').click();
+        await vi.waitFor(() => expect(sentCommands().map(m => m.action)).toContain('startAutoCycle'));
+        expect(rnd('blend')).toEqual([true, true]);
+        expect(rnd('filters')).toEqual([true, true]);
+        expect($('stage-mode').textContent).toBe('AUTO');
+      });
+
+      it('All tabs chip is the same as the setting (asks for <all_urls> in the click)', async () => {
+        chrome.permissions = { request: vi.fn().mockResolvedValue(true) };
+        $('chip-all-tabs').click();
+        await vi.waitFor(() => expect(controller.settings.allTabs).toBe(true));
+        expect(chrome.permissions.request).toHaveBeenCalledWith({ origins: ['<all_urls>'] });
+        expect($('chip-all-tabs').classList.contains('active')).toBe(true);
+        expect($('setting-all-tabs').textContent).toBe('ON');
+        $('setting-all-tabs').click();
+        await vi.waitFor(() => expect(controller.settings.allTabs).toBe(false));
+        expect($('chip-all-tabs').classList.contains('active')).toBe(false);
+      });
+    });
+
+    describe('footer and opacity', () => {
+      beforeEach(() => {
+        usePopupHtml();
+      });
+
+      it('N skipped: hidden at 0', async () => {
+        chrome.storage.local.get.mockResolvedValueOnce({});
+        await controller._loadHeavyPresets();
+        expect($('heavy-skipped').hidden).toBe(true);
+        chrome.storage.local.get.mockResolvedValueOnce({ heavyPresets: { rain: { fps: 5 }, radar: { fps: 9 } } });
+        await controller._loadHeavyPresets();
+        expect($('heavy-skipped').hidden).toBe(false);
+        expect($('heavy-skipped').textContent).toBe('2 skipped');
+        expect($('heavy-skipped').title).toBe('rain, radar');
+      });
+
+      it('Opacity shows the value', () => {
+        controller._bindEvents();
+        const slider = $('opacity-slider');
+        slider.value = '40';
+        slider.dispatchEvent(new Event('input'));
+        expect($('opacity-value').textContent).toBe('40%');
+        expect(slider.style.getPropertyValue('--v')).toBe('40%');
+        controller.opacity = 0.8;
+        controller._updateUI();
+        expect(slider.value).toBe('80');
+        expect($('opacity-value').textContent).toBe('80%');
+      });
+    });
+
+    // chrome:// やストアなど: ロゴ・マーク・ひとことだけ
+    describe('pages it cannot run on', () => {
+      beforeEach(() => {
+        usePopupHtml();
+      });
+
+      it('shows only the logo, the mark and "This page can\'t be overlaid"', async () => {
+        chrome.tabs.query.mockResolvedValueOnce([{ id: 7, url: 'chrome://extensions/' }]);
+        await controller.init();
+        expect(document.querySelector('.popup').classList.contains('is-blocked')).toBe(true);
+        expect($('blocked').hidden).toBe(false);
+        expect($('blocked-msg').textContent).toBe("This page can't be overlaid");
+        expect($('blocked').querySelector('img.mark').getAttribute('src')).toBe('mark.png');
+        // 操作は付けない・エンジンも読まない
+        expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+        expect(controller._livePollTimer).toBeNull();
+      });
     });
   });
 });

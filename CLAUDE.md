@@ -13,7 +13,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - p5.js (2D graphics)
 - Chrome Extension Manifest V3
 - Service Worker (状態永続化)
-- Vitest + jsdom (testing, 3964 tests) + Playwright e2e (`tests/e2e/`, 86)
+- Vitest + jsdom (testing, 3989 tests) + Playwright e2e (`tests/e2e/`, 92)
 
 ## Architecture
 - **Popup**: `popup/` — UI controller, injects via `chrome.scripting.executeScript`
@@ -54,14 +54,21 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - createGraphicsプリセット: `windowResized`時に古いバッファを`.remove()`してからnew
 - audio-bridge: `event.source === window`でpostMessage origin検証
 
-## UI: 3ボタン + Auto個別トグル
-- **Reset**: 全リセット（レイヤー・フィルタ・ブレンド・Auto・トグル全OFF）
+## UI: Auto が主役・手動は畳む(見本 `tools/design/mockup/index.html`)
+- **いつもの画面**(上から): ヘッダー(ロゴ `popup/lockup.png`・設定・ON/OFF)→ ステージ → `Next` / `Auto` → チップ → Opacity → `Manual` の行 → フッター
+- **ステージ**: `AUTO` / `MANUAL` / `OFF`、BPM(取れるときだけ)と拍の点(60 / BPM 秒で脈打つ)、出ているレイヤー名(最大 5)。名前と BPM は popup が開いている間 1 秒おきにエンジンから読む(表示だけ。popup の状態には入れない)
 - **Next**: ランダム1-3プリセット（選択分のみinject、FX維持）
-- **Auto**: プリセットローテーション（BPM連動、16ビート、4-15秒クランプ）
-  - **Blend Rnd**: ブレンドモードをランダム変更（Auto ON/OFF問わず独立動作）
-  - **Filter Rnd**: フィルターをランダム変更（Auto ON/OFF問わず独立動作）
+- **Auto** / **Stop Auto**: プリセットローテーション（BPM連動、16ビート、4-15秒クランプ）
+- **チップ**: `Blend Rnd` / `Filter Rnd` / `All tabs`。ON は緑の点
+  - **Blend Rnd** / **Filter Rnd**: ランダム変更（Auto ON/OFF問わず独立動作）。手動の Blend / Filters の `Rnd` と同じもの
   - Auto ONでBlend Rnd / Filter Rndも自動ON、Auto OFFでも独立動作を継続
+  - **All tabs**: 設定の All tabs と同じもの
+- **Manual**(開いたときだけ): Effect・Filters・Blend・Scenes・Text・Reset・Audio。開いているかは `vjamfx_manual_open`(storage.local)に覚える
+- **Reset**(手動の中): 全リセット（レイヤー・フィルタ・ブレンド・Auto・トグル全OFF）
+- **フッター**: この端末で重くて外しているもの `N skipped`(0 のときは出さない)・VJam 本体へのリンク
+- **動かないページ**(chrome:// など): ロゴ・マーク・`This page can't be overlaid` だけ
 - **Lock**: テキスト表示（`Lock`/`Locked`）、locked時オレンジ
+- **色**: 緑は ON のスイッチと「Rnd などが ON の点」だけ。ピンク→紫のグラデーションはステージのメーターだけ。アイコンは HTML の中の細い線の SVG(絵文字・記号は使わない)
 
 ## Auto/Rnd 状態管理ルール
 - **Auto/Rndの真実はpopupのフラグのみ** — シーン・SW状態には保存しない
@@ -80,7 +87,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - `Save`ボタン → スロット選択で保存（自動でSaveモード解除）
 - 通常クリック → 保存済みスロット読込
 - 右クリック(contextmenu) → スロットクリア
-- 空スロット: `border-style: dashed`、保存済み: `solid` + 緑枠
+- 空スロット: `border-style: dashed`、保存済み: `solid` + 明るい枠
 - Saveモード中: オレンジ枠 + パルスアニメーション
 
 ## Text（ON/OFFパターン）
@@ -90,8 +97,8 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 
 ## Testing
 ```bash
-npm test          # vitest run (3964 tests)
-npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(86)
+npm test          # vitest run (3989 tests)
+npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(92)
 npm run test:watch
 ```
 

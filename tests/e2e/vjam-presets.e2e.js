@@ -5,7 +5,7 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { startSite, launchWithExtension, openPopup, readState, readCanvases, waitLayersFadedIn, isAudioPlaying, diffScore } from './helpers.js';
+import { startSite, launchWithExtension, openPopup, openManual, readState, readCanvases, waitLayersFadedIn, isAudioPlaying, diffScore } from './helpers.js';
 
 const IMPORTED = [
   'corrupted-archive', 'deep-nebula', 'desktop-meltdown', 'gravity-cloth', 'hanabi-dusk',
@@ -31,6 +31,7 @@ test.describe.serial('VJam 由来の 14 本が popup から動く', () => {
     baseline = await page.screenshot();
     popup = await openPopup(ext, site.base);
     popup.on('pageerror', (e) => errors.push(`[popup] ${e}`));
+    await openManual(popup);
   });
 
   test.afterAll(async () => {
@@ -81,6 +82,7 @@ test.describe.serial('Filter を VJam 方式にする', () => {
     page = ext.context.pages()[0] ?? await ext.context.newPage();
     await page.goto(`${site.base}/index.html`);
     popup = await openPopup(ext, site.base);
+    await openManual(popup);
     const buttons = popup.locator('#filter-grid .filter-btn');
     expect(await buttons.evaluateAll((els) => els.map((b) => b.dataset.filter)))
       .toEqual(['invert', 'hue-rotate', 'saturate', 'grayscale', 'contrast']);
