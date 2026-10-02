@@ -13,11 +13,11 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - p5.js (2D graphics)
 - Chrome Extension Manifest V3
 - Service Worker (状態永続化)
-- Vitest + jsdom (testing, 2029 tests) + Playwright e2e (`tests/e2e/`, 28)
+- Vitest + jsdom (testing, 3964 tests) + Playwright e2e (`tests/e2e/`, 86)
 
 ## Architecture
 - **Popup**: `popup/` — UI controller, injects via `chrome.scripting.executeScript`
-- **Content (MAIN world)**: `content/` — VJamFXEngine, 198 presets, video audio capture
+- **Content (MAIN world)**: `content/` — VJamFXEngine, 370 presets, video audio capture
 - **デフォルトプール**: `content/default-pool.json`(Next / Auto / Rnd の抽選対象。手動は全部選べる)。選ぶ画面と計測は `tools/`(`tools/README.md`)、決定版の記録は `tools/curate/selected-pool.json`
 - **Safari(iPad)版**: `safari/`(Xcode)+ `scripts/build-safari-ext.sh`(共有ソース → `build/safari-ext/`、manifest は `safari/manifest.patch.json`)。手順は `safari/README.md`
 - **MSE タップ**: `content/mse-tap.js`(Safari のみ。document_start / MAIN world)。MediaSource の append と標準 HLS の区切りから音声をデコードして BPM・ビートを出す。`__vjamMse` があるときエンジンは createMediaElementSource を張らない
@@ -90,8 +90,8 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 
 ## Testing
 ```bash
-npm test          # vitest run (2029 tests)
-npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(28)
+npm test          # vitest run (3964 tests)
+npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(86)
 npm run test:watch
 ```
 

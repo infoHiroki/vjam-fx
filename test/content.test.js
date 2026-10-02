@@ -3039,6 +3039,45 @@ describe('VJamFXEngine', () => {
       }
     });
 
+    // 抽選では WebGL を 1 回に 1 本まで(#44)。2 本引くと 1 本がすぐ消えて、その回のレイヤーが減る
+    describe('lottery (#44)', () => {
+      afterEach(() => {
+        engine._stopAutoCycle();
+        if (Math.random.mockRestore) Math.random.mockRestore();
+      });
+
+      it('Auto picks at most one WebGL preset (pool.webgl) and keeps the count it drew', () => {
+        engine._fadeDuration = 0;
+        engine.handleMessage({ action: 'startAutoCycle', presets: [...GL, ...FLAT], interval: 100000, skipFirstTick: true, pool: { webgl: GL } });
+        expect([...engine._webglPresets]).toEqual(GL);
+        for (let i = 0; i < 100; i++) {
+          const spy = vi.spyOn(Math, 'random').mockImplementationOnce(() => 0.99); // 3 本(並べ替えは本物の乱数)
+          engine._autoCycleTick();
+          spy.mockRestore();
+          const names = engine.getActiveLayerNames();
+          // WebGL 3 本・2D 2 本のプールから 3 本 = 2D 2 本 + WebGL 1 本
+          expect(names).toHaveLength(3);
+          expect(names.filter(n => GL.includes(n))).toHaveLength(1);
+        }
+      });
+
+      it('Auto picks one when the pool is all WebGL', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0.99);
+        engine.startAutoCycle(GL, 100000, { pool: { webgl: GL } });
+        expect(engine.getActiveLayerNames()).toEqual([GL[0]]);
+      });
+
+      it('a replacement for a heavy layer is not WebGL while another WebGL layer stays (webgl from Next)', () => {
+        engine.handleMessage({ action: 'crossfade', presets: [GL[0], FLAT[0]], poolPresets: [...GL, ...FLAT], webgl: GL });
+        expect([...engine._webglPresets]).toEqual(GL);
+        for (let i = 0; i < 30; i++) expect(engine._pickReplacement(FLAT[0])).toBe(FLAT[1]);
+        // 外すのが WebGL なら WebGL も選べる
+        const picked = new Set();
+        for (let i = 0; i < 100; i++) picked.add(engine._pickReplacement(GL[0]));
+        expect([...picked].sort()).toEqual([GL[1], GL[2], FLAT[1]].sort());
+      });
+    });
+
     it('does not count a WebGL preset whose p5 has not set up yet (no renderer)', () => {
       window.VJamFX.presets['gl-late'] = class {
         constructor() { this.p5 = { frameRate() {}, remove() {} }; }
