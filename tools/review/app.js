@@ -125,7 +125,14 @@ async function init() {
 // ---------- 判定・一覧 ----------
 
 const verdict = item => verdictOf(state.saved, state.pool, item);
-const tabItems = () => state.items[state.view.tab];
+// ?only=a,b,c でプリセットを絞って回る(点滅系だけ見る、など)。並びも URL の順にする
+const ONLY = (() => { const q = new URLSearchParams(location.search).get('only'); return q ? q.split(',').map(x => x.trim()).filter(Boolean) : null; })();
+const tabItems = () => {
+  const items = state.items[state.view.tab];
+  if (!ONLY || state.view.tab !== 'presets') return items;
+  const byKey = new Map(items.map(it => [it.key, it]));
+  return ONLY.map(k => byKey.get(k)).filter(Boolean);
+};
 const visible = () => tabItems().filter(item => matchesView(verdict(item), state.view.filter));
 const currentTrace = () => state.traces.find(t => t.name === state.pv.audio) || null;
 
