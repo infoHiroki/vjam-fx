@@ -689,12 +689,15 @@ describe('mse-tap', () => {
   });
 
   describe('MediaSource hook', () => {
-    let decodes, FakeSourceBuffer, FakeMediaSource;
+    let decodes, FakeSourceBuffer, FakeMediaSource, clock;
 
     const flush = () => new Promise(r => setTimeout(r, 0));
+    // エンジンが使っている(frameAt を呼んだ)。呼ばない間はデコードしない(下の 'while the engine is not using it')
+    const use = (t = 0) => window.__vjamMse.frameAt(t);
 
     beforeEach(() => {
-      decodes = [];
+      decodes = []; clock = 1e6;
+      vi.spyOn(Date, 'now').mockImplementation(() => clock);
       // テストごとに作り直す(prototype のパッチが重ならないように)
       FakeSourceBuffer = class {
         constructor(type) { this.type = type; this.timestampOffset = 0; this.appended = []; this.calls = []; }
@@ -732,6 +735,7 @@ describe('mse-tap', () => {
     });
 
     it('decodes init + cluster and serves frames at the playback time', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
       sb.appendBuffer(bytes(webmInit(), webmCluster(0)));
       await flush();
@@ -743,6 +747,7 @@ describe('mse-tap', () => {
     });
 
     it('adds timestampOffset to the start', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('audio/mp4; codecs="mp4a.40.2"');
       sb.timestampOffset = 30;
       sb.appendBuffer(bytes(mp4Init(44100), mp4Segment(441000).all));
@@ -759,6 +764,7 @@ describe('mse-tap', () => {
     });
 
     it('hooks audio-only video/mp4 (Twitch)', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('video/mp4;codecs="mp4a.40.2"');
       sb.appendBuffer(bytes(mp4Init(44100), mp4Segment(0).all));
       await flush();
@@ -767,6 +773,7 @@ describe('mse-tap', () => {
     });
 
     it('resets the analysis when the video switches (new audio SourceBuffer)', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
       sb.appendBuffer(bytes(webmInit(), webmCluster(0)));
       await flush();
@@ -776,6 +783,7 @@ describe('mse-tap', () => {
     });
 
     it('drops decodes that finish after the video switched', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
       sb.appendBuffer(bytes(webmInit(), webmCluster(0)));
       new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
@@ -784,6 +792,7 @@ describe('mse-tap', () => {
     });
 
     it('drops the partial cluster on abort', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
       const c = webmCluster(0);
       sb.appendBuffer(webmInit());
@@ -796,6 +805,7 @@ describe('mse-tap', () => {
     });
 
     it('forgets removed ranges', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
       sb.appendBuffer(bytes(webmInit(), webmCluster(0)));
       await flush();
@@ -805,6 +815,7 @@ describe('mse-tap', () => {
     });
 
     it('follows changeType (webm → mp4)', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
       sb.changeType('audio/mp4; codecs="mp4a.40.2"');
       sb.appendBuffer(bytes(mp4Init(44100), mp4Segment(0).all));
@@ -814,6 +825,7 @@ describe('mse-tap', () => {
     });
 
     it('counts decode failures without throwing', async () => {
+      use();
       window.OfflineAudioContext.prototype.decodeAudioData = () => Promise.reject(new Error('bad'));
       const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
       sb.appendBuffer(bytes(webmInit(), webmCluster(0)));
@@ -823,6 +835,7 @@ describe('mse-tap', () => {
     });
 
     it('detects the beat of the decoded audio', async () => {
+      use();
       const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
       sb.appendBuffer(webmInit());
       for (let k = 0; k < 6; k++) sb.appendBuffer(webmCluster(k * 5000));
@@ -834,6 +847,138 @@ describe('mse-tap', () => {
       expect(last.bpm).toBeLessThan(121);
       expect(beats.length).toBeGreaterThanOrEqual(19);
       expect(beats.length).toBeLessThanOrEqual(21);
+    });
+
+    describe('while the engine is not using it', () => {
+      const seg = tc => bytes(webmInit(), webmCluster(tc)); // 区切り 1 つ(init + cluster)。tc は ms
+      // デコードに渡った区切りの tc(渡った順)
+      const order = tcs => decodes.map(d => tcs.find(tc => same(d, seg(tc))));
+
+      function appendClusters(sb, tcs) {
+        sb.appendBuffer(webmInit());
+        for (const tc of tcs) sb.appendBuffer(webmCluster(tc));
+      }
+
+      it('holds the segments without decoding until frameAt is called', async () => {
+        const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        appendClusters(sb, [0, 5000, 10000]);
+        clock += 60000;
+        await flush();
+        expect(decodes.length).toBe(0);
+        expect(sb.appended.length).toBe(4); // 元の append はそのまま
+        const { stats } = window.__vjamMse;
+        expect(stats.segments).toBe(3);
+        expect(stats.held).toBe(3);
+        expect(stats.decoded).toBe(0);
+      });
+
+      it('decodes the held segments from the playback position: playing → ahead → a little before', async () => {
+        const tcs = [0, 5000, 10000, 15000, 20000];
+        const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        appendClusters(sb, tcs);
+        await flush();
+        use(11); // 10〜15 秒の区切りを再生中
+        await flush();
+        expect(order(tcs)).toEqual([10000, 15000, 20000, 5000, 0]);
+        expect(window.__vjamMse.stats.held).toBe(0);
+        expect(window.__vjamMse.stats.decoded).toBe(5);
+        expect(window.__vjamMse.frameAt(12)).not.toBeNull();
+      });
+
+      it('finds the beat soon after the engine starts', async () => {
+        const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        appendClusters(sb, [0, 5000, 10000, 15000, 20000, 25000]);
+        await flush();
+        use(8);
+        await flush();
+        const { beats, last } = run({ frameAt: window.__vjamMse.frameAt }, 8, 18);
+        expect(window.__vjamMse.stats.mode).toBe('grid');
+        expect(last.bpm).toBeGreaterThan(119);
+        expect(last.bpm).toBeLessThan(121);
+        expect(beats.length).toBeGreaterThanOrEqual(19);
+      });
+
+      it('decodes one at a time and stops when frameAt stops (keeps the rest)', async () => {
+        const pending = [];
+        window.OfflineAudioContext.prototype.decodeAudioData = function(buf) {
+          decodes.push(new Uint8Array(buf));
+          return new Promise(r => pending.push(() => r(fakeAudioBuffer())));
+        };
+        const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        appendClusters(sb, [0, 5000, 10000]);
+        use(0);
+        await flush();
+        expect(decodes.length).toBe(1);
+        pending.shift()();
+        await flush();
+        expect(decodes.length).toBe(2);
+        clock += 2500;   // エンジン OFF:frameAt が止まった
+        pending.shift()();
+        await flush();
+        expect(decodes.length).toBe(2);
+        expect(window.__vjamMse.stats.held).toBe(1);
+      });
+
+      it('decodes new segments right away while in use, and holds them again after it stops', async () => {
+        const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        use();
+        sb.appendBuffer(seg(0));
+        await flush();
+        expect(decodes.length).toBe(1);
+        clock += 2500;   // エンジン OFF
+        sb.appendBuffer(webmCluster(5000));
+        await flush();
+        expect(decodes.length).toBe(1);
+        expect(window.__vjamMse.stats.held).toBe(1);
+        expect(window.__vjamMse.frameAt(2)).not.toBeNull(); // 解析済みのデータは残っている(呼んだので使い始める)
+        await flush();
+        expect(decodes.length).toBe(2);
+        expect(window.__vjamMse.stats.held).toBe(0);
+      });
+
+      it('drops the oldest held segments over the cap', async () => {
+        lib.config.maxHeld = 2 * seg(0).length; // 2 つぶん
+        const tcs = [0, 5000, 10000];
+        const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        appendClusters(sb, tcs);
+        expect(window.__vjamMse.stats.held).toBe(2);
+        use(6);
+        await flush();
+        expect(order(tcs)).toEqual([5000, 10000]);
+      });
+
+      it('keeps the timestampOffset at the time of the append', async () => {
+        const sb = new FakeMediaSource().addSourceBuffer('audio/mp4; codecs="mp4a.40.2"');
+        sb.timestampOffset = 30;
+        sb.appendBuffer(bytes(mp4Init(44100), mp4Segment(0).all));
+        sb.timestampOffset = 0;
+        use(32);
+        await flush();
+        expect(window.__vjamMse.frameAt(32)).not.toBeNull();
+        expect(window.__vjamMse.frameAt(2)).toBeNull();
+      });
+
+      it('forgets held segments in removed ranges', async () => {
+        const tcs = [0, 5000, 10000];
+        const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        appendClusters(sb, tcs);
+        sb.remove(0, 5);
+        expect(window.__vjamMse.stats.held).toBe(2);
+        use(6);
+        await flush();
+        expect(order(tcs)).toEqual([5000, 10000]);
+        expect(window.__vjamMse.frameAt(2)).toBeNull();
+      });
+
+      it('drops the held segments when the video switches', async () => {
+        const sb = new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        appendClusters(sb, [0, 5000]);
+        new FakeMediaSource().addSourceBuffer('audio/webm; codecs="opus"');
+        expect(window.__vjamMse.stats.held).toBe(0);
+        use(2);
+        await flush();
+        expect(decodes.length).toBe(0);
+      });
     });
   });
 
@@ -1390,6 +1535,7 @@ describe('mse-tap', () => {
         addSourceBuffer() { return { timestampOffset: 0, appendBuffer() {}, abort() {}, remove() {} }; }
       };
       tap = loadTap();
+      tap.frameAt(0);
       new window.MediaSource().addSourceBuffer('audio/webm; codecs="opus"').appendBuffer(bytes(webmInit(), webmCluster(0)));
       await settle();
       expect(tap.frameAt(2)).not.toBeNull();
