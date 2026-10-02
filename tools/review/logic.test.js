@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import {
-  FIXED_PRESETS, presetItems, comboItems, poolSets, verdictOf, isManual, matchesView, counts,
+  FIXED_PRESETS, SOURCES, presetItems, parseSources, comboItems, poolSets, verdictOf, isManual, matchesView, counts,
   stepKey, nextAfterJudge, buildPool, metricsFor, parseListing,
 } from './logic.js';
 import { filterList } from '../curate/logic.js';
@@ -17,6 +17,22 @@ describe('一覧', () => {
       ['a', 'fx'], ['b', 'fx'], ['cand', 'candidates'], ['shared', 'fx'],
     ]);
     expect(items.every(i => i.kind === 'presets')).toBe(true);
+  });
+
+  it('WebGL 候補も未取り込みのものだけ足す(FX・候補に同じ名前があればそちら)', () => {
+    const items = presetItems(['a', 'shared'], ['cand', 'both'], ['gl', 'shared', 'both']);
+    expect(items.map(i => [i.key, i.source])).toEqual([
+      ['a', 'fx'], ['both', 'candidates'], ['cand', 'candidates'], ['gl', 'webgl'], ['shared', 'fx'],
+    ]);
+    expect(SOURCES.webgl).toBe('WebGL 候補');
+  });
+
+  it('?source= は知っている出どころだけ(無ければ絞らない)', () => {
+    expect(parseSources('webgl')).toEqual(['webgl']);
+    expect(parseSources('webgl, candidates')).toEqual(['webgl', 'candidates']);
+    expect(parseSources('nope')).toBe(null);
+    expect(parseSources('')).toBe(null);
+    expect(parseSources(null)).toBe(null);
   });
 
   it('Filter・Blend は filter 24 種(bench の combos と同じ並び)→ blend 5 種', () => {
@@ -111,6 +127,14 @@ describe('参考情報', () => {
     expect(metricsFor({ key: 'b', source: 'fx' }, results)).toEqual({ fps: 3 });
     expect(metricsFor({ key: 'a', source: 'candidates' }, results)).toEqual({ fps: 2 });
     expect(metricsFor({ key: 'x', source: 'fx' }, { fx: null, candidates: null })).toBe(null);
+  });
+
+  it('WebGL 候補は WebGL の計測。FX に取り込んだ後で FX を測り直す前は WebGL の計測を使う', () => {
+    const results = { fx: { a: { fps: 1 } }, candidates: {}, webgl: { a: { fps: 4 }, g: { fps: 5 } } };
+    expect(metricsFor({ key: 'g', source: 'webgl' }, results)).toEqual({ fps: 5 });
+    expect(metricsFor({ key: 'a', source: 'webgl' }, results)).toEqual({ fps: 4 });
+    expect(metricsFor({ key: 'g', source: 'fx' }, results)).toEqual({ fps: 5 });
+    expect(metricsFor({ key: 'g', source: 'webgl' }, { fx: null, candidates: null })).toBe(null);
   });
 
   it('http.server のディレクトリ一覧から拡張子で拾う', () => {

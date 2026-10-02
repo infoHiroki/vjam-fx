@@ -9,13 +9,27 @@ export const FLASH_WARN = DEFAULT_THRESHOLDS.flash;
 
 export const VIEWS = { all: '全部', undecided: '未判定', yes: '採用', no: 'ボツ' };
 
-// プリセット: content/presets 全部 + 候補のうち未取り込み(同じ名前が content/presets に無いもの)。名前順
-export function presetItems(fxNames, candNames) {
-  const fx = new Set(fxNames);
-  return [
-    ...fxNames.map(name => ({ kind: 'presets', key: name, source: 'fx' })),
-    ...candNames.filter(name => !fx.has(name)).map(name => ({ kind: 'presets', key: name, source: 'candidates' })),
-  ].sort((a, b) => a.key.localeCompare(b.key));
+// 出どころの表示名(fx = content/presets、candidates = bench/candidates、webgl = bench/candidates-webgl)
+export const SOURCES = { fx: 'FX', candidates: '候補', webgl: 'WebGL 候補' };
+
+// プリセット: content/presets 全部 + 候補・WebGL 候補のうち未取り込み(同じ名前が content/presets に無いもの)。名前順
+export function presetItems(fxNames, candNames, webglNames = []) {
+  const items = fxNames.map(name => ({ kind: 'presets', key: name, source: 'fx' }));
+  const seen = new Set(fxNames);
+  for (const [names, source] of [[candNames, 'candidates'], [webglNames, 'webgl']]) {
+    for (const name of names) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      items.push({ kind: 'presets', key: name, source });
+    }
+  }
+  return items.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/** ?source=webgl などで絞る(出どころのキーをカンマ区切り)。無い・知らないキーだけなら null(絞らない) */
+export function parseSources(q) {
+  const keys = String(q || '').split(',').map(s => s.trim()).filter(k => SOURCES[k]);
+  return keys.length ? keys : null;
 }
 
 // Filter・Blend: filter(filterList の並び)→ blend
@@ -94,11 +108,12 @@ export function buildPool(presetItemsList, filterKeys, blendKeys, verdictFn) {
   };
 }
 
-// 計測の数字。FX に無いもの(候補から取り込んだもの)は候補の計測を使う
+// 計測の数字。候補は候補の計測。FX に無いもの(候補から取り込んだもの)は候補・WebGL 候補の計測を使う
 export function metricsFor(item, results) {
-  const fx = results.fx || {}, cand = results.candidates || {};
+  const fx = results.fx || {}, cand = results.candidates || {}, webgl = results.webgl || {};
   if (item.source === 'candidates') return cand[item.key] || null;
-  return fx[item.key] || cand[item.key] || null;
+  if (item.source === 'webgl') return webgl[item.key] || null;
+  return fx[item.key] || cand[item.key] || webgl[item.key] || null;
 }
 
 // http.server のディレクトリ一覧から、拡張子 ext のファイル名(拡張子なし)を拾う
