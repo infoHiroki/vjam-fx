@@ -10,6 +10,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .wrap{max-width:720px;margin:0 auto}
 h1{font-size:2rem;font-weight:800;margin-bottom:.5rem;background:linear-gradient(135deg,#FF1493,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 h2{font-size:1.2rem;font-weight:700;margin:2rem 0 .5rem;color:#ccc}
+h3{font-size:1rem;font-weight:700;margin:1.2rem 0 .4rem;color:#bbb}
 p,li{color:#aaa;font-size:.95rem}
 ul{padding-left:1.2rem;margin:.5rem 0}
 li{margin:.3rem 0}
@@ -23,10 +24,10 @@ a:hover{text-decoration:underline}
 <body>
 <div class="wrap">
 <h1>Privacy Policy — VJam FX</h1>
-<p class="updated">Last updated: February 28, 2026</p>
+<p class="updated">Last updated: October 3, 2026</p>
 
 <h2>What VJam FX Does</h2>
-<p>VJam FX is a Chrome extension that overlays visual effects on webpages. It captures audio directly from video/audio elements on the page to detect beats and sync visual effects to music — no microphone needed.</p>
+<p>VJam FX overlays visual effects on webpages. It is available as a Chrome extension and as a Safari extension for iPad and iPhone (the VJam FX app). It reads the audio of the video or music playing on the page to detect beats and sync the visual effects to the music — no microphone needed.</p>
 
 <h2>Data Collection</h2>
 <p><strong>VJam FX collects no data.</strong> Specifically:</p>
@@ -36,24 +37,35 @@ a:hover{text-decoration:underline}
 <li><strong>No analytics or tracking</strong> of any kind</li>
 <li><strong>No cookies</strong> are set</li>
 <li><strong>No third-party services</strong> are used</li>
-<li><strong>No network requests</strong> are made (except loading the extension's own files)</li>
+<li><strong>Nothing is sent anywhere.</strong> VJam FX has no server and never sends data to us or to anyone else. Apart from loading its own files, the only network requests it makes are in Safari, where it may download a video's audio segments again from the same address the page is already streaming the video from (see <a href="#safari">&ldquo;Safari&rdquo;</a> below)</li>
 </ul>
 
 <h2>Audio Capture</h2>
+<p>The audio is used only to find the beat and the loudness of the bass, mids and treble.</p>
+
+<h3>Chrome</h3>
 <p>VJam FX uses two methods to capture audio for beat detection — <strong>no microphone is required</strong>:</p>
 <ul>
 <li><strong>Video/Audio Element Capture</strong> (primary): Uses <code>createMediaElementSource</code> to capture audio directly from <code>&lt;video&gt;</code> and <code>&lt;audio&gt;</code> elements on the page. This is completely silent — no recording indicator is shown.</li>
 <li><strong>Tab Audio Capture</strong> (fallback): If video element audio is unavailable (e.g., CORS/MSE restrictions), the extension falls back to capturing the tab's audio output via <code>tabCapture</code>. This may show a recording indicator in the browser.</li>
 </ul>
-<p>In both cases:</p>
+
+<h3 id="safari">Safari (iPad and iPhone)</h3>
+<p>Safari does not let extensions capture a tab's audio, so the Safari version reads the audio data that the page itself plays — <strong>no microphone is required</strong>:</p>
 <ul>
-<li>Audio is analyzed <strong>entirely locally</strong> in your browser using the Web Audio API</li>
+<li><strong>Streaming video (MediaSource)</strong>: When a page plays a video through Media Source Extensions, VJam FX reads a copy of the audio data that the page passes to Safari. The original data is passed on unchanged. So that the beat is ready when you turn the effects on, this starts when the page loads, on the websites you have allowed VJam FX to access.</li>
+<li><strong>Standard HLS video</strong>: When a page plays a standard HLS stream (<code>.m3u8</code>) directly in the video element, VJam FX downloads the stream's audio segments again from the same address the video is played from, and reads them. It does this only while the effects are on and the video is playing. Live and encrypted streams are skipped.</li>
+</ul>
+
+<h3>In all cases</h3>
+<ul>
+<li>Audio is analyzed <strong>entirely locally</strong> on your device</li>
 <li>Audio data is processed in real-time for beat detection and frequency analysis</li>
-<li><strong>No audio is recorded, stored, or transmitted</strong> anywhere</li>
-<li>Audio capture is active only while effects are running</li>
+<li><strong>No audio is recorded, stored, or transmitted</strong> anywhere. The analysis is kept only in the page's memory and is discarded when you leave the page</li>
 </ul>
 
 <h2>Permissions</h2>
+<h3>Chrome</h3>
 <ul>
 <li><strong>activeTab</strong>: Allows the extension to inject visual effects into the current tab only when you click the extension icon. No access to other tabs.</li>
 <li><strong>scripting</strong>: Required to inject the visual effects engine (p5.js canvas) into the webpage.</li>
@@ -62,9 +74,15 @@ a:hover{text-decoration:underline}
 <li><strong>offscreen</strong>: Required to create an offscreen document for processing tab audio capture data.</li>
 <li><strong>storage</strong>: Used to save your scene configurations (preset selections, blend modes, filter settings) locally in your browser.</li>
 </ul>
+<h3>Safari</h3>
+<ul>
+<li><strong>activeTab</strong>, <strong>scripting</strong>, <strong>webNavigation</strong>, <strong>storage</strong>: Same as Chrome. <code>tabCapture</code> and <code>offscreen</code> are not used.</li>
+<li><strong>Access to websites</strong>: The Safari version runs a small script at the start of each page (<code>document_start</code>) so it can read the audio data of the video from the beginning (see <a href="#safari">&ldquo;Safari&rdquo;</a> above). You choose which websites VJam FX can access in Settings › Apps › Safari › Extensions › VJam FX.</li>
+<li>The VJam FX app itself only shows how to turn on and use the extension. It collects nothing.</li>
+</ul>
 
 <h2>Data Storage</h2>
-<p>VJam FX stores your effect settings and scene configurations (selected presets, blend mode, filter choices, saved scenes) locally in your browser's extension storage. This data never leaves your device.</p>
+<p>VJam FX stores your effect settings and scene configurations (selected presets, blend mode, filter choices, saved scenes) and a list of effects that are too heavy for your device only in the extension's local storage on your device (<code>storage.local</code>). Which effects are on in each tab is kept in session storage and cleared when the browser closes. This data never leaves your device.</p>
 
 <h2>Changes</h2>
 <p>If this policy changes, the updated version will be included with the extension update.</p>

@@ -1,15 +1,90 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
 
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 
+    <title>VJam FX</title>
     <link rel="stylesheet" href="../Style.css">
+    <!-- 端末の言語で html の lang を決める(CSP でインラインは動かないのでファイルで読む) -->
+    <script src="../Script.js"></script>
 </head>
 <body>
-    <img src="../Icon.png" width="128" height="128" alt="VJam FX Icon">
-    <p>You can turn on VJam FX’s Safari extension in Settings.</p>
+<main class="page">
+<div class="wrap">
+
+    <header class="hero">
+        <img class="logo" src="../Lockup.png" alt="VJam FX">
+        <div class="meter"></div>
+    </header>
+
+    <!-- English -->
+    <div data-lang="en">
+        <p class="lead"><span>Music-reactive VJ visuals on top of any web page in Safari.</span> <span>Play a video with sound, and the effects move with the beat.</span></p>
+
+        <div class="cards">
+            <section class="card">
+                <h2><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Turn on the extension</h2>
+                <ol class="steps">
+                    <li>Open the <b>Settings</b> app</li>
+                    <li><span class="path"><b>Apps</b><i></i><b>Safari</b><i></i><b>Extensions</b></span></li>
+                    <li>Tap <b>VJam FX</b> and turn it on <span class="sw"></span></li>
+                    <li>Set <b>All Websites</b> to <b>Allow</b></li>
+                </ol>
+                <p class="note">iOS / iPadOS 17: <span class="path"><b>Settings</b><i></i><b>Safari</b><i></i><b>Extensions</b></span></p>
+                <p class="note">VJam FX needs every website so it can read the sound of the video on the page and follow the beat.</p>
+            </section>
+
+            <section class="card">
+                <h2><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l12 8-12 8z"/></svg>Use it</h2>
+                <ol class="steps">
+                    <li>Open a page with a video in <b>Safari</b></li>
+                    <li>Tap <span class="key">AA</span> in the address bar</li>
+                    <li>Tap <b>VJam FX</b></li>
+                    <li>Turn the switch on <span class="sw"></span> and play the video</li>
+                </ol>
+                <p class="note">Effects start in Auto and change with the music. Tap Next for a new look.</p>
+            </section>
+        </div>
+
+        <p class="foot">The sound is analyzed only on this device. Nothing is collected or sent.</p>
+    </div>
+
+    <!-- 日本語 -->
+    <div data-lang="ja">
+        <p class="lead"><span>Safari で開いた Web ページに、音に合わせて動く VJ エフェクトを重ねます。</span><span>音の出る動画を再生すると、ビートに合わせて動きます。</span></p>
+
+        <div class="cards">
+            <section class="card">
+                <h2><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>機能拡張をオンにする</h2>
+                <ol class="steps">
+                    <li><b>設定</b>アプリを開く</li>
+                    <li><span class="path"><b>アプリ</b><i></i><b>Safari</b><i></i><b>機能拡張</b></span></li>
+                    <li><b>VJam FX</b> をタップしてオン <span class="sw"></span></li>
+                    <li><b>すべてのWebサイト</b>を<b>許可</b>にする</li>
+                </ol>
+                <p class="note">iOS / iPadOS 17 は <span class="path"><b>設定</b><i></i><b>Safari</b><i></i><b>機能拡張</b></span></p>
+                <p class="note">動画の音を読んでビートに合わせるため、すべてのサイトの許可が要ります。</p>
+            </section>
+
+            <section class="card">
+                <h2><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l12 8-12 8z"/></svg>使い方</h2>
+                <ol class="steps">
+                    <li>Safari で動画のページを開く</li>
+                    <li>アドレスバーの <span class="key">ぁあ</span> をタップ</li>
+                    <li><b>VJam FX</b> をタップ</li>
+                    <li>スイッチをオン <span class="sw"></span> にして、動画を再生</li>
+                </ol>
+                <p class="note">Auto で始まり、音楽に合わせて切り替わります。Next で別の見た目に。</p>
+            </section>
+        </div>
+
+        <p class="foot">音の解析はこの端末の中だけ。データの収集・送信はしません。</p>
+    </div>
+
+</div>
+</main>
 </body>
 </html>

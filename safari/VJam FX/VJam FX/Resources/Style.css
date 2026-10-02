@@ -1,29 +1,255 @@
+/* 色は popup と同じ(tools/design/mockup/index.html の :root)。緑は ON のスイッチだけ、グラデーションはメーターだけ */
+:root {
+    color-scheme: dark;
+
+    --bg: #030303;
+    --surface: #0d0d0d;
+    --surface2: #151515;
+    --line: #232323;
+    --line2: #2e2e2e;
+    --text: #f0f0f0;
+    --dim: #8a8a8a;
+    --faint: #5a5a5a;
+    --accent: #00cc66;
+    --g1: #FF1493;
+    --g2: #8B5CF6;
+}
+
 * {
+    box-sizing: border-box;
     -webkit-user-select: none;
     -webkit-user-drag: none;
+    -webkit-touch-callout: none;
     cursor: default;
 }
 
-:root {
-    color-scheme: light dark;
-
-    --spacing: 20px;
+/* 言語:Script.js が html の lang を ja にしたら日本語、それ以外は英語 */
+html:not([lang="ja"]) [data-lang="ja"],
+html[lang="ja"] [data-lang="en"] {
+    display: none;
 }
 
-html {
+html, body {
     height: 100%;
+    margin: 0;
+    background: var(--bg);
 }
 
 body {
+    color: var(--text);
+    font: 16px/1.55 -apple-system, "Hiragino Sans", sans-serif;
+    -webkit-text-size-adjust: 100%;
+}
+
+/* アプリ側で WKWebView のスクロールを切っているので、はみ出すときはこの中でスクロールする */
+.page {
+    position: fixed;
+    inset: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    padding:
+        max(32px, env(safe-area-inset-top))
+        max(20px, env(safe-area-inset-right))
+        max(32px, env(safe-area-inset-bottom))
+        max(20px, env(safe-area-inset-left));
+}
+
+.wrap {
+    width: 100%;
+    max-width: 880px;
+    margin: auto;
+}
+
+/* ロゴ + 拍で脈打つメーター(120 BPM) */
+.hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.logo {
+    display: block;
+    height: clamp(64px, 11vw, 104px);
+}
+
+.meter {
+    width: clamp(160px, 30vw, 280px);
+    height: 3px;
+    margin-top: 16px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--g1), var(--g2));
+    animation: meter 0.5s infinite;
+}
+
+@keyframes meter {
+    0% { transform: scaleX(1); }
+    60%, 100% { transform: scaleX(0.3); }
+}
+
+/* 文の途中で折り返さない(文と文のあいだで折り返す) */
+.lead span {
+    display: inline-block;
+}
+
+.lead {
+    max-width: 34em;
+    margin: 24px auto 28px;
+    color: #d6d6d6;
+    font-size: 18px;
+    text-align: center;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px 20px 18px;
+}
+
+.card h2 {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 10px;
+    margin: 0 0 14px;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* 細い線のアイコン(HTML の中の SVG) */
+.ic {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    color: var(--dim);
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.steps {
+    list-style: none;
+    counter-reset: step;
+    margin: 0;
+    padding: 0;
+    display: flex;
     flex-direction: column;
+    gap: 12px;
+}
 
-    gap: var(--spacing);
-    margin: 0 calc(var(--spacing) * 2);
-    height: 100%;
+.steps li {
+    counter-increment: step;
+    min-height: 26px;
+    padding-left: 38px;
+    position: relative;
+}
 
-    font: -apple-system-short-body;
+.steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--line2);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: var(--dim);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+b {
+    font-weight: 600;
+}
+
+/* 設定の道順:項目のあいだに細い線の「>」 */
+.path {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    vertical-align: top;
+}
+
+.path i {
+    width: 7px;
+    height: 7px;
+    border-top: 1.5px solid var(--faint);
+    border-right: 1.5px solid var(--faint);
+    transform: rotate(45deg);
+    margin-right: 3px;
+}
+
+/* アドレスバーのボタン */
+.key {
+    display: inline-block;
+    padding: 0 7px;
+    border: 1px solid var(--line2);
+    border-radius: 6px;
+    background: var(--surface2);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 22px;
+    vertical-align: 1px;
+}
+
+/* ON のスイッチ(popup のヘッダーと同じ形) */
+.sw {
+    display: inline-block;
+    position: relative;
+    width: 34px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--accent);
+    vertical-align: -4px;
+}
+
+.sw::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 17px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #03140b;
+}
+
+.note {
+    margin: 14px 0 0;
+    color: var(--dim);
+    font-size: 14px;
+}
+
+.note + .note {
+    margin-top: 6px;
+}
+
+.note .path {
+    gap: 2px 5px;
+}
+
+.foot {
+    margin: 24px 0 0;
+    color: var(--faint);
+    font-size: 14px;
     text-align: center;
+}
+
+/* iPad の縦など、広くて高い画面では全体を大きく */
+@media (min-width: 740px) and (min-height: 1000px) {
+    .wrap {
+        zoom: 1.2;
+    }
 }
