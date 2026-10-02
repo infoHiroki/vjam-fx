@@ -909,4 +909,179 @@ describe('Service Worker', () => {
       expect((await savedState(1)).active).toBe(true);
     });
   });
+
+  // 重いプリセット(#40): エンジン → bridge → SW が storage.local に覚える。遷移後の再注入・全タブで ON でも除く
+  describe('heavy presets (#40)', () => {
+    let localStore;
+
+    beforeEach(() => {
+      localStore = {};
+      chrome.storage.local.get = vi.fn((key) => Promise.resolve(
+        typeof key === 'string' && localStore[key] !== undefined ? { [key]: JSON.parse(JSON.stringify(localStore[key])) } : {}));
+      chrome.storage.local.set = vi.fn((obj) => {
+        Object.assign(localStore, JSON.parse(JSON.stringify(obj)));
+        return Promise.resolve();
+      });
+    });
+
+    const send = (msg, sender = { tab: { id: 1 } }) => {
+      const sendResponse = vi.fn();
+      const async = messageListeners[0](msg, sender, sendResponse);
+      return { async, sendResponse };
+    };
+    const getState = async (tabId) => {
+      const sendResponse = vi.fn();
+      messageListeners[0]({ type: 'getState', tabId }, {}, sendResponse);
+      await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+      return sendResponse.mock.calls[0][0].state;
+    };
+    const allTabsState = async () => (await chrome.storage.session.get('allTabsState')).allTabsState;
+
+    describe('remembering', () => {
+      it('saves the preset with the measured fps and the time', async () => {
+        const { sendResponse } = send({ type: 'heavyPreset', name: 'film-grain', fps: 5.6, replacement: 'aurora' });
+        expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+        await vi.waitFor(() => expect(localStore.heavyPresets).toBeDefined());
+        expect(localStore.heavyPresets['film-grain'].fps).toBe(5.6);
+        expect(new Date(localStore.heavyPresets['film-grain'].at).toISOString()).toBe(localStore.heavyPresets['film-grain'].at);
+      });
+
+      it('keeps every one when several come at once', async () => {
+        send({ type: 'heavyPreset', name: 'film-grain', fps: 5.6 });
+        send({ type: 'heavyPreset', name: 'ascii-art', fps: 7.1 });
+        send({ type: 'heavyPreset', name: 'liquid', fps: 10.2 });
+        await vi.waitFor(() => expect(Object.keys(localStore.heavyPresets || {}).sort()).toEqual(['ascii-art', 'film-grain', 'liquid']));
+      });
+
+      it('keeps what was saved before', async () => {
+        localStore.heavyPresets = { voronoi: { fps: 21.9, at: '2026-10-01T00:00:00.000Z' } };
+        send({ type: 'heavyPreset', name: 'film-grain', fps: 5.6 });
+        await vi.waitFor(() => expect(localStore.heavyPresets['film-grain']).toBeDefined());
+        expect(localStore.heavyPresets.voronoi).toEqual({ fps: 21.9, at: '2026-10-01T00:00:00.000Z' });
+      });
+
+      it('ignores names that are not preset names', async () => {
+        send({ type: 'heavyPreset', name: '../manifest', fps: 1 });
+        send({ type: 'heavyPreset', name: 'Film Grain', fps: 1 });
+        send({ type: 'heavyPreset', fps: 1 });
+        await new Promise(r => setTimeout(r, 20));
+        expect(chrome.storage.local.set).not.toHaveBeenCalled();
+      });
+
+      it('swaps the layer in the tab state and the all-tabs state (no heavy layer after navigation)', async () => {
+        send({ type: 'setState', tabId: 1, state: { active: true, layers: ['film-grain', 'rain'], blendMode: 'screen' } });
+        send({ type: 'heavyPreset', name: 'film-grain', fps: 5.6, replacement: 'aurora' });
+        await vi.waitFor(async () => expect((await getState(1)).layers).toEqual(['aurora', 'rain']));
+        expect((await allTabsState()).layers).toEqual(['aurora', 'rain']);
+      });
+
+      it('drops the layer when there was no replacement, but never leaves no layer', async () => {
+        send({ type: 'setState', tabId: 1, state: { active: true, layers: ['film-grain', 'rain'] } });
+        send({ type: 'heavyPreset', name: 'film-grain', fps: 5.6, replacement: null });
+        await vi.waitFor(async () => expect((await getState(1)).layers).toEqual(['rain']));
+
+        send({ type: 'setState', tabId: 2, state: { active: true, layers: ['liquid'] } });
+        send({ type: 'heavyPreset', name: 'liquid', fps: 10.2, replacement: null }, { tab: { id: 2 } });
+        await vi.waitFor(() => expect(localStore.heavyPresets && localStore.heavyPresets.liquid).toBeDefined());
+        expect((await getState(2)).layers).toEqual(['liquid']);
+      });
+    });
+
+    describe('loading a replacement', () => {
+      it('injects the preset file into the tab that asked and answers ok', async () => {
+        const { async, sendResponse } = send({ type: 'injectPreset', name: 'aurora' }, { tab: { id: 7 } });
+        expect(async).toBe(true);
+        await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith({ ok: true }));
+        expect(chrome.scripting.executeScript).toHaveBeenCalledWith({ target: { tabId: 7 }, world: 'MAIN', files: ['content/presets/aurora.js'] });
+      });
+
+      it('answers not ok when the injection fails', async () => {
+        chrome.scripting.executeScript.mockRejectedValueOnce(new Error('Cannot access contents of the page'));
+        const { sendResponse } = send({ type: 'injectPreset', name: 'aurora' });
+        await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith({ ok: false }));
+      });
+
+      it('does not inject anything but a preset file, and only into the tab that asked', () => {
+        for (const [name, sender] of [['../background/service-worker', { tab: { id: 1 } }], ['aurora', {}], [undefined, { tab: { id: 1 } }]]) {
+          const { sendResponse } = send({ type: 'injectPreset', name }, sender);
+          expect(sendResponse).toHaveBeenCalledWith({ ok: false });
+        }
+        expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('re-inject after navigation', () => {
+      // 遷移後に最後に送る起動 func をフェイクのエンジンで実行し、エンジンに届いたメッセージを返す
+      async function afterNavigation(state) {
+        send({ type: 'setState', tabId: 1, state });
+        await navigationListeners[0]({ tabId: 1, frameId: 0 });
+        await new Promise(r => setTimeout(r, 400));
+        const startCall = chrome.scripting.executeScript.mock.calls.map(c => c[0]).find(c => c.func && c.args && c.args.length > 0);
+        const messages = [];
+        window._vjamFxEngine = { handleMessage: (msg) => messages.push(msg) };
+        try {
+          startCall.func(...startCall.args);
+        } finally {
+          delete window._vjamFxEngine;
+        }
+        return messages;
+      }
+      const injectedPresets = () => chrome.scripting.executeScript.mock.calls
+        .flatMap(c => c[0].files || []).filter(f => f.startsWith('content/presets/')).sort();
+
+      it('leaves heavy presets out of the Auto pool and the layers (Auto replaces them anyway)', async () => {
+        localStore.heavyPresets = { 'film-grain': { fps: 5.6, at: '2026-10-02T00:00:00.000Z' } };
+        const messages = await afterNavigation({
+          active: true, layers: ['film-grain', 'rain'], blendMode: 'screen',
+          autoCyclePresets: ['film-grain', 'rain', 'radar'], autoBlend: true, autoFilters: true,
+        });
+        expect(messages.find(m => m.action === 'startAutoCycle').presets).toEqual(['rain', 'radar']);
+        expect(messages.find(m => m.action === 'start').preset).toBe('rain');
+        expect(messages.some(m => m.preset === 'film-grain')).toBe(false);
+        expect(injectedPresets()).toEqual(['content/presets/radar.js', 'content/presets/rain.js']);
+      });
+
+      it('starts from the pool when every layer was heavy', async () => {
+        localStore.heavyPresets = { 'film-grain': { fps: 5.6, at: '' } };
+        const messages = await afterNavigation({
+          active: true, layers: ['film-grain'], blendMode: 'screen', autoCyclePresets: ['film-grain', 'rain'],
+        });
+        expect(messages.find(m => m.action === 'start').preset).toBe('rain');
+        expect(injectedPresets()).toEqual(['content/presets/rain.js']);
+      });
+
+      it('keeps the pool when all of it is heavy', async () => {
+        localStore.heavyPresets = { 'film-grain': { fps: 5.6, at: '' }, rain: { fps: 20, at: '' } };
+        const messages = await afterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen', autoCyclePresets: ['film-grain', 'rain'],
+        });
+        expect(messages.find(m => m.action === 'startAutoCycle').presets).toEqual(['film-grain', 'rain']);
+      });
+
+      it('keeps the layers as they were when Auto is off (chosen by hand)', async () => {
+        localStore.heavyPresets = { 'film-grain': { fps: 5.6, at: '' } };
+        const messages = await afterNavigation({ active: true, layers: ['film-grain'], blendMode: 'screen', autoCyclePresets: null });
+        expect(messages.find(m => m.action === 'start').preset).toBe('film-grain');
+      });
+
+      it('all tabs: the tab switched to also gets no heavy preset', async () => {
+        chrome.storage.local.get = vi.fn((key) => Promise.resolve(key === 'vjamfx_settings'
+          ? { vjamfx_settings: { allTabs: true } }
+          : { heavyPresets: { 'film-grain': { fps: 5.6, at: '' } } }));
+        chrome.tabs.get = vi.fn((id) => Promise.resolve({ id, windowId: 1, active: true, status: 'complete', url: `https://example.com/${id}` }));
+        chrome.tabs.query = vi.fn().mockResolvedValue([]);
+        send({ type: 'setState', tabId: 1, state: {
+          active: true, layers: ['film-grain'], blendMode: 'screen', autoCyclePresets: ['film-grain', 'rain'], autoBlend: true, autoFilters: true,
+        } });
+        await activatedListeners[0]({ tabId: 2, windowId: 1 });
+        const calls = chrome.scripting.executeScript.mock.calls.map(c => c[0]).filter(c => c.target.tabId === 2);
+        const files = calls.flatMap(c => c.files || []);
+        expect(files).toContain('content/content.js');
+        expect(files).not.toContain('content/presets/film-grain.js');
+        const startCall = calls.find(c => c.func && c.args && c.args.length > 0);
+        expect(startCall.args[0]).toEqual(['rain']);
+        expect(startCall.args[3]).toEqual(['rain']);
+      });
+    });
+  });
 });

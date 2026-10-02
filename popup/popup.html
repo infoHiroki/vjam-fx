@@ -59,6 +59,12 @@
           <option value="hi">Hi</option>
         </select>
       </div>
+      <!-- この端末で重いので外したもの(Next / Auto が選ばない)。Restore で全部戻す -->
+      <div class="setting-row" title="Presets too heavy for this device. Next / Auto skip them">
+        <label>Too heavy</label>
+        <span style="margin-left:auto;margin-right:8px;font-size:11px;color:#aaa"><span id="heavy-count">0</span> skipped</span>
+        <button id="btn-heavy-reset" class="audio-btn" style="padding:2px 8px;font-size:11px" disabled>Restore</button>
+      </div>
     </div>
 
     <div class="action-hero">

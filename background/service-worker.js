@@ -85,6 +85,53 @@ function setAllTabsState(state) {
   }
 }
 
+// --- 重いプリセット(#40) ---
+// エンジンがこの端末で重いと判断したもの。storage.local の heavyPresets = { プリセット名: { fps, at } }。
+// popup は Next / Auto のプールから除く。SW もページ遷移の復帰・全タブで ON で除く
+const HEAVY_KEY = 'heavyPresets';
+const PRESET_NAME = /^[a-z0-9-]+$/;
+
+async function getHeavyPresets() {
+  try {
+    const result = await chrome.storage.local.get(HEAVY_KEY);
+    return result[HEAVY_KEY] || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+// 知らせが重なっても 1 つずつ書く(読んで足して書くので)
+let heavyWrite = Promise.resolve();
+
+function saveHeavyPreset(name, fps) {
+  heavyWrite = heavyWrite.then(async () => {
+    const heavy = await getHeavyPresets();
+    heavy[name] = { fps: typeof fps === 'number' ? fps : null, at: new Date().toISOString() };
+    await chrome.storage.local.set({ [HEAVY_KEY]: heavy });
+  }).catch(() => {});
+  return heavyWrite;
+}
+
+// プールから重いものを除く(全部重いならそのまま)
+function withoutHeavy(ids, heavy) {
+  const light = ids.filter(id => !heavy[id]);
+  return light.length ? light : ids;
+}
+
+// エンジンが重いレイヤーを入れ替えた: 覚えて、タブの状態・全タブで ON の状態のレイヤーも入れ替える(遷移後に重いものを戻さない)
+async function onHeavyPreset(tabId, { name, fps, replacement }) {
+  saveHeavyPreset(name, fps);
+  const swap = (state) => {
+    if (!state || !Array.isArray(state.layers) || !state.layers.includes(name)) return null;
+    const layers = [...new Set(state.layers.map(id => id === name ? replacement : id).filter(id => PRESET_NAME.test(id || '')))];
+    return layers.length ? { ...state, layers } : null;
+  };
+  const tabNext = tabId ? swap(await getState(tabId)) : null;
+  if (tabNext) setState(tabId, tabNext);
+  const allNext = swap(await getAllTabsState());
+  if (allNext) setAllTabsState(allNext);
+}
+
 /**
  * Inject all scripts and start all layers on a tab
  */
@@ -95,7 +142,15 @@ async function injectAndStart(tabId, state) {
     const tab = await chrome.tabs.get(tabId);
     if (!isInjectableUrl(tab.url)) return false;
 
-    const layers = state.layers || (state.preset ? [state.preset] : []);
+    let layers = state.layers || (state.preset ? [state.preset] : []);
+    // Auto のプールから重いものを除く。Auto が回るならレイヤーからも(最初の切り替えで入れ替わる。全部重ければプールの 1 本目)
+    const heavy = await getHeavyPresets();
+    const autoCyclePresets = state.autoCyclePresets && state.autoCyclePresets.length > 0
+      ? withoutHeavy(state.autoCyclePresets, heavy) : null;
+    if (autoCyclePresets) {
+      const light = layers.filter(id => !heavy[id]);
+      layers = light.length ? light : autoCyclePresets.slice(0, 1);
+    }
     if (layers.length === 0) return false;
 
     // Core scripts
@@ -106,8 +161,8 @@ async function injectAndStart(tabId, state) {
 
     // Preset files for all layers + auto-cycle presets
     const presetSet = new Set(layers);
-    if (state.autoCyclePresets) {
-      for (const id of state.autoCyclePresets) presetSet.add(id);
+    if (autoCyclePresets) {
+      for (const id of autoCyclePresets) presetSet.add(id);
     }
     const presetFiles = [...presetSet].map(id => `content/presets/${id}.js`);
 
@@ -226,7 +281,7 @@ async function injectAndStart(tabId, state) {
           }
         }
       },
-      args: [layers, state.blendMode || 'screen', state.filters || [], state.autoCyclePresets || null, state.opacity, !!state.autoBlend, !!state.autoFilters, state.locks || {}, state.textState || null, state.pool || null, state.barsPerCycle || null, state.fadeDuration ?? null, state.audioSensitivity ?? null],
+      args: [layers, state.blendMode || 'screen', state.filters || [], autoCyclePresets, state.opacity, !!state.autoBlend, !!state.autoFilters, state.locks || {}, state.textState || null, state.pool || null, state.barsPerCycle || null, state.fadeDuration ?? null, state.audioSensitivity ?? null],
     });
 
     return true;
@@ -356,6 +411,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const tabId = pausedTabAudioTabId;
       pausedTabAudioTabId = null;
       startTabAudio(tabId).then(ok => sendResponse({ ok }));
+      return true;
+    }
+    sendResponse({ ok: false });
+  } else if (msg.type === 'heavyPreset') {
+    // エンジン → bridge から: このタブで重いと分かったプリセット(#40)
+    if (PRESET_NAME.test(msg.name || '')) onHeavyPreset(sender && sender.tab && sender.tab.id, msg).catch(() => {});
+    sendResponse({ ok: true });
+  } else if (msg.type === 'injectPreset') {
+    // エンジン → bridge から: 入れ替え先のプリセットがまだ読み込まれていない(Next で選んだものしか入れていないとき)
+    const injectTabId = sender && sender.tab && sender.tab.id;
+    if (injectTabId && PRESET_NAME.test(msg.name || '')) {
+      chrome.scripting.executeScript({
+        target: { tabId: injectTabId },
+        world: 'MAIN',
+        files: [`content/presets/${msg.name}.js`],
+      }).then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
       return true;
     }
     sendResponse({ ok: false });
