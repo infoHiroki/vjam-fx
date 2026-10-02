@@ -33,7 +33,7 @@ VJam FX uses two methods to capture audio for beat detection — **no microphone
 
 Safari does not let extensions capture a tab's audio, so the Safari version reads the audio data that the page itself plays — **no microphone is required**:
 
-1. **Streaming video (MediaSource)**: When a page plays a video through Media Source Extensions, VJam FX reads a copy of the audio data that the page passes to Safari. The original data is passed on unchanged. So that the beat is ready when you turn the effects on, this starts when the page loads, on the websites you have allowed VJam FX to access.
+1. **Streaming video (MediaSource)**: When a page plays a video through Media Source Extensions, VJam FX reads a copy of the audio data that the page passes to Safari. The original data is passed on unchanged. So that the beat is ready when you turn the effects on, VJam FX keeps a copy of the most recent audio data (up to 8 MB) in the page's memory from when the page loads, on the websites you have allowed VJam FX to access. It is decoded and analyzed only while the effects are on, and it is discarded when you leave the page.
 
 2. **Standard HLS video**: When a page plays a standard HLS stream (`.m3u8`) directly in the video element, VJam FX downloads the stream's audio segments again from the same address the video is played from, and reads them. It does this only while the effects are on and the video is playing. Live and encrypted streams are skipped.
 
