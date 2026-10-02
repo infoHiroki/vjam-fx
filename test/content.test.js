@@ -2353,6 +2353,7 @@ describe('VJamFXEngine', () => {
     let clock; // performance.now
     let t; // rAF の時刻
     let posted;
+    let skips; // 外したもの(_skipHeavy が入れ替えたときの { name, fps, replacement })
 
     beforeAll(() => {
       for (const name of NAMES) {
@@ -2380,6 +2381,13 @@ describe('VJamFXEngine', () => {
       engine._fadeDuration = 0; // 足してから 2 秒で数え始める
       engine.createOverlay();
       engine.active = true;
+      skips = [];
+      const skip = engine._skipHeavy.bind(engine);
+      engine._skipHeavy = (fps) => {
+        const before = engine._heavyPending;
+        skip(fps);
+        if (engine._heavyPending && engine._heavyPending !== before) skips.push({ ...engine._heavyPending });
+      };
     });
 
     afterEach(() => {
@@ -2399,6 +2407,7 @@ describe('VJamFXEngine', () => {
       }
     }
 
+    // SW に知らせた(端末に覚える)もの
     const heavyPosts = () => posted.filter(m => m.source === 'vjam-fx-engine' && m.type === 'heavyPreset');
     const injectPosts = () => posted.filter(m => m.source === 'vjam-fx-engine' && m.type === 'injectPreset');
 
@@ -2407,27 +2416,27 @@ describe('VJamFXEngine', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
         run(20, 4.9); // 2 秒待って、割り続けて 2.9 秒
         expect(engine.getActiveLayerNames()).toEqual([NAMES[0]]);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         run(20, 0.2);
         expect(engine.activeLayers.has(NAMES[0])).toBe(false);
-        expect(heavyPosts()).toHaveLength(1);
-        expect(heavyPosts()[0]).toMatchObject({ name: NAMES[0], fps: 20 });
+        expect(skips).toHaveLength(1);
+        expect(skips[0]).toMatchObject({ name: NAMES[0], fps: 20 });
       });
 
       it('waits for the fade-in to finish (+ 2 s) before counting', () => {
         engine._fadeDuration = 1.5;
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
         run(20, 6.4); // 1.5 + 2 + 2.9 秒
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         run(20, 0.2);
-        expect(heavyPosts()).toHaveLength(1);
+        expect(skips).toHaveLength(1);
       });
 
       it('does not skip at 25fps (threshold is 24fps)', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
         run(25, 20);
         expect(engine.getActiveLayerNames()).toEqual([NAMES[0]]);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
       });
 
       it('needs 3 seconds in a row', () => {
@@ -2437,9 +2446,9 @@ describe('VJamFXEngine', () => {
           run(20, 2);
           run(50, 1);
         }
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         run(20, 3.1);
-        expect(heavyPosts()).toHaveLength(1);
+        expect(skips).toHaveLength(1);
       });
 
       it('starts over when a layer is added or removed (fade)', () => {
@@ -2447,24 +2456,24 @@ describe('VJamFXEngine', () => {
         run(20, 4);
         engine._addLayer(NAMES[1], true);
         run(20, 4.9); // 足したので 2 秒待ってから 2.9 秒
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         engine._removeLayer(NAMES[1]);
         run(20, 4.9);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         run(20, 0.2);
-        expect(heavyPosts()).toHaveLength(1);
+        expect(skips).toHaveLength(1);
       });
 
       it('does not count while the tab is hidden', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
         Object.defineProperty(document, 'hidden', { value: true, configurable: true });
         run(20, 10);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         delete document.hidden;
         run(20, 2.9);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         run(20, 0.2);
-        expect(heavyPosts()).toHaveLength(1);
+        expect(skips).toHaveLength(1);
       });
 
       it('starts over after rAF stopped (the tab was in the background)', () => {
@@ -2474,7 +2483,7 @@ describe('VJamFXEngine', () => {
           run(20, 2);
           t += 3000; // rAF が止まっていた
         }
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
       });
 
       it('does not count during a dip (Rnd blend / filter)', () => {
@@ -2483,10 +2492,10 @@ describe('VJamFXEngine', () => {
         run(20, 2);
         engine._dip();
         run(20, 10);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         engine._cancelDip();
         run(20, 3.1);
-        expect(heavyPosts()).toHaveLength(1);
+        expect(skips).toHaveLength(1);
       });
 
       it('does not count during the Auto rest', () => {
@@ -2494,10 +2503,10 @@ describe('VJamFXEngine', () => {
         run(20, 2);
         engine._autoResting = true;
         run(20, 10);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         engine._autoResting = false;
         run(20, 3.1);
-        expect(heavyPosts()).toHaveLength(1);
+        expect(skips).toHaveLength(1);
       });
 
       it('marks the Auto rest from the fade-out until the next set', () => {
@@ -2522,9 +2531,9 @@ describe('VJamFXEngine', () => {
         expect(engine._fpsThrottled).toBe(true);
         expect(engine.activeLayers.get(NAMES[0]).preset.p5.frameRate).toHaveBeenCalledWith(30);
         run(25, 20);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         run(20, 3.1);
-        expect(heavyPosts()).toHaveLength(1);
+        expect(skips).toHaveLength(1);
       });
 
       it('reports the average fps of the 3 slow seconds (one decimal)', () => {
@@ -2533,18 +2542,95 @@ describe('VJamFXEngine', () => {
         run(20, 1);
         run(10, 1);
         run(20, 1.1);
-        expect(heavyPosts()[0].fps).toBe(16.7);
+        expect(skips[0].fps).toBe(16.7);
       });
 
       it('OFF (stop) resets the measuring but keeps what it learned', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
         run(20, 5.1);
+        run(50, 5.1); // 軽くなったので覚える
+        expect(heavyPosts()).toHaveLength(1);
         expect(engine._heavyPresets.has(NAMES[0])).toBe(true);
         run(20, 3);
         engine.stop();
         expect(engine._heavyMeter).toBeNull();
         expect(engine._heavyHoldUntil).toBe(0);
         expect(engine._heavyPresets.has(NAMES[0])).toBe(true);
+      });
+    });
+
+    // 誤判定対策: 外したあと 3 秒の fps がしきい値以上に戻ったとき(本当に軽くなったとき)だけ覚える
+    describe('saving (only when it really got lighter)', () => {
+      it('saves after the 3 s after the layer is gone are back at 24fps or more', () => {
+        engine.crossfade([NAMES[0]], { poolPresets: NAMES });
+        run(20, 5.1);
+        expect(skips).toHaveLength(1);
+        expect(heavyPosts()).toEqual([]); // 外しただけではまだ覚えない
+        run(50, 4.9); // 外したので 2 秒待って、2.9 秒
+        expect(heavyPosts()).toEqual([]);
+        run(50, 0.2);
+        expect(heavyPosts()).toEqual([{ source: 'vjam-fx-engine', type: 'heavyPreset', name: NAMES[0], fps: 20, replacement: skips[0].replacement }]);
+        expect(engine._heavyPresets.has(NAMES[0])).toBe(true);
+        expect(engine._heavyPending).toBeNull();
+      });
+
+      it('does not save when the page stays heavy after the layer is gone (the layer was innocent)', () => {
+        engine.crossfade([NAMES[0]], { poolPresets: [NAMES[0], NAMES[1]] });
+        run(20, 5.1);
+        expect(skips.map(m => m.name)).toEqual([NAMES[0]]);
+        expect(engine.getActiveLayerNames()).toEqual([NAMES[1]]);
+        run(20, 5.1); // 外しても重いまま
+        expect(heavyPosts()).toEqual([]);
+        // このページでも重い扱いにしない(入れ替えだけで終わり。また選んでよい)
+        expect(engine._heavyPresets.has(NAMES[0])).toBe(false);
+        run(20, 30);
+        expect(heavyPosts()).toEqual([]);
+        expect(engine._heavyPresets.size).toBeLessThanOrEqual(1); // 確かめている途中の 1 本だけ
+      });
+
+      it('decides on the average of the 3 s (one slow second is fine, two are not)', () => {
+        engine.crossfade([NAMES[0]], { poolPresets: NAMES });
+        run(20, 5.1); // 5050ms で外す
+        run(50, 2); // 外したので 2 秒待つ(7100ms まで)
+        run(40, 1);
+        run(20, 1);
+        run(25, 1); // (40 + 20 + 25) / 3 = 28.3
+        expect(heavyPosts().map(m => m.name)).toEqual([NAMES[0]]);
+
+        engine._heavyPresets.clear();
+        engine.crossfade([NAMES[1]], { poolPresets: NAMES });
+        run(20, 5.1);
+        expect(skips.map(m => m.name)).toEqual([NAMES[0], NAMES[1]]);
+        run(50, 2);
+        run(25, 1);
+        run(20, 2); // (25 + 20 + 20) / 3 = 21.7
+        expect(engine._heavyPending).toBeNull();
+        expect(heavyPosts().map(m => m.name)).toEqual([NAMES[0]]);
+        expect(engine._heavyPresets.has(NAMES[1])).toBe(false);
+      });
+
+      it('measures 3 s in a row: starts over when layers change in between (Auto switch)', () => {
+        engine.crossfade([NAMES[0]], { poolPresets: NAMES });
+        run(20, 5.1);
+        run(50, 4);
+        engine._addLayer(NAMES[2], true);
+        run(50, 4.9);
+        expect(heavyPosts()).toEqual([]);
+        run(50, 0.2);
+        expect(heavyPosts()).toHaveLength(1);
+      });
+
+      it('does not save what was not confirmed before OFF', () => {
+        engine.crossfade([NAMES[0]], { poolPresets: NAMES });
+        run(20, 5.1);
+        expect(engine._heavyPresets.has(NAMES[0])).toBe(true);
+        engine.stop();
+        expect(engine._heavyPending).toBeNull();
+        expect(engine._heavyPresets.has(NAMES[0])).toBe(false);
+        engine.active = true;
+        engine.crossfade([NAMES[1]], { poolPresets: NAMES });
+        run(50, 10);
+        expect(heavyPosts()).toEqual([]);
       });
     });
 
@@ -2555,7 +2641,7 @@ describe('VJamFXEngine', () => {
         costs[NAMES[2]] = 10;
         engine.crossfade(NAMES.slice(0, 3), { poolPresets: NAMES });
         run(20, 5.1);
-        expect(heavyPosts().map(m => m.name)).toEqual([NAMES[1]]);
+        expect(skips.map(m => m.name)).toEqual([NAMES[1]]);
         expect(engine.activeLayers.has(NAMES[1])).toBe(false);
         expect(engine.activeLayers.has(NAMES[0])).toBe(true);
         expect(engine.activeLayers.has(NAMES[2])).toBe(true);
@@ -2568,7 +2654,7 @@ describe('VJamFXEngine', () => {
         costs[NAMES[0]] = 1;
         costs[NAMES[1]] = 20; // 遅くなってからは NAMES[1]
         run(20, 3.1);
-        expect(heavyPosts().map(m => m.name)).toEqual([NAMES[1]]);
+        expect(skips.map(m => m.name)).toEqual([NAMES[1]]);
       });
 
       it('wraps p5.redraw without changing what it does', () => {
@@ -2585,7 +2671,7 @@ describe('VJamFXEngine', () => {
         try {
           engine.crossfade(['no-p5'], { poolPresets: NAMES });
           run(20, 5.1);
-          expect(heavyPosts().map(m => m.name)).toEqual(['no-p5']);
+          expect(skips.map(m => m.name)).toEqual(['no-p5']);
         } finally {
           delete window.VJamFX.presets['no-p5'];
         }
@@ -2598,7 +2684,7 @@ describe('VJamFXEngine', () => {
         engine.handleMessage({ action: 'addLayer', preset: NAMES[1] });
         run(20, 20);
         expect(engine.getActiveLayerNames()).toEqual([NAMES[0], NAMES[1]]);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         expect(engine._heavyPresets.size).toBe(0);
       });
 
@@ -2608,7 +2694,7 @@ describe('VJamFXEngine', () => {
         engine.handleMessage({ action: 'addLayer', preset: NAMES[1] });
         run(20, 20);
         expect(engine.getActiveLayerNames()).toEqual([NAMES[0], NAMES[1]]);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
       });
 
       it('skips the Auto layer next to a lighter one chosen by hand', () => {
@@ -2618,7 +2704,7 @@ describe('VJamFXEngine', () => {
         // crossfade で手のレイヤーも外れるので、もう一度手で足す
         engine.handleMessage({ action: 'addLayer', preset: NAMES[1] });
         run(20, 5.1);
-        expect(heavyPosts().map(m => m.name)).toEqual([NAMES[0]]);
+        expect(skips.map(m => m.name)).toEqual([NAMES[0]]);
         expect(engine.getActiveLayerNames().sort()).toEqual([NAMES[1], NAMES[2]]);
       });
 
@@ -2645,17 +2731,17 @@ describe('VJamFXEngine', () => {
         engine.crossfade([], { locks: { effect: true } });
         run(20, 20);
         expect(engine.getActiveLayerNames()).toEqual([NAMES[0]]);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
       });
 
       it('takes the effect lock from Auto too', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
         engine.startAutoCycle(NAMES, 100000, { locks: { effect: true } });
         run(20, 20);
-        expect(heavyPosts()).toEqual([]);
+        expect(skips).toEqual([]);
         engine.updateAutoCycleOptions({ locks: { effect: false } });
         run(20, 3.1);
-        expect(heavyPosts()).toHaveLength(1);
+        expect(skips).toHaveLength(1);
         engine._stopAutoCycle();
       });
     });
@@ -2669,7 +2755,7 @@ describe('VJamFXEngine', () => {
         const heavyDiv = engine.activeLayers.get(heavy).container;
         run(20, 6.6);
 
-        const [post] = heavyPosts();
+        const [post] = skips;
         expect(post).toMatchObject({ name: heavy, fps: 20 });
         expect(NAMES).toContain(post.replacement);
         expect(post.replacement).not.toBe(heavy);
@@ -2694,7 +2780,7 @@ describe('VJamFXEngine', () => {
       it('Next: takes the replacement from the pool Next passed', () => {
         engine.crossfade([NAMES[0]], { poolPresets: [NAMES[0], NAMES[3]] });
         run(20, 5.1);
-        expect(heavyPosts()[0]).toMatchObject({ name: NAMES[0], replacement: NAMES[3] });
+        expect(skips[0]).toMatchObject({ name: NAMES[0], replacement: NAMES[3] });
         expect(engine.getActiveLayerNames()).toEqual([NAMES[3]]);
         expect(engine.currentPresetName).toBeNull();
       });
@@ -2704,7 +2790,7 @@ describe('VJamFXEngine', () => {
         engine.crossfade([NAMES[0], NAMES[1]], { poolPresets: NAMES });
         costs[NAMES[0]] = 30;
         run(20, 5.1);
-        expect(heavyPosts()[0]).toMatchObject({ name: NAMES[0], replacement: NAMES[3] });
+        expect(skips[0]).toMatchObject({ name: NAMES[0], replacement: NAMES[3] });
         expect(engine.getActiveLayerNames().sort()).toEqual([NAMES[1], NAMES[3]]);
       });
 
@@ -2712,21 +2798,21 @@ describe('VJamFXEngine', () => {
         engine.crossfade([NAMES[0], NAMES[1]], { poolPresets: [NAMES[0], NAMES[1]] });
         costs[NAMES[0]] = 30;
         run(20, 5.1);
-        expect(heavyPosts()[0]).toMatchObject({ name: NAMES[0], replacement: null });
+        expect(skips[0]).toMatchObject({ name: NAMES[0], replacement: null });
         expect(engine.getActiveLayerNames()).toEqual([NAMES[1]]);
       });
 
       it('prefers presets that are already loaded', () => {
         engine.crossfade([NAMES[0]], { poolPresets: [NAMES[0], 'not-loaded-1', NAMES[1], 'not-loaded-2'] });
         run(20, 5.1);
-        expect(heavyPosts()[0].replacement).toBe(NAMES[1]);
+        expect(skips[0].replacement).toBe(NAMES[1]);
         expect(injectPosts()).toEqual([]);
       });
 
       it('asks the SW (via the bridge) to load a replacement that is not loaded yet, and adds it when loaded', () => {
         engine.crossfade([NAMES[0]], { poolPresets: [NAMES[0], 'late-x'] });
         run(20, 5.1);
-        expect(heavyPosts()[0]).toMatchObject({ name: NAMES[0], replacement: 'late-x' });
+        expect(skips[0]).toMatchObject({ name: NAMES[0], replacement: 'late-x' });
         expect(injectPosts()).toEqual([{ source: 'vjam-fx-engine', type: 'injectPreset', name: 'late-x' }]);
         expect(engine.activeLayers.size).toBe(0);
 

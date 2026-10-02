@@ -51,7 +51,9 @@
   // 重いプリセットを飛ばす(#40): 全体の fps が HEAVY_FPS を HEAVY_SECONDS 秒続けて割ったら、一番重いレイヤーを入れ替える。
   // 全体の fps は描画ループ(_startLoop)の rAF で測る。30fps 落としは p5 の描画を間引くだけで rAF は画面の更新どおり回るので、
   // 落とし中でも描画が 30fps に収まっていれば下がらない。下がるのは描画 1 回が 1 フレームに収まらないときだけ(しきい値は 30 の 8 割)
-  // レイヤーを足した・外したら、フェードが終わって HEAVY_SETTLE_MS たつまで数えない
+  // レイヤーを足した・外したら、フェードが終わって HEAVY_SETTLE_MS たつまで数えない。
+  // 端末に覚えるのは、外したあとの HEAVY_SECONDS 秒が HEAVY_FPS 以上に戻ったとき(本当に軽くなったとき)だけ。
+  // 戻らなければページ自体が重い(外したレイヤーは無実)ので、入れ替えだけで終わる
   const HEAVY_FPS = 24;
   const HEAVY_SECONDS = 3;
   const HEAVY_SETTLE_MS = 2000;
@@ -135,6 +137,7 @@
       this._poolPresets = null; // 入れ替え先を選ぶプール(Auto / Next が渡す)
       this._effectLock = false; // エフェクトのロック(Auto / Next が渡す)。ロック中は入れ替えない
       this._pendingPreset = null; // SW に読み込みを頼んだ入れ替え先
+      this._heavyPending = null; // 外したあと、本当に軽くなったかを見ているもの { name, fps, replacement, samples }
       this._autoResting = false; // Auto の休み中
 
       // MSE タップの BPM(Auto / Rnd の間隔用。取れていなければ 0)
@@ -912,10 +915,11 @@
         return;
       }
       const m = this._heavyMeter;
-      // 初回・rAF が止まっていた(タブが裏にいた)ときは数え直す
+      // 初回・rAF が止まっていた(タブが裏にいた)ときは数え直す(外したあとの確かめも続けた 3 秒で見直す)
       if (!m || now - m.last > 1000) {
         this._heavyMeter = { start: now, last: now, frames: 0, low: 0, lowFps: 0 };
         this._resetDrawTimes();
+        if (this._heavyPending) this._heavyPending.samples = [];
         return;
       }
       m.last = now;
@@ -924,6 +928,7 @@
       const fps = m.frames * 1000 / (now - m.start);
       m.start = now;
       m.frames = 0;
+      if (this._heavyPending) this._confirmHeavy(fps);
       if (fps >= HEAVY_FPS) {
         // 描く時間は、割り続けている間の分だけで比べる
         m.low = 0;
@@ -953,7 +958,7 @@
       return heaviest;
     }
 
-    // 一番重いレイヤーをフェードで外して、プールの別のものに入れ替える。SW に知らせて端末に覚えてもらう(bridge 経由)。
+    // 一番重いレイヤーをフェードで外して、プールの別のものに入れ替える。端末に覚えるかは外したあとの fps で決める(_confirmHeavy)。
     // 手で選んだレイヤー・エフェクトのロック中は外さない(覚えもしない)
     _skipHeavy(fps) {
       const name = this._heaviestLayer();
@@ -967,9 +972,24 @@
         this.currentPresetName = null;
       }
       if (replacement) this._addReplacement(replacement);
+      this._heavyPending = { name: name, fps: Math.round(fps * 10) / 10, replacement: replacement || null, samples: [] };
+    }
+
+    // 外したあとの HEAVY_SECONDS 秒(フェードが終わって HEAVY_SETTLE_MS たってから続けて)の平均が HEAVY_FPS 以上なら、
+    // SW に知らせて端末に覚えてもらう(bridge 経由)。割ったままならページ自体が重いので覚えない(このページでも選び直してよい)
+    _confirmHeavy(fps) {
+      const pending = this._heavyPending;
+      pending.samples.push(fps);
+      if (pending.samples.length < HEAVY_SECONDS) return;
+      this._heavyPending = null;
+      const avg = pending.samples.reduce((sum, v) => sum + v, 0) / pending.samples.length;
+      if (avg < HEAVY_FPS) {
+        this._heavyPresets.delete(pending.name);
+        return;
+      }
       window.postMessage({
         source: 'vjam-fx-engine', type: 'heavyPreset',
-        name: name, fps: Math.round(fps * 10) / 10, replacement: replacement || null,
+        name: pending.name, fps: pending.fps, replacement: pending.replacement,
       }, window.location.origin || '*');
     }
 
@@ -1025,6 +1045,11 @@
       this._heavyHoldMs = 0;
       this._heavyHoldUntil = 0;
       this._pendingPreset = null;
+      // 確かめ終わっていないものは覚えない
+      if (this._heavyPending) {
+        this._heavyPresets.delete(this._heavyPending.name);
+        this._heavyPending = null;
+      }
     }
 
     destroy() {
