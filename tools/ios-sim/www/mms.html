@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>mms-hlsjs</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+<style>body{margin:0;background:#fff;font:16px sans-serif}video{width:100%;display:block;background:#000}p{padding:12px}</style></head>
+<body><video id="v" playsinline muted controls></video>
+<p>hls.js (ManagedMediaSource) test page.</p>
+<script>
+const v=document.getElementById('v');
+window.__hlsInfo={supported:Hls.isSupported(), mms:!!window.ManagedMediaSource};
+window.__go=function(){if(window.__started)return;window.__started=1;if(Hls.isSupported()){const h=new Hls();h.loadSource('https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8');h.attachMedia(v);window.__hls=h;}};if(!/wait/.test(location.search))window.__go();
+</script></body></html>
