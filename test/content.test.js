@@ -833,6 +833,414 @@ describe('VJamFXEngine', () => {
     });
   });
 
+  // 切り替えを全部フェードにする(#38): Next のクロスフェード・Auto の休み・Rnd / Auto の blend / filter の dip
+  describe('transitions (#38)', () => {
+    const FADE_NAMES = ['fade-a', 'fade-b', 'fade-c', 'fade-d'];
+    const POOL = { filters: ['saturate(2)', 'sepia(1)'], blends: ['lighten', 'difference'] };
+    const destroyed = [];
+
+    beforeAll(() => {
+      for (const name of FADE_NAMES) {
+        window.VJamFX.presets[name] = class {
+          constructor() { this.p5 = { frameRate() {}, remove() {} }; }
+          setup(container) { container.appendChild(document.createElement('canvas')); }
+          destroy() { destroyed.push(name); }
+        };
+      }
+    });
+
+    afterAll(() => {
+      for (const name of FADE_NAMES) delete window.VJamFX.presets[name];
+    });
+
+    beforeEach(() => {
+      destroyed.length = 0;
+      vi.useFakeTimers();
+      engine.createOverlay();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    const layerDivs = (name) => [...engine._stage.querySelectorAll(`[data-vjam-layer="${name}"]`)];
+    const stage = () => engine._stage;
+
+    describe('Next (crossfade)', () => {
+      it('fades the current layers out and the new ones in, and removes the old ones after the fade', () => {
+        engine.startPreset(FADE_NAMES[0]);
+        engine._addLayer(FADE_NAMES[1]);
+        const old = [...layerDivs(FADE_NAMES[0]), ...layerDivs(FADE_NAMES[1])];
+
+        engine.handleMessage({ action: 'crossfade', presets: [FADE_NAMES[2], FADE_NAMES[3]], blendMode: 'screen', locks: {} });
+
+        // エンジンの上では入れ替わっている
+        expect(engine.getActiveLayerNames()).toEqual([FADE_NAMES[2], FADE_NAMES[3]]);
+        expect(engine.currentPresetName).toBe(FADE_NAMES[2]);
+        expect(engine.currentPreset).toBe(engine.activeLayers.get(FADE_NAMES[2]).preset);
+        // 古いレイヤーはまだ DOM に残ってフェードアウト中(1.5 秒)、新しいレイヤーは 0 からフェードイン
+        for (const div of old) {
+          expect(div.isConnected).toBe(true);
+          expect(div.style.opacity).toBe('0');
+          expect(div.style.transition).toBe('opacity 1.5s linear');
+        }
+        expect(destroyed).toEqual([]);
+        for (const name of FADE_NAMES.slice(2)) {
+          const [div] = layerDivs(name);
+          expect(div.style.opacity).toBe('0');
+          expect(div.style.transition).toContain('opacity 1.5s');
+        }
+
+        // transitionend が来なくても、フェード時間 + 200ms で外す
+        vi.advanceTimersByTime(1699);
+        for (const div of old) expect(div.isConnected).toBe(true);
+        vi.advanceTimersByTime(1);
+        for (const div of old) expect(div.isConnected).toBe(false);
+        expect(destroyed.sort()).toEqual([FADE_NAMES[0], FADE_NAMES[1]]);
+        expect(engine._stage.querySelectorAll('[data-vjam-layer]').length).toBe(2);
+      });
+
+      it('removes the old layers on transitionend', () => {
+        engine.startPreset(FADE_NAMES[0]);
+        const [old] = layerDivs(FADE_NAMES[0]);
+        engine.crossfade([FADE_NAMES[1]], {});
+        old.dispatchEvent(new Event('transitionend'));
+        expect(old.isConnected).toBe(false);
+        expect(destroyed).toEqual([FADE_NAMES[0]]);
+      });
+
+      it('restarts a preset that is chosen again (the old one fades out)', () => {
+        engine.startPreset(FADE_NAMES[0]);
+        const [old] = layerDivs(FADE_NAMES[0]);
+        engine.crossfade([FADE_NAMES[0]], {});
+        expect(layerDivs(FADE_NAMES[0]).length).toBe(2);
+        expect(engine.activeLayers.get(FADE_NAMES[0]).container).not.toBe(old);
+        vi.advanceTimersByTime(1700);
+        expect(layerDivs(FADE_NAMES[0])).toEqual([engine.activeLayers.get(FADE_NAMES[0]).container]);
+      });
+
+      it('resets the filter and sets the blend right away, and keeps the opacity', () => {
+        engine.startPreset(FADE_NAMES[0]);
+        engine.setFilter('invert', true);
+        engine._rndFilter = 'sepia(1)';
+        engine.setBlendMode('difference');
+        engine.setOpacity(0.4);
+        engine.crossfade([FADE_NAMES[1]], { blendMode: 'lighten', locks: {} });
+        expect(engine.activeFilters.size).toBe(0);
+        expect(engine._rndFilter).toBe('');
+        expect(engine.overlay.style.filter).toBe('none');
+        expect(engine.blendMode).toBe('lighten');
+        expect(engine.overlay.style.mixBlendMode).toBe('lighten');
+        expect(engine.opacity).toBe(0.4);
+        expect(engine.overlay.style.opacity).toBe('0.4');
+        // 押した反応は dip しない
+        expect(stage().style.opacity).toBe('');
+      });
+
+      it('uses screen when no blend is given', () => {
+        engine.setBlendMode('difference');
+        engine.crossfade([FADE_NAMES[0]], {});
+        expect(engine.blendMode).toBe('screen');
+      });
+
+      it('keeps locked layers / blend / filter', () => {
+        engine.startPreset(FADE_NAMES[0]);
+        engine.setBlendMode('difference');
+        engine.setFilter('sepia', true);
+        engine.crossfade([], { blendMode: 'lighten', locks: { effect: true, blend: true, filter: true } });
+        expect(engine.getActiveLayerNames()).toEqual([FADE_NAMES[0]]);
+        expect(layerDivs(FADE_NAMES[0])[0].style.opacity).toBe('0');
+        expect(engine.currentPresetName).toBe(FADE_NAMES[0]);
+        expect(engine.blendMode).toBe('difference');
+        expect(engine.activeFilters.has('sepia')).toBe(true);
+        vi.advanceTimersByTime(5000);
+        expect(layerDivs(FADE_NAMES[0])[0].isConnected).toBe(true);
+        expect(destroyed).toEqual([]);
+      });
+
+      it('stops Auto / Rnd (popup sends them again)', () => {
+        engine.startAutoCycle(FADE_NAMES, 8000, { skipFirstTick: true });
+        engine.startAutoFX({ autoBlend: true });
+        engine.crossfade([FADE_NAMES[0]], {});
+        expect(engine._autoCycleTimer).toBeNull();
+        expect(engine._autoFXTimer).toBeNull();
+      });
+
+      it('starts the engine when it was not running yet', () => {
+        expect(engine.active).toBe(false);
+        engine.crossfade([FADE_NAMES[0], FADE_NAMES[1]], { blendMode: 'screen' });
+        expect(engine.active).toBe(true);
+        expect(engine._rafId).not.toBeNull();
+        expect(engine.getActiveLayerNames()).toEqual([FADE_NAMES[0], FADE_NAMES[1]]);
+      });
+
+      it('switches instantly with fade duration 0', () => {
+        engine.handleMessage({ action: 'setFadeDuration', duration: 0 });
+        engine.startPreset(FADE_NAMES[0]);
+        const [old] = layerDivs(FADE_NAMES[0]);
+        engine.crossfade([FADE_NAMES[1]], {});
+        expect(old.isConnected).toBe(false);
+        expect(destroyed).toEqual([FADE_NAMES[0]]);
+        expect(layerDivs(FADE_NAMES[1])[0].style.transition).toContain('opacity 0s');
+      });
+    });
+
+    describe('Auto rest', () => {
+      // 休みの直前まで進める(1 回目の切り替えで休む)。Rnd の blend / filter を掛けた状態にしておく
+      function startUntilRest(options) {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        engine.startAutoCycle(FADE_NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL, ...options });
+        engine._autoRestAt = 1;
+        vi.advanceTimersByTime(300); // 最初の切り替えの dip
+        expect(engine.overlay.style.mixBlendMode).toBe('lighten');
+        expect(engine.overlay.style.filter).toBe('saturate(2)');
+      }
+
+      it('fades all layers out, resets blend / filter after the fade, and fades the next set in 0.5 s later', () => {
+        startUntilRest();
+        const old = [...engine._stage.querySelectorAll('[data-vjam-layer]')];
+        expect(old.length).toBeGreaterThan(0);
+        vi.advanceTimersByTime(8000 - 300); // 休み
+        expect(engine.activeLayers.size).toBe(0);
+        // フェードアウト中: まだ DOM にあり、blend / filter も変えない(消えてから戻す)
+        for (const div of old) {
+          expect(div.isConnected).toBe(true);
+          expect(div.style.opacity).toBe('0');
+        }
+        expect(engine.overlay.style.mixBlendMode).toBe('lighten');
+        expect(engine.overlay.style.filter).toBe('saturate(2)');
+        // 休みの間の拍では切り替えない
+        for (let i = 0; i < 40; i++) engine._onBeat();
+        vi.advanceTimersByTime(1499);
+        expect(engine.overlay.style.filter).toBe('saturate(2)');
+        vi.advanceTimersByTime(1);
+        // 消えた: blend / filter を既定に戻す(見えていないので dip しない)
+        expect(engine.blendMode).toBe('screen');
+        expect(engine.overlay.style.mixBlendMode).toBe('screen');
+        expect(engine.overlay.style.filter).toBe('none');
+        expect(stage().style.opacity).toBe('');
+        expect(engine.activeLayers.size).toBe(0);
+        vi.advanceTimersByTime(200);
+        for (const div of old) expect(div.isConnected).toBe(false);
+        // 0.5 秒空けてから次のセットがフェードイン
+        vi.advanceTimersByTime(299);
+        expect(engine.activeLayers.size).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(engine.activeLayers.size).toBeGreaterThan(0);
+        for (const [, layer] of engine.activeLayers) {
+          expect(layer.container.style.opacity).toBe('0');
+          expect(layer.container.style.transition).toContain('opacity 1.5s');
+        }
+        // そのあとは普通に拍で切り替わる
+        const tick = vi.spyOn(engine, '_autoCycleTick');
+        for (let i = 0; i < 16; i++) engine._onBeat();
+        expect(tick).toHaveBeenCalledTimes(1);
+      });
+
+      it('follows the fade duration setting', () => {
+        engine.handleMessage({ action: 'setFadeDuration', duration: 3 });
+        startUntilRest();
+        vi.advanceTimersByTime(8000 - 300);
+        vi.advanceTimersByTime(2999);
+        expect(engine.overlay.style.filter).toBe('saturate(2)');
+        vi.advanceTimersByTime(1);
+        expect(engine.overlay.style.filter).toBe('none');
+        vi.advanceTimersByTime(499);
+        expect(engine.activeLayers.size).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(engine.activeLayers.size).toBeGreaterThan(0);
+      });
+
+      it('keeps the instant rest with fade duration 0', () => {
+        engine.handleMessage({ action: 'setFadeDuration', duration: 0 });
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        engine.startAutoCycle(FADE_NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL });
+        engine._autoRestAt = 1;
+        const old = [...engine._stage.querySelectorAll('[data-vjam-layer]')];
+        vi.advanceTimersByTime(8000);
+        for (const div of old) expect(div.isConnected).toBe(false);
+        expect(engine.overlay.style.mixBlendMode).toBe('screen');
+        expect(engine.overlay.style.filter).toBe('none');
+        vi.advanceTimersByTime(499);
+        expect(engine.activeLayers.size).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(engine.activeLayers.size).toBeGreaterThan(0);
+      });
+
+      it('keeps locked layers and resets blend / filter right away with a dip', () => {
+        startUntilRest({ locks: { effect: true } });
+        const names = engine.getActiveLayerNames();
+        vi.advanceTimersByTime(8000 - 300); // 休み
+        expect(engine.getActiveLayerNames()).toEqual(names);
+        expect(engine.blendMode).toBe('screen');
+        expect(stage().style.opacity).toBe('0');
+        expect(engine.overlay.style.filter).toBe('saturate(2)');
+        vi.advanceTimersByTime(300);
+        expect(engine.overlay.style.mixBlendMode).toBe('screen');
+        expect(engine.overlay.style.filter).toBe('none');
+        expect(stage().style.opacity).toBe('1');
+      });
+
+      it('does not switch after Auto is stopped during the fade-out', () => {
+        startUntilRest();
+        vi.advanceTimersByTime(8000 - 300);
+        engine.kill({});
+        vi.advanceTimersByTime(10000);
+        expect(engine.activeLayers.size).toBe(0);
+        expect(engine._autoCycleTimer).toBeNull();
+      });
+    });
+
+    describe('Rnd / Auto blend and filter (dip)', () => {
+      it('lowers the overlay contents, changes the filter at the bottom, then brings it back', () => {
+        engine.setOpacity(0.5);
+        engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
+        // 状態はすぐ変わる(popup が読む値)。CSS は暗くなってから
+        expect(engine._rndFilter).toBe('sepia(1)');
+        expect(engine.overlay.style.filter).toBe('');
+        expect(stage().style.transition).toBe('opacity 300ms linear');
+        expect(stage().style.opacity).toBe('0');
+        vi.advanceTimersByTime(299);
+        expect(engine.overlay.style.filter).toBe('');
+        vi.advanceTimersByTime(1);
+        expect(engine.overlay.style.filter).toBe('sepia(1)');
+        expect(stage().style.opacity).toBe('1');
+        vi.advanceTimersByTime(300);
+        expect(stage().style.opacity).toBe('');
+        expect(stage().style.transition).toBe('');
+        // 人が設定した不透明度(ホスト)には触らない
+        expect(engine.overlay.style.opacity).toBe('0.5');
+        expect(engine.opacity).toBe(0.5);
+      });
+
+      it('dips for a blend change too (overlay and canvases)', () => {
+        engine._addLayer(FADE_NAMES[0]);
+        const canvas = engine._stage.querySelector('canvas');
+        engine._randomizeBlend({ blends: ['lighten'] }, true);
+        expect(engine.blendMode).toBe('lighten');
+        expect(engine.overlay.style.mixBlendMode).toBe('screen');
+        expect(canvas.style.mixBlendMode).toBe('screen');
+        expect(stage().style.opacity).toBe('0');
+        vi.advanceTimersByTime(300);
+        expect(engine.overlay.style.mixBlendMode).toBe('lighten');
+        expect(canvas.style.mixBlendMode).toBe('lighten');
+      });
+
+      it('puts blend and filter changed together into one dip', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        engine.startAutoCycle(FADE_NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL });
+        expect(stage().style.opacity).toBe('0');
+        vi.advanceTimersByTime(300);
+        expect(engine.overlay.style.mixBlendMode).toBe('lighten');
+        expect(engine.overlay.style.filter).toBe('saturate(2)');
+        expect(stage().style.opacity).toBe('1');
+        vi.advanceTimersByTime(300);
+        expect(stage().style.opacity).toBe('');
+      });
+
+      it('dips on the standalone Rnd tick', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        engine.startAutoFX({ autoBlend: true, autoFilters: true, pool: POOL });
+        vi.advanceTimersByTime(8000);
+        expect(engine.blendMode).toBe('lighten');
+        expect(stage().style.opacity).toBe('0');
+        expect(engine.overlay.style.mixBlendMode).toBe('screen');
+        vi.advanceTimersByTime(300);
+        expect(engine.overlay.style.mixBlendMode).toBe('lighten');
+        expect(engine.overlay.style.filter).toBe('saturate(2)');
+      });
+
+      it('goes down again when a change comes while coming back up', () => {
+        engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
+        vi.advanceTimersByTime(400);
+        expect(stage().style.opacity).toBe('1');
+        engine._randomizeFilter({ filters: ['saturate(2)'] }, true);
+        expect(stage().style.opacity).toBe('0');
+        expect(engine.overlay.style.filter).toBe('sepia(1)');
+        vi.advanceTimersByTime(300);
+        expect(engine.overlay.style.filter).toBe('saturate(2)');
+        // 最初の dip の戻りのタイマーは捨てている
+        vi.advanceTimersByTime(299);
+        expect(stage().style.opacity).toBe('1');
+        vi.advanceTimersByTime(1);
+        expect(stage().style.opacity).toBe('');
+      });
+
+      it('keeps manual buttons instant', () => {
+        engine.handleMessage({ action: 'setBlendMode', blendMode: 'difference' });
+        expect(engine.overlay.style.mixBlendMode).toBe('difference');
+        engine.handleMessage({ action: 'toggleFilter', filter: 'sepia' });
+        expect(engine.overlay.style.filter).toBe('sepia(1)');
+        engine.handleMessage({ action: 'setFilter', filter: 'invert', enabled: true });
+        expect(engine.overlay.style.filter).toBe('sepia(1) invert(1)');
+        engine.handleMessage({ action: 'clearFilters' });
+        expect(engine.overlay.style.filter).toBe('none');
+        expect(stage().style.opacity).toBe('');
+      });
+
+      it('applies a manual change during a dip right away, and the dip does not undo it', () => {
+        engine._randomizeBlend({ blends: ['lighten'] }, true);
+        engine.setBlendMode('exclusion');
+        expect(engine.overlay.style.mixBlendMode).toBe('exclusion');
+        vi.advanceTimersByTime(600);
+        expect(engine.blendMode).toBe('exclusion');
+        expect(engine.overlay.style.mixBlendMode).toBe('exclusion');
+      });
+
+      it('keeps the user opacity when it changes during a dip', () => {
+        engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
+        engine.handleMessage({ action: 'setOpacity', opacity: 0.3 });
+        expect(engine.overlay.style.opacity).toBe('0.3');
+        expect(stage().style.opacity).toBe('0');
+        vi.advanceTimersByTime(600);
+        expect(engine.overlay.style.opacity).toBe('0.3');
+        expect(stage().style.opacity).toBe('');
+      });
+
+      it('does not dip with fade duration 0', () => {
+        engine.handleMessage({ action: 'setFadeDuration', duration: 0 });
+        engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
+        engine._randomizeBlend({ blends: ['lighten'] }, true);
+        expect(engine.overlay.style.filter).toBe('sepia(1)');
+        expect(engine.overlay.style.mixBlendMode).toBe('lighten');
+        expect(stage().style.opacity).toBe('');
+      });
+
+      it('kill during a dip applies the reset right away and the dip ends', () => {
+        engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
+        engine._randomizeBlend({ blends: ['lighten'] }, true);
+        engine.kill({});
+        expect(stage().style.opacity).toBe('');
+        expect(stage().style.transition).toBe('');
+        expect(engine.overlay.style.filter).toBe('none');
+        expect(engine.overlay.style.mixBlendMode).toBe('screen');
+        vi.advanceTimersByTime(600);
+        expect(engine.overlay.style.filter).toBe('none');
+        expect(engine.overlay.style.mixBlendMode).toBe('screen');
+        expect(stage().style.opacity).toBe('');
+      });
+
+      it('kill with blend / filter locks during a dip applies the Rnd values right away', () => {
+        engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
+        engine._randomizeBlend({ blends: ['lighten'] }, true);
+        engine.kill({ locks: { blend: true, filter: true } });
+        expect(engine.overlay.style.filter).toBe('sepia(1)');
+        expect(engine.overlay.style.mixBlendMode).toBe('lighten');
+        expect(stage().style.opacity).toBe('');
+      });
+
+      it('turning OFF during a dip leaves no timer behind', () => {
+        engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
+        engine.handleMessage({ action: 'stop' });
+        expect(engine.overlay).toBeNull();
+        expect(engine._dipDownTimer).toBeNull();
+        expect(engine._dipUpTimer).toBeNull();
+        expect(() => vi.advanceTimersByTime(600)).not.toThrow();
+      });
+    });
+  });
+
   describe('tab audio capture', () => {
     it('should have null _externalAudioData initially', () => {
       expect(engine._externalAudioData).toBeNull();

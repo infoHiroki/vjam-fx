@@ -104,16 +104,21 @@ test.describe.serial('Filter を VJam 方式にする', () => {
       return e._autoFXFilters && e._autoFXPool ? e._autoFXPool.filters : null;
     })).toEqual(POOL.filters);
     expect(POOL.filters.length).toBe(14);
-    // 実物のエンジンで何度も引いて、掛かる filter を集める
+    // 実物のエンジンで何度も引いて、選ばれる filter を集める(CSS に掛かるのは dip で暗くなってから。#38)
     const seen = await page.evaluate(() => {
       const e = window._vjamFxEngine;
       const out = new Set();
       for (let i = 0; i < 300; i++) {
         e._randomizeFilter(e._autoFXPool, true);
-        out.add(e.overlay.style.filter);
+        out.add(e._rndFilter);
       }
       return [...out];
     });
     expect(seen.sort()).toEqual(POOL.filters.slice().sort());
+    // 最後に選んだものが掛かる
+    await expect.poll(() => page.evaluate(() => {
+      const e = window._vjamFxEngine;
+      return !e._dipDownTimer && e.overlay.style.filter === e._rndFilter;
+    })).toBe(true);
   });
 });
