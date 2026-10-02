@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { PopupController } from '../popup/popup.js';
 
 describe('PopupController', () => {
@@ -35,8 +37,8 @@ describe('PopupController', () => {
   });
 
   describe('preset list', () => {
-    it('should have 198 presets available', () => {
-      expect(controller.presets.length).toBe(198);
+    it('should have 212 presets available', () => {
+      expect(controller.presets.length).toBe(212);
     });
 
     it('should have all expected preset names', () => {
@@ -185,7 +187,7 @@ describe('PopupController', () => {
       await controller._saveState();
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.autoCyclePresets).not.toBeNull();
-      expect(call[0].state.autoCyclePresets.length).toBe(198);
+      expect(call[0].state.autoCyclePresets.length).toBe(212);
     });
 
     it('should have null autoCyclePresets when not cycling', async () => {
@@ -639,20 +641,20 @@ describe('PopupController', () => {
       expect(controller.poolPresets.map(p => p.id).sort()).toEqual(['neon-tunnel', 'rain']);
       expect(controller.pool).toEqual({ filters: POOL.filters, blends: POOL.blends });
       // 手動の一覧は全部
-      expect(controller.presets.length).toBe(198);
+      expect(controller.presets.length).toBe(212);
     });
 
     it('falls back to all presets when the pool cannot be read', async () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('not found')));
       await controller._loadPool();
-      expect(controller.poolPresets.length).toBe(198);
+      expect(controller.poolPresets.length).toBe(212);
       expect(controller.pool).toBeNull();
     });
 
     it('falls back to all presets when the pool has no known preset', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: () => Promise.resolve({ ...POOL, presets: ['no-such-preset'] }) }));
       await controller._loadPool();
-      expect(controller.poolPresets.length).toBe(198);
+      expect(controller.poolPresets.length).toBe(212);
     });
 
     it('Next picks presets only from the pool', async () => {
@@ -1102,6 +1104,57 @@ describe('PopupController', () => {
       chrome.runtime.sendMessage.mockResolvedValueOnce({ state: null });
       await controller._syncState();
       expect(controller.isActive).toBe(false);
+    });
+  });
+
+  // filter のボタンは VJam 本体と同じ 5 個(#35)。Bright / Sepia / Blur はボタンだけ隠し、保存済みのシーン・状態のために残す
+  describe('filter buttons (VJam style)', () => {
+    const html = readFileSync(resolve(__dirname, '../popup/popup.html'), 'utf-8');
+    const grid = new DOMParser().parseFromString(html, 'text/html').getElementById('filter-grid');
+    const activeButtons = () => [...document.querySelectorAll('.filter-btn.active')].map(b => b.dataset.filter);
+
+    beforeEach(() => {
+      // テスト用の DOM の filter ボタンを popup.html のものに差し替える
+      container.querySelectorAll('.filter-btn').forEach(b => b.remove());
+      container.querySelector('.popup').insertAdjacentHTML('beforeend', grid.outerHTML);
+    });
+
+    it('popup.html shows the 5 filters of VJam (no Bright / Sepia / Blur)', () => {
+      const filters = [...grid.querySelectorAll('.filter-btn')].map(b => b.dataset.filter);
+      expect(filters).toEqual(['invert', 'hue-rotate', 'saturate', 'grayscale', 'contrast']);
+    });
+
+    it('restores an old state with Bright / Sepia / Blur ON without breaking', async () => {
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ result: null }]);
+      chrome.runtime.sendMessage.mockResolvedValueOnce({ state: {
+        active: true, layers: ['rain'], blendMode: 'screen', filters: ['brightness', 'invert', 'sepia', 'blur'],
+      } });
+      await controller._syncState();
+      expect(activeButtons()).toEqual(['invert']);
+      // 隠したものも落とさない(保存し直しても残る)
+      expect([...controller.activeFilters]).toEqual(['brightness', 'invert', 'sepia', 'blur']);
+      chrome.runtime.sendMessage.mockClear();
+      await controller._saveState();
+      expect(chrome.runtime.sendMessage.mock.calls[0][0].state.filters).toEqual(['brightness', 'invert', 'sepia', 'blur']);
+      // 見えるボタンはそのまま使える
+      controller._bindEvents();
+      document.querySelector('.filter-btn[data-filter="saturate"]').click();
+      expect(activeButtons()).toEqual(['invert', 'saturate']);
+      expect(controller.activeFilters.has('saturate')).toBe(true);
+    });
+
+    it('loads an old scene with Bright ON and still sends it to the engine', async () => {
+      controller.isActive = true;
+      controller.scenes[0] = { layers: ['rain'], blendMode: 'screen', filters: ['brightness', 'contrast'], opacity: 0.8 };
+      const sent = [];
+      controller._sendCommand = vi.fn(async (msg) => { sent.push(msg); });
+      await controller._loadScene(0);
+      expect(sent.filter(m => m.action === 'setFilter')).toEqual([
+        { action: 'setFilter', filter: 'brightness', enabled: true },
+        { action: 'setFilter', filter: 'contrast', enabled: true },
+      ]);
+      expect(activeButtons()).toEqual(['contrast']);
+      expect(controller._busy).toBe(false);
     });
   });
 
