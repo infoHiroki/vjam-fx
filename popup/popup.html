@@ -76,15 +76,13 @@
     </div>
 
     <div class="section-label"><span>Filters</span><button id="lock-filter" class="auto-toggle lock-toggle" title="Lock filters">Lock</button><button id="auto-filters" class="auto-toggle" title="Randomize filters">Rnd</button></div>
-    <div class="filter-grid" id="filter-grid">
+    <!-- VJam 本体と同じ 5 個(brightness / sepia / blur はボタンだけ出さない。エンジンは保存済みのシーン・状態のために対応したまま) -->
+    <div class="filter-grid" id="filter-grid" style="grid-template-columns:repeat(5,1fr)">
       <button class="filter-btn" data-filter="invert">Invert</button>
       <button class="filter-btn" data-filter="hue-rotate">Hue Rot</button>
-      <button class="filter-btn" data-filter="grayscale">Gray</button>
       <button class="filter-btn" data-filter="saturate">Saturate</button>
-      <button class="filter-btn" data-filter="brightness">Bright</button>
+      <button class="filter-btn" data-filter="grayscale">Gray</button>
       <button class="filter-btn" data-filter="contrast">Contrast</button>
-      <button class="filter-btn" data-filter="sepia">Sepia</button>
-      <button class="filter-btn" data-filter="blur">Blur</button>
     </div>
 
     <div class="section-label"><span>Blend</span><button id="lock-blend" class="auto-toggle lock-toggle" title="Lock blend mode">Lock</button><button id="auto-blend" class="auto-toggle" title="Randomize blend mode">Rnd</button></div>

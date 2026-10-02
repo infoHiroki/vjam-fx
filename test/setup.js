@@ -89,7 +89,7 @@ globalThis.p5 = class p5Mock {
       'ambientLight', 'directionalLight', 'pointLight', 'specularMaterial', 'emissiveMaterial', 'ambientMaterial', 'normalMaterial',
       'shader', 'resetShader', 'createShader',
       'textFont', 'textSize', 'textAlign', 'text', 'textWidth',
-      'strokeCap', 'strokeJoin',
+      'strokeCap', 'strokeJoin', 'clear', 'bezier',
       'lerp', 'constrain', 'dist', 'abs', 'floor', 'ceil', 'round',
       'sin', 'cos', 'tan', 'atan2', 'sqrt', 'pow', 'min', 'max',
       'color', 'lerpColor', 'red', 'green', 'blue', 'alpha', 'hue', 'saturation', 'brightness',

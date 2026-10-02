@@ -104,7 +104,6 @@
     "neon-highway",
     "neon-horizon",
     "neon-rain",
-    "neon-sign",
     "neon-smoke",
     "neon-tunnel",
     "neon-vines",
@@ -177,12 +176,7 @@
     "wormhole"
   ],
   "filters": [
-    "none",
-    "hue-rotate(180deg)",
-    "grayscale(1)",
     "saturate(2.5)",
-    "brightness(1.4)",
-    "contrast(1.5)",
     "saturate(2)",
     "saturate(3)",
     "hue-rotate(180deg) saturate(2)",

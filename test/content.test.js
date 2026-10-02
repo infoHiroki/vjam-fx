@@ -627,6 +627,16 @@ describe('VJamFXEngine', () => {
       engine.setFilter('nonexistent', true);
       expect(engine.activeFilters.size).toBe(0);
     });
+
+    // popup のボタンは VJam と同じ 5 個(#35)。Bright / Sepia / Blur はボタンだけ隠し、保存済みのシーン・状態のためにエンジンは対応したまま
+    it('still applies the filters whose buttons are hidden (brightness / sepia / blur)', () => {
+      engine.createOverlay();
+      engine.handleMessage({ action: 'setFilter', filter: 'brightness', enabled: true });
+      engine.handleMessage({ action: 'setFilter', filter: 'sepia', enabled: true });
+      engine.handleMessage({ action: 'setFilter', filter: 'blur', enabled: true });
+      const overlay = document.querySelector('[data-vjam-fx]');
+      expect(overlay.style.filter).toBe('brightness(1.4) sepia(1) blur(3px)');
+    });
   });
 
   describe('kill', () => {
@@ -1549,6 +1559,19 @@ describe('VJamFXEngine', () => {
         engine._randomizeFilter(POOL, true);
         expect(engine.activeFilters.size).toBe(0);
         expect(POOL.filters).toContain(engine.overlay.style.filter);
+      });
+
+      // デフォルトプールの filters は VJam の COMPOUND_FILTERS から invert を含む 2 種を除いた 14 種(#35)
+      it('picks only from the 14 filters of the default pool', () => {
+        const pool = JSON.parse(readFileSync(resolve(__dirname, '../content/default-pool.json'), 'utf-8'));
+        expect(pool.filters.length).toBe(14);
+        const seen = new Set();
+        for (let i = 0; i < 300; i++) {
+          engine._randomizeFilter(pool, true);
+          seen.add(engine._rndFilter);
+          expect(engine.overlay.style.filter).toBe(engine._rndFilter);
+        }
+        expect([...seen].sort()).toEqual(pool.filters.slice().sort());
       });
 
       it('falls back to single filters without invert / blur when no pool is given', () => {
