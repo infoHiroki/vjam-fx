@@ -4,6 +4,7 @@
 
 - `bench/` — プリセット・Filter・Blend の計測(Python + Playwright)
 - `curate.html` — 計測結果を見て選び、`content/default-pool.json` の形で書き出す画面
+- `review.html` — 1 本ずつライブで動かして 採用 / ボツ を付け、同じ形で書き出す画面(選び直し)
 
 ## 計測(bench/)
 
@@ -94,6 +95,64 @@ iPad で見るときは `python3 -m http.server 8813 --bind 0.0.0.0` で立て�
 - `presets` は名前順。候補(まだ `content/presets` に無いもの)を選ぶとそれも入る
 - `filters` は CSS の filter 文字列。`none`(フィルタなし)も選べる
 
+## 選び直し画面(review.html)
+
+```bash
+python3 -m http.server 8000          # リポのルートで(ポートは空いているもの)
+open http://localhost:8000/tools/review.html
+```
+
+iPad で見るときは `--bind 0.0.0.0` で立てて `http://<Mac の IP>:8000/tools/review.html` を開く。
+
+- **対象**:プリセット = `content/presets` 全部 + `bench/candidates` のうち未取り込み(同じ名前が `content/presets` に無いもの)。Filter・Blend = filter 24 種(combos と同じ並び)+ blend 5 種
+- **初期状態**:今の `content/default-pool.json` に入っているものが「採用」、それ以外は「未判定」。手で付けた判定はブラウザ(localStorage)に保存する。「最初に戻す」で手で付けたものを全部消す
+- **プレビュー**:記事ページ(`bench/site/article.html`)の上で実際のプリセットを動かす。白・暗、blend、filter、音をその場で切り替え
+  - プリセット:1 本だけ
+  - Filter・Blend:`retro-wave` / `bird-murmuration` / `pixel-cascade`(combos の代表の先頭 3 本)を重ねる(製品の Auto と同じ見え方)
+  - 音:擬似 120 BPM か、`traces/*.json`(下)。traces は http.server のディレクトリ一覧から拾うので、無ければ擬似だけ
+- **Auto で見る**:採用中のプール(プリセット・filter・blend)で、製品の Auto ON(Blend Rnd・Filter Rnd も ON)と同じ `startAutoCycle` を回す。出ているレイヤー・blend・filter を押すとそこへ飛ぶ
+- **キー**(iPad 用に同じボタンが下にある)
+
+| キー | |
+| --- | --- |
+| `←` / `→` | 前 / 次 |
+| `Y` / `1` | 採用(次へ進む) |
+| `N` / `0` | ボツ(次へ進む) |
+| `D` | 白・暗 |
+| `Space` | 一時停止 |
+| `A` | Auto で見る / 止める |
+
+- 上の「全部 / 未判定 / 採用 / ボツ」で絞って回る
+- 横に出す参考情報(自動では決めない)
+  - 計測(`bench/out/*/results.json`):元のページ(白・暗)、fps、ms、反応、点滅(0.5 回/秒を超えたら ⚠️)。Filter・Blend は combos の集計
+  - VJam 本体の音の反応(`review/vjam-reactivity.json`):低音・中音・高音・音量・ビートを使っている回数
+  - VJam 本体の人のレビュー(`review/vjam-review.json`):採用されていたら「VJam 採用」
+- **書き出し**で `default-pool.json` をダウンロード、**コピー**でクリップボードへ。形は上と同じ
+
+### VJam 本体の資料を JSON にする
+
+リポの外(`~/Dev/vjam`)の資料を読む。変わったら回し直してコミットする。
+
+```bash
+node tools/review/vjam-json.mjs            # 既定は ~/Dev/vjam
+node tools/review/vjam-json.mjs <VJam のリポ>
+```
+
+| 元 | 出力 |
+| --- | --- |
+| `docs/preset-audio-reactivity.md` の詳細表 | `review/vjam-reactivity.json` |
+| `tmp-presets/seed-review.md` の「採用」 | `review/vjam-review.json` |
+
+### `traces/*.json`(音の反応データ)
+
+```json
+{ "name": "house-124", "source": "YouTube(ミュート再生を MSE タップで解析)", "bpm": 124, "fps": 30,
+  "frames": [[rms, bass, mid, treble, beat, strength], ...] }
+```
+
+- 1 フレーム = 1/fps 秒(既定 30)。beat は 0 / 1。値は製品の `__vjamMse.frameAt()` が返すもの
+- 頭から fps で流してエンジンに渡す(終わったら頭に戻る)。形が違うファイルは飛ばす
+
 ## テスト
 
-`tools/curate/logic.test.js`(判定・集計・書き出し・filters.json とエンジンの定義が揃っているか)は `npm test` で一緒に回る。
+`tools/curate/logic.test.js`(判定・集計・書き出し・filters.json とエンジンの定義が揃っているか)と `tools/review/*.test.js`(判定・進み方・書き出し・音・VJam の資料の変換)は `npm test` で一緒に回る。
