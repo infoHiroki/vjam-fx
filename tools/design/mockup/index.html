@@ -1,0 +1,159 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VJam FX popup 見本</title>
+<style>
+:root{
+  --bg:#030303; --surface:#0d0d0d; --surface2:#151515; --line:#232323; --line2:#2e2e2e;
+  --text:#f0f0f0; --dim:#8a8a8a; --faint:#5a5a5a;
+  --accent:#00cc66; --g1:#FF1493; --g2:#8B5CF6; --cr:#ff2a5a; --cc:#00e6dc;
+  --page:#1b1b1b; --radius:12px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);font:13px/1.45 -apple-system,"Hiragino Sans",sans-serif;padding:24px 16px 60px}
+h1{font-size:20px;margin:0 0 4px}.lead{color:#aaa;margin:0 0 24px;max-width:760px}
+h2{font-size:15px;margin:32px 0 6px}.cap{color:#999;margin:0 0 14px;font-size:12px}
+.row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.state{display:flex;flex-direction:column;gap:8px}.state b{font-size:12px;color:#ccc;font-weight:600}
+.card{background:#232323;border-radius:12px;padding:14px}
+/* ===== popup ===== */
+.pop{width:300px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:12px;overflow:hidden}
+.hdr{display:flex;align-items:center;gap:8px;height:28px}
+.logo{height:24px;display:block;margin-top:2px}
+.sp{flex:1}
+.ibtn{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--dim)}
+.ibtn svg,.btn svg,.tgl svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sw{width:42px;height:24px;border-radius:12px;background:var(--line2);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#bdbdbd;transition:.2s}
+.sw.on{background:var(--accent)}.sw.on::after{left:21px;background:#03140b}
+/* stage: いま流れているもの */
+.stage{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:12px}
+.mode{display:flex;align-items:baseline;gap:8px}
+.mode .big{font-size:24px;font-weight:800;letter-spacing:.06em;text-shadow:-1.5px 0 var(--cr),1.5px 0 var(--cc)}
+.mode .bpm{font-variant-numeric:tabular-nums;color:var(--dim);font-size:12px}
+.beat{width:8px;height:8px;border-radius:50%;background:var(--text);margin-left:auto;animation:beat .484s infinite}
+@keyframes beat{0%{transform:scale(1.4);opacity:1}40%{transform:scale(.8);opacity:.35}100%{transform:scale(.8);opacity:.35}}
+.meter{height:3px;border-radius:2px;margin-top:10px;background:linear-gradient(90deg,var(--g1),var(--g2));transform-origin:left;animation:meter .484s infinite}
+@keyframes meter{0%{transform:scaleX(1)}60%{transform:scaleX(.25)}100%{transform:scaleX(.25)}}
+.now{margin-top:10px;display:flex;flex-direction:column;gap:4px}
+.now .it{display:flex;align-items:center;gap:8px;color:#d6d6d6}
+.now .th{width:28px;height:18px;border-radius:4px;background:#222 center/cover}
+.now .nm{flex:1}.now .ly{font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.btn{height:36px;border-radius:9px;border:1px solid var(--line2);background:var(--surface2);color:var(--text);display:flex;align-items:center;justify-content:center;gap:6px;font-weight:600}
+.btn.primary{background:var(--text);color:#050505;border-color:var(--text)}
+.chips{display:flex;gap:6px;margin-top:10px}
+.tgl{flex:1;height:30px;border-radius:8px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;color:var(--dim)}
+.tgl.on{color:var(--text);border-color:#4a4a4a;background:#1a1a1a}
+.tgl.on i{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.tgl i{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.op{display:flex;align-items:center;gap:10px;margin-top:12px;color:var(--dim);font-size:11px}
+.op .track{flex:1;height:3px;border-radius:2px;background:var(--line2);position:relative}
+.op .track b{position:absolute;inset:0 20% 0 0;background:#cfcfcf;border-radius:2px}
+.op .track b::after{content:"";position:absolute;right:-6px;top:-5px;width:13px;height:13px;border-radius:50%;background:#fff}
+.disc{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;display:flex;align-items:center;color:var(--dim);font-size:12px}
+.disc .sp{flex:1}.disc svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7}
+.foot{margin-top:10px;display:flex;justify-content:space-between;font-size:11px;color:var(--faint)}
+.foot a{color:var(--dim);text-decoration:none;border-bottom:1px solid var(--line2)}
+/* OFF */
+.off .stage{opacity:.55}.off .big{text-shadow:none;color:var(--dim)}
+.hint{margin-top:10px;color:var(--dim);font-size:12px}
+/* manual */
+.man{margin-top:10px;display:flex;flex-direction:column;gap:10px}
+.lbl{font-size:10px;letter-spacing:.12em;color:var(--faint);text-transform:uppercase;margin-bottom:6px}
+.search{height:30px;border-radius:8px;border:1px solid var(--line2);background:var(--surface);padding:0 10px;display:flex;align-items:center;color:var(--faint);font-size:12px}
+.list{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.list div{height:30px;padding:0 10px;border-bottom:1px solid #151515;color:#cfcfcf;display:flex;gap:8px;align-items:center}.list div:last-child{border-bottom:0}
+.list div::before{content:"";box-sizing:border-box;flex:none;width:7px;height:7px;border-radius:50%;border:1px solid var(--faint)}.list div.sel{color:var(--text)}.list div.sel::before{background:var(--text);border-color:var(--text)}
+
+.seg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}.seg span{height:28px;border-radius:7px;border:1px solid var(--line2);display:grid;place-items:center;font-size:11px;color:var(--dim)}
+.seg span.on{color:var(--text);border-color:#5a5a5a;background:#1b1b1b}
+.seg4{grid-template-columns:repeat(4,1fr)}
+/* blocked */
+.blocked{padding:28px 8px;text-align:center;color:var(--dim)}
+.blocked .mk{width:44px;opacity:.5;margin-bottom:10px}
+/* icons */
+.icons{display:flex;gap:18px;align-items:flex-end}.icons figure{margin:0;text-align:center;color:#aaa;font-size:11px}
+.tb img{display:block;border-radius:6px;margin-top:6px}
+</style></head><body>
+<h1>VJam FX popup 見本</h1>
+<p class="lead">popup 作り直しの見本(2026-10-02 に決定)。アイコンは A(マークだけ・名前は VJam FX のまま)、popup は Auto が主役で、細かい操作は「手動」に畳む。ここの日本語は説明用で、製品の文言は今の popup と同じ英語。</p>
+
+<h2>① アイコン</h2>
+<p class="cap">採用:A。128 は 96 の絵 + 周り 16px 透明。16 / 32 は線を太くした専用版(#46 で入れ済み)。</p>
+<div class="row">
+ <div class="card"><div class="icons">
+  <figure><img src="v3/icon-A-128.png" width="128"><figcaption>A 128</figcaption></figure>
+  <figure><img src="v3/icon-A-48.png" width="48"><figcaption>48</figcaption></figure>
+  <figure><img src="v3/icon-16.png" width="16"><figcaption>16</figcaption></figure>
+  <figure><img src="v3/icon-32.png" width="32"><figcaption>32</figcaption></figure>
+ </div></div>
+ <div class="card tb"><b style="font-size:12px;color:#ccc">ツールバー(左:16 専用 / 右:A を縮小しただけ)</b>
+  <img src="v3/toolbar-light.png" width="260"><img src="v3/toolbar-dark.png" width="260"></div>
+</div>
+<h2>ロゴ(popup のヘッダー)</h2>
+<p class="cap">FX の下端を手書きの「AM」の下端にそろえた。色ずれの向きもロゴと同じ(左ピンク・右水色)。</p>
+<div class="row"><div class="card" style="background:#030303"><img src="v3/lockup.png" style="height:72px;display:block"></div>
+<div class="card" style="background:#030303;display:flex;align-items:center"><img src="v3/lockup.png" style="height:20px;display:block"></div></div>
+
+<h2>② popup:Auto が主役(4 つの状態)</h2>
+<p class="cap">いつもは上の 3 段(ヘッダー・いま流れているもの・操作)だけで足りる。細かい操作は「手動」を開いたときだけ出る。</p>
+<div class="row">
+
+ <div class="state"><b>ON・Auto 中(いつもの画面)</b>
+ <div class="pop">
+  <div class="hdr"><img class="logo" src="v3/lockup.png" alt="VJam FX"><span class="sp"></span>
+   <span class="ibtn" title="設定"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>
+   <span class="sw on"></span></div>
+  <div class="stage">
+   <div class="mode"><span class="big">AUTO</span><span class="bpm">124 BPM · 16 拍</span><span class="beat"></span></div>
+   <div class="meter"></div>
+   <div class="now">
+    <div class="it"><span class="th" style="background:linear-gradient(135deg,#0b3,#033)"></span><span class="nm">Neon Rain</span><span class="ly">1</span></div>
+    <div class="it"><span class="th" style="background:radial-gradient(circle,#f36,#103)"></span><span class="nm">Sonar Ping</span><span class="ly">2</span></div>
+    <div class="it"><span class="th" style="background:linear-gradient(180deg,#527,#0a4)"></span><span class="nm">Aurora</span><span class="ly">3</span></div>
+   </div>
+  </div>
+  <div class="actions">
+   <span class="btn primary"><svg viewBox="0 0 24 24"><path d="M5 4l10 8-10 8z"/><path d="M19 5v14"/></svg>Next</span>
+   <span class="btn"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>Auto を止める</span>
+  </div>
+  <div class="chips">
+   <span class="tgl on"><i></i>Blend Rnd</span><span class="tgl on"><i></i>Filter Rnd</span><span class="tgl"><i></i>All tabs</span>
+  </div>
+  <div class="op">不透明度<span class="track"><b></b></span><span style="font-variant-numeric:tabular-nums">80%</span></div>
+  <div class="disc">手動で選ぶ<span class="sp"></span><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+  <div class="foot"><span>この端末で重いもの:3 本を外し中</span><a href="#">VJam 本体</a></div>
+ </div></div>
+
+ <div class="state off"><b>OFF</b>
+ <div class="pop">
+  <div class="hdr"><img class="logo" src="v3/lockup.png" alt="VJam FX"><span class="sp"></span><span class="sw"></span></div>
+  <div class="stage"><div class="mode"><span class="big">OFF</span><span class="bpm">このタブ</span></div></div>
+  <p class="hint">右上のスイッチで ON。そのまま Auto で始まって、音に合わせて切り替わります。</p>
+  <div class="foot"><span></span><a href="#">VJam 本体</a></div>
+ </div></div>
+
+ <div class="state"><b>手動を開いたところ</b>
+ <div class="pop">
+  <div class="hdr"><img class="logo" src="v3/lockup.png" alt="VJam FX"><span class="sp"></span><span class="sw on"></span></div>
+  <div class="actions" style="margin-top:12px">
+   <span class="btn primary"><svg viewBox="0 0 24 24"><path d="M5 4l10 8-10 8z"/><path d="M19 5v14"/></svg>Next</span>
+   <span class="btn"><svg viewBox="0 0 24 24"><path d="M5 4l14 8-14 8z"/></svg>Auto</span>
+  </div>
+  <div class="man">
+   <div><div class="lbl">エフェクト</div><div class="search">検索…</div>
+    <div class="list" style="margin-top:6px"><div class="sel">Neon Rain</div><div>Neon Smoke</div><div class="sel">Neon Tunnel</div><div>Neon Vines</div></div></div>
+   <div><div class="lbl">Filter</div><div class="seg"><span>Invert</span><span class="on">Hue</span><span>Sat</span><span>Gray</span><span>Cont</span></div></div>
+   <div><div class="lbl">Blend</div><div class="seg seg4"><span class="on">Screen</span><span>Lighten</span><span>Diff</span><span>Excl</span></div></div>
+   <div><div class="lbl">シーン</div><div class="seg seg4"><span class="on">1</span><span class="on">2</span><span>3</span><span>4</span></div></div>
+  </div>
+  <div class="disc">手動を閉じる<span class="sp"></span><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></div>
+ </div></div>
+
+ <div class="state"><b>動かないページ(chrome:// など)</b>
+ <div class="pop">
+  <div class="hdr"><img class="logo" src="v3/lockup.png" alt="VJam FX"></div>
+  <div class="blocked"><img class="mk" src="mark.png"><div>このページには重ねられません</div><div style="font-size:11px;margin-top:4px;color:var(--faint)">ふつうの Web ページで開いてください</div></div>
+ </div></div>
+
+</div>
+</body></html>
