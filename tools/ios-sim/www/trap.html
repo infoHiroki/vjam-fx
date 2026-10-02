@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>trap</title>
+<!-- 画面いっぱい表示(#51)の邪魔をするもの: video の祖先の transform / will-change(position: fixed の基準がその祖先になる)と低い z-index、その上に被る固定ヘッダーと帯 -->
+<style>body{margin:0;background:#fff;font:16px sans-serif}
+header{position:fixed;top:0;left:0;right:0;height:56px;padding:16px;box-sizing:border-box;background:#36c;color:#fff;z-index:10}
+main{padding-top:72px}
+.card{transform:translateX(0);will-change:transform;position:relative;z-index:1;overflow:hidden;border-radius:12px;margin:0 12px}
+.cover{position:absolute;left:0;right:0;top:320px;height:80px;padding:12px;box-sizing:border-box;background:#fc3;z-index:5}
+video{width:100%;display:block;background:#000}p{padding:12px}</style></head>
+<body><header>Header (fixed, z-index 10)</header>
+<main><div class="card"><video id="v" playsinline muted controls src="https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8"></video></div>
+<div class="cover">Cover (z-index 5)</div>
+<p>Trap test page. The video's ancestor has transform / will-change and a low z-index.</p></main></body></html>
