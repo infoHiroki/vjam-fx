@@ -89,12 +89,14 @@ async function loadTraces() {
 
 async function init() {
   load();
-  const [defs, pool, fx, cand, combos, reactivity, review, fxNames, candNames, traces] = await Promise.all([
+  const [defs, pool, fx, cand, combos, reactivity, review, fxNames, candNames, traces, ipad] = await Promise.all([
     getJSON('bench/filters.json'), getJSON('../content/default-pool.json'),
     getJSON(`${OUT}fx/results.json`), getJSON(`${OUT}candidates/results.json`), getJSON(`${OUT}combos/results.json`),
     getJSON('review/vjam-reactivity.json'), getJSON('review/vjam-review.json'),
     listDir('../content/presets/', '.js'), listDir('bench/candidates/', '.js'), loadTraces(),
+    getJSON('bench/ipad-results-2026-10-02.json'),
   ]);
+  state.ipad = ipad || {};
   if (!defs) throw new Error('tools/bench/filters.json が読めない');
   state.defs = defs;
   state.filters = filterList(defs);
@@ -403,7 +405,12 @@ function presetInfo(item) {
       item.source === 'candidates' ? badge('cand', '候補', 'tools/bench/candidates(まだ content/presets に無い)') : badge('', 'FX'),
       state.vjam.adopted.has(item.key) ? badge('vjam', 'VJam 採用', 'VJam 本体の人のレビュー(seed-review.md)で採用') : null,
       flashWarn ? badge('warn', '⚠️ 点滅', `点滅が ${FLASH_WARN} 回/秒を超える`) : null),
-    h('h3', {}, '計測(1280×800・CPU 4 倍スロットル・擬似 120 BPM)'),
+    h('h3', {}, 'iPad 第 9 世代での実測(Safari・1 本だけ)'),
+    (() => { const ip = state.ipad[item.key];
+      if (!ip) return h('p', { class: 'note' }, '実測なし');
+      if (ip.error) return h('p', { class: 'fail' }, 'iPad で起動に失敗した');
+      return kv([['fps', `${fmt(ip.fps, 1)}${ip.fps < 30 ? '(重い)' : ip.fps < 45 ? '(やや重い)' : ''}`, ip.fps < 30 ? 'fail' : ip.fps < 45 ? 'warn' : 'pass']]); })(),
+    h('h3', {}, '計測(Mac・1280×800・CPU 4 倍スロットル・擬似 120 BPM)'),
     metrics,
     h('h3', {}, 'VJam 本体の音の反応(使っている回数)'),
     react ? kv([
