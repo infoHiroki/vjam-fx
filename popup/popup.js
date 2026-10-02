@@ -32,6 +32,24 @@ const PRESET_CATEGORIES = [
     { id: 'dna-aurora', name: 'DNA Aurora' },
     { id: 'plasma-ball', name: 'Plasma Ball' },
     { id: 'hologram', name: 'Hologram' },
+    { id: '3d-plasma', name: '3D Plasma', webgl: true },
+    { id: '3d-terrain', name: '3D Terrain', webgl: true },
+    { id: '3d-tunnel', name: '3D Tunnel', webgl: true },
+    { id: 'apollonian-caves', name: 'Apollonian Caves', webgl: true },
+    { id: 'aurora-shader', name: 'Aurora Shader', webgl: true },
+    { id: 'fractal-zoom', name: 'Fractal Zoom', webgl: true },
+    { id: 'gyroid-flux', name: 'Gyroid Flux', webgl: true },
+    { id: 'hypnotic-spiral', name: 'Hypnotic Spiral', webgl: true },
+    { id: 'kathmandu-alley', name: 'Kathmandu Alley', webgl: true },
+    { id: 'mandelbrot-zoom', name: 'Mandelbrot Zoom', webgl: true },
+    { id: 'neon-tunnel-gpu', name: 'Neon Tunnel GPU', webgl: true },
+    { id: 'plasma-warp', name: 'Plasma Warp', webgl: true },
+    { id: 'quantum-tunnel', name: 'Quantum Tunnel', webgl: true },
+    { id: 'spiral-vortex', name: 'Spiral Vortex', webgl: true },
+    { id: 'terrain-flyover', name: 'Terrain Flyover', webgl: true },
+    { id: 'torii-gates', name: 'Torii Gates', webgl: true },
+    { id: 'tunnel-shader', name: 'Tunnel Shader', webgl: true },
+    { id: 'warp-helix', name: 'Warp Helix', webgl: true },
   ]},
   { label: 'Frames & Film', presets: [
     { id: 'neon-frame', name: 'Neon Frame' },
@@ -48,6 +66,11 @@ const PRESET_CATEGORIES = [
     { id: 'polaroid-flash', name: 'Polaroid Flash' },
     { id: 'tape-distort', name: 'Tape Distort' },
     { id: 'tape-warp', name: 'Tape Warp' },
+    { id: 'flame-frame-gpu', name: 'Flame Frame GPU', webgl: true },
+    { id: 'frost-frame', name: 'Frost Frame', webgl: true },
+    { id: 'glitch-border', name: 'Glitch Border', webgl: true },
+    { id: 'laser-frame-gpu', name: 'Laser Frame GPU', webgl: true },
+    { id: 'plasma-border', name: 'Plasma Border', webgl: true },
   ]},
   { label: 'Patterns', presets: [
     { id: 'kaleidoscope', name: 'Kaleidoscope' },
@@ -68,6 +91,37 @@ const PRESET_CATEGORIES = [
     { id: 'pendulum-wave', name: 'Pendulum Wave' },
     { id: 'compass-rose', name: 'Compass Rose' },
     { id: 'square-hymn', name: 'Square Hymn' },
+    { id: 'abstract-topology', name: 'Abstract Topology', webgl: true },
+    { id: 'bismuth', name: 'Bismuth', webgl: true },
+    { id: 'butterfly-effect', name: 'Butterfly Effect', webgl: true },
+    { id: 'cross-stitch', name: 'Cross Stitch', webgl: true },
+    { id: 'diffraction-grating', name: 'Diffraction Grating', webgl: true },
+    { id: 'fibonacci-spiral-gpu', name: 'Fibonacci Spiral GPU', webgl: true },
+    { id: 'fractal-flame', name: 'Fractal Flame', webgl: true },
+    { id: 'geode', name: 'Geode', webgl: true },
+    { id: 'geometric-tile', name: 'Geometric Tile', webgl: true },
+    { id: 'hilma-circles', name: 'Hilma Circles', webgl: true },
+    { id: 'hilma-spiral', name: 'Hilma Spiral', webgl: true },
+    { id: 'interference-pattern', name: 'Interference Pattern', webgl: true },
+    { id: 'interference-rings', name: 'Interference Rings', webgl: true },
+    { id: 'kaleidoscope-gpu', name: 'Kaleidoscope GPU', webgl: true },
+    { id: 'magnetic-pendulum', name: 'Magnetic Pendulum', webgl: true },
+    { id: 'mandelbulb', name: 'Mandelbulb', webgl: true },
+    { id: 'menger-temple', name: 'Menger Temple', webgl: true },
+    { id: 'moire-gpu', name: 'Moire GPU', webgl: true },
+    { id: 'pendulum-chaos', name: 'Pendulum Chaos', webgl: true },
+    { id: 'petroglyph', name: 'Petroglyph', webgl: true },
+    { id: 'quaternion-julia', name: 'Quaternion Julia', webgl: true },
+    { id: 'sdf-chrome', name: 'SDF Chrome', webgl: true },
+    { id: 'sdf-shapes', name: 'SDF Shapes', webgl: true },
+    { id: 'stained-glass-cathedral', name: 'Stained Glass Cathedral', webgl: true },
+    { id: 'stained-glass-dark', name: 'Stained Glass Dark', webgl: true },
+    { id: 'stained-glass-gpu', name: 'Stained Glass GPU', webgl: true },
+    { id: 'stained-glass-neon', name: 'Stained Glass Neon', webgl: true },
+    { id: 'stained-glass-rose', name: 'Stained Glass Rose', webgl: true },
+    { id: 'tessellation', name: 'Tessellation', webgl: true },
+    { id: 'wave-interference-3d', name: 'Wave Interference 3D', webgl: true },
+    { id: 'woodcut', name: 'Woodcut', webgl: true },
   ]},
   { label: 'Organic', presets: [
     { id: 'cellular', name: 'Cellular' },
@@ -90,6 +144,33 @@ const PRESET_CATEGORIES = [
     { id: 'growth-spiral', name: 'Growth Spiral' },
     { id: 'mycelium', name: 'Mycelium' },
     { id: 'fungal-web', name: 'Fungal Web' },
+    { id: '3d-bubble', name: '3D Bubble', webgl: true },
+    { id: '3d-worm', name: '3D Worm', webgl: true },
+    { id: 'blood-cell-flow', name: 'Blood Cell Flow', webgl: true },
+    { id: 'coral-polyp-gpu', name: 'Coral Polyp GPU', webgl: true },
+    { id: 'crystal-growth', name: 'Crystal Growth', webgl: true },
+    { id: 'ferrofluid', name: 'Ferrofluid', webgl: true },
+    { id: 'fluid-dynamics', name: 'Fluid Dynamics', webgl: true },
+    { id: 'fluid-smoke', name: 'Fluid Smoke', webgl: true },
+    { id: 'ink-vortex-gpu', name: 'Ink Vortex GPU', webgl: true },
+    { id: 'lava-flow', name: 'Lava Flow', webgl: true },
+    { id: 'liquid-chrome', name: 'Liquid Chrome', webgl: true },
+    { id: 'liquid-gold', name: 'Liquid Gold', webgl: true },
+    { id: 'liquid-nitrogen', name: 'Liquid Nitrogen', webgl: true },
+    { id: 'marble-flow', name: 'Marble Flow', webgl: true },
+    { id: 'metaball-pulse', name: 'Metaball Pulse', webgl: true },
+    { id: 'oil-painting', name: 'Oil Painting', webgl: true },
+    { id: 'petri-culture', name: 'Petri Culture', webgl: true },
+    { id: 'psychedelic-flow', name: 'Psychedelic Flow', webgl: true },
+    { id: 'reaction-diffusion', name: 'Reaction Diffusion', webgl: true },
+    { id: 'sdf-organic', name: 'SDF Organic', webgl: true },
+    { id: 'smoke-rings', name: 'Smoke Rings', webgl: true },
+    { id: 'smoke-rings-gpu', name: 'Smoke Rings GPU', webgl: true },
+    { id: 'soap-film', name: 'Soap Film', webgl: true },
+    { id: 'suminagashi', name: 'Suminagashi', webgl: true },
+    { id: 'synapse-fire', name: 'Synapse Fire', webgl: true },
+    { id: 'voronoi-electric', name: 'Voronoi Electric', webgl: true },
+    { id: 'voronoi-gpu', name: 'Voronoi GPU', webgl: true },
   ]},
   { label: 'Nature', presets: [
     { id: 'fractal-tree', name: 'Fractal Tree' },
@@ -109,6 +190,11 @@ const PRESET_CATEGORIES = [
     { id: 'moss-carpet', name: 'Moss Carpet' },
     { id: 'lichen-spread', name: 'Lichen Spread' },
     { id: 'spore-drift', name: 'Spore Drift' },
+    { id: 'erosion-landscape', name: 'Erosion Landscape', webgl: true },
+    { id: 'japanese-garden', name: 'Japanese Garden', webgl: true },
+    { id: 'ridge-silhouette', name: 'Ridge Silhouette', webgl: true },
+    { id: 'tectonic', name: 'Tectonic', webgl: true },
+    { id: 'topographic', name: 'Topographic', webgl: true },
   ]},
   { label: 'Water', presets: [
     { id: 'water-surface', name: 'Water Surface' },
@@ -121,6 +207,18 @@ const PRESET_CATEGORIES = [
     { id: 'kelp-forest', name: 'Kelp Forest' },
     { id: 'ice-formation', name: 'Ice Formation' },
     { id: 'erosion-line', name: 'Erosion Line' },
+    { id: 'deep-caustics', name: 'Deep Caustics', webgl: true },
+    { id: 'deep-sea-vent', name: 'Deep Sea Vent', webgl: true },
+    { id: 'ice-crystal', name: 'Ice Crystal', webgl: true },
+    { id: 'ocean-caustics-gpu', name: 'Ocean Caustics GPU', webgl: true },
+    { id: 'ocean-deep', name: 'Ocean Deep', webgl: true },
+    { id: 'ocean-storm', name: 'Ocean Storm', webgl: true },
+    { id: 'ocean-wave', name: 'Ocean Wave', webgl: true },
+    { id: 'polar-ice', name: 'Polar Ice', webgl: true },
+    { id: 'ripple-interference', name: 'Ripple Interference', webgl: true },
+    { id: 'tide-pattern', name: 'Tide Pattern', webgl: true },
+    { id: 'tide-pool-life', name: 'Tide Pool Life', webgl: true },
+    { id: 'water-caustics', name: 'Water Caustics', webgl: true },
   ]},
   { label: 'Grid & Tech', presets: [
     { id: 'glitch-grid', name: 'Glitch Grid' },
@@ -144,6 +242,17 @@ const PRESET_CATEGORIES = [
     { id: 'data-sprites', name: 'Data Sprites' },
     { id: 'matrix-code', name: 'Matrix Code' },
     { id: 'matrix-rain', name: 'Matrix Rain' },
+    { id: 'brain-scan', name: 'Brain Scan', webgl: true },
+    { id: 'circuit-gpu', name: 'Circuit GPU', webgl: true },
+    { id: 'circuit-matrix', name: 'Circuit Matrix', webgl: true },
+    { id: 'circuit-schematic', name: 'Circuit Schematic', webgl: true },
+    { id: 'data-rain', name: 'Data Rain', webgl: true },
+    { id: 'digital-rain-gpu', name: 'Digital Rain GPU', webgl: true },
+    { id: 'dna-sequence', name: 'DNA Sequence', webgl: true },
+    { id: 'holo-display', name: 'Holo Display', webgl: true },
+    { id: 'microchip-die', name: 'Microchip Die', webgl: true },
+    { id: 'neon-grid-city', name: 'Neon Grid City', webgl: true },
+    { id: 'neon-grid-shader', name: 'Neon Grid Shader', webgl: true },
   ]},
   { label: 'Space', presets: [
     { id: 'starfield', name: 'Starfield' },
@@ -160,6 +269,17 @@ const PRESET_CATEGORIES = [
     { id: 'sonar-ping', name: 'Sonar Ping' },
     { id: 'sand-dunes', name: 'Sand Dunes' },
     { id: 'solar-flare', name: 'Solar Flare' },
+    { id: 'asteroid-belt', name: 'Asteroid Belt', webgl: true },
+    { id: 'black-hole-psyche', name: 'Black Hole Psyche', webgl: true },
+    { id: 'galaxy-spiral', name: 'Galaxy Spiral', webgl: true },
+    { id: 'gravitational-lens', name: 'Gravitational Lens', webgl: true },
+    { id: 'magnetic-storm-gpu', name: 'Magnetic Storm GPU', webgl: true },
+    { id: 'nebula-cloud', name: 'Nebula Cloud', webgl: true },
+    { id: 'nebula-gpu', name: 'Nebula GPU', webgl: true },
+    { id: 'radio-telescope', name: 'Radio Telescope', webgl: true },
+    { id: 'solar-corona', name: 'Solar Corona', webgl: true },
+    { id: 'sun-surface', name: 'Sun Surface', webgl: true },
+    { id: 'supernova', name: 'Supernova', webgl: true },
   ]},
   { label: 'Neon & Glow', presets: [
     { id: 'neon-80s', name: 'Neon 80s' },
@@ -178,6 +298,15 @@ const PRESET_CATEGORIES = [
     { id: 'fire-wall', name: 'Fire Wall' },
     { id: 'paper-lantern', name: 'Paper Lantern' },
     { id: 'neon-type', name: 'Neon Type' },
+    { id: 'electric-storm', name: 'Electric Storm', webgl: true },
+    { id: 'energy-field', name: 'Energy Field', webgl: true },
+    { id: 'fire-shader', name: 'Fire Shader', webgl: true },
+    { id: 'holographic-foil', name: 'Holographic Foil', webgl: true },
+    { id: 'neon-pulse-rings', name: 'Neon Pulse Rings', webgl: true },
+    { id: 'neon-sign-flicker', name: 'Neon Sign Flicker', webgl: true },
+    { id: 'plasma-globe', name: 'Plasma Globe', webgl: true },
+    { id: 'plasma-globe-gpu', name: 'Plasma Globe GPU', webgl: true },
+    { id: 'thermite-reaction', name: 'Thermite Reaction', webgl: true },
   ]},
   { label: 'Glitch & Retro', presets: [
     { id: 'glitch-8bit', name: 'Glitch 8bit' },
@@ -204,6 +333,13 @@ const PRESET_CATEGORIES = [
     { id: 'pixel-rain', name: 'Pixel Rain' },
     { id: 'pixel-sort-b', name: 'Pixel Sort' },
     { id: 'ascii-art', name: 'ASCII Art' },
+    { id: 'circuit-bend', name: 'Circuit Bend', webgl: true },
+    { id: 'glitch-corruption', name: 'Glitch Corruption', webgl: true },
+    { id: 'glitch-rain', name: 'Glitch Rain', webgl: true },
+    { id: 'glitch-shader', name: 'Glitch Shader', webgl: true },
+    { id: 'heat-distortion', name: 'Heat Distortion', webgl: true },
+    { id: 'pixel-grid', name: 'Pixel Grid', webgl: true },
+    { id: 'retro-sun', name: 'Retro Sun', webgl: true },
   ]},
   { label: 'Audio Reactive', presets: [
     { id: 'frequency-rings', name: 'Frequency Rings' },
@@ -225,6 +361,19 @@ const PRESET_CATEGORIES = [
     { id: 'vinyl-groove', name: 'Vinyl Groove' },
     { id: 'cassette-reel', name: 'Cassette Reel' },
     { id: 'honeycomb-pulse', name: 'Honeycomb Pulse' },
+    { id: '3d-wave', name: '3D Wave', webgl: true },
+    { id: 'color-organ', name: 'Color Organ', webgl: true },
+    { id: 'cymatics', name: 'Cymatics', webgl: true },
+    { id: 'doppler-shift', name: 'Doppler Shift', webgl: true },
+    { id: 'electromagnetic-wave', name: 'Electromagnetic Wave', webgl: true },
+    { id: 'sound-sculpture', name: 'Sound Sculpture', webgl: true },
+    { id: 'sound-wave-propagation', name: 'Sound Wave Propagation', webgl: true },
+    { id: 'spectral-analysis', name: 'Spectral Analysis', webgl: true },
+    { id: 'thermal-cam', name: 'Thermal Cam', webgl: true },
+    { id: 'vinyl-groove-gpu', name: 'Vinyl Groove GPU', webgl: true },
+    { id: 'vinyl-waveform', name: 'Vinyl Waveform', webgl: true },
+    { id: 'waveform-mesh', name: 'Waveform Mesh', webgl: true },
+    { id: 'waveform-terrain', name: 'Waveform Terrain', webgl: true },
   ]},
   { label: 'Particles', presets: [
     { id: 'snowfall', name: 'Snowfall' },
@@ -236,17 +385,30 @@ const PRESET_CATEGORIES = [
     { id: 'smoke-stack', name: 'Smoke Stack' },
     { id: 'fog-bank', name: 'Fog Bank' },
     { id: 'wind-ripple', name: 'Wind Ripple' },
+    { id: '3d-particles', name: '3D Particles', webgl: true },
+    { id: 'cloud-chamber', name: 'Cloud Chamber', webgl: true },
+    { id: 'electron-cloud', name: 'Electron Cloud', webgl: true },
+    { id: 'particle-accelerator', name: 'Particle Accelerator', webgl: true },
+    { id: 'sand-timer', name: 'Sand Timer', webgl: true },
   ]},
   { label: 'Weather', presets: [
     { id: 'rain', name: 'Rain' },
     { id: 'neon-rain', name: 'Neon Rain' },
     { id: 'cyber-rain-heavy', name: 'Cyber Rain' },
     { id: 'ceiling-drip', name: 'Ceiling Drip' },
+    { id: 'rain-window', name: 'Rain Window', webgl: true },
+    { id: 'sandstorm', name: 'Sandstorm', webgl: true },
+    { id: 'storm-cell', name: 'Storm Cell', webgl: true },
+    { id: 'weather-radar', name: 'Weather Radar', webgl: true },
   ]},
 ];
 
 // Flat list for compatibility
 const ALL_PRESETS = PRESET_CATEGORIES.flatMap(c => c.presets);
+
+// WebGL のプリセット(webgl: true。VJam 本体から #44 で取り込んだもの)。エンジンは WebGL のレイヤーを同時に 1 枚までにするので、
+// Next / Auto の抽選では 1 回に 1 本まで(2 本引くと 1 本がすぐ消えて、その回のレイヤーが減る)
+const WEBGL_PRESETS = ALL_PRESETS.filter(p => p.webgl).map(p => p.id);
 
 const FILTER_NAMES = ['invert', 'hue-rotate', 'grayscale', 'saturate', 'brightness', 'contrast', 'sepia', 'blur'];
 const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
@@ -509,7 +671,8 @@ class PopupController {
       const ids = new Set(Array.isArray(pool.presets) ? pool.presets : []);
       const presets = ALL_PRESETS.filter(p => ids.has(p.id));
       if (presets.length > 0) this.poolPresets = presets;
-      this.pool = { filters: pool.filters, blends: pool.blends };
+      // webgl: Auto の抽選で 1 回に 1 本までにするため、エンジンへプールごと渡す(SW もページ遷移後にプールごと渡す)
+      this.pool = { filters: pool.filters, blends: pool.blends, webgl: WEBGL_PRESETS };
     } catch (e) { /* 読めない: 今の全プリセットで動く */ }
   }
 
@@ -571,13 +734,23 @@ class PopupController {
     return { action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters, pool: this.pool };
   }
 
-  // Next の選び方: プールからランダムに 1〜3 本
+  // Next の選び方: プールからランダムに 1〜3 本。WebGL は 1 本まで
   _randomPoolPresets() {
     const pool = this._usablePool();
     const count = 1 + Math.floor(Math.random() * Math.min(3, pool.length));
     const shuffled = pool.slice();
     for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
-    return shuffled.slice(0, count);
+    const chosen = [];
+    let hasWebgl = false;
+    for (const p of shuffled) {
+      if (chosen.length >= count) break;
+      if (p.webgl) {
+        if (hasWebgl) continue;
+        hasWebgl = true;
+      }
+      chosen.push(p);
+    }
+    return chosen;
   }
 
   async _loadScenes() {
@@ -1173,8 +1346,8 @@ class PopupController {
         for (const p of chosen) {
           await this._injectPreset(p.id);
         }
-        // poolPresets: 選んだものが重かったときの入れ替え先(エンジンが選ぶ)
-        await this._sendCommand({ action: 'crossfade', presets: chosen.map(p => p.id), blendMode: this.selectedBlendMode, locks: this.locks, poolPresets: this._usablePool().map(p => p.id) });
+        // poolPresets: 選んだものが重かったときの入れ替え先(エンジンが選ぶ。webgl で WebGL を 2 枚にしない)
+        await this._sendCommand({ action: 'crossfade', presets: chosen.map(p => p.id), blendMode: this.selectedBlendMode, locks: this.locks, poolPresets: this._usablePool().map(p => p.id), webgl: WEBGL_PRESETS });
         if (!this.locks.effect) {
           this.activeLayers.clear();
           for (const p of chosen) this.activeLayers.add(p.id);

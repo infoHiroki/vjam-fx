@@ -5,8 +5,8 @@ import { resolve } from 'path';
 // デフォルトプール(Next / Auto / Rnd の抽選対象。形式は #1、中身は #4 の選択画面で選んだ決定版 tools/curate/selected-pool.json)
 const pool = JSON.parse(readFileSync(resolve(__dirname, '../content/default-pool.json'), 'utf-8'));
 const selected = JSON.parse(readFileSync(resolve(__dirname, '../tools/curate/selected-pool.json'), 'utf-8'));
-// 人が選び直し画面(tools/review.html)で選んだ結果(#35)
-const userPool = JSON.parse(readFileSync(resolve(__dirname, '../tools/curate/user-pool-2026-10-02.json'), 'utf-8'));
+// 人が選び直し画面(tools/review.html)で選んだ結果(#35 の 173 本に WebGL 158 本を足したもの。#44)
+const userPool = JSON.parse(readFileSync(resolve(__dirname, '../tools/curate/user-pool-2026-10-02-webgl.json'), 'utf-8'));
 // VJam 本体(~/Dev/vjam/src/main.js)の COMPOUND_FILTERS から invert を含む 2 種を除いたもの(並びも VJam と同じ)。
 // invert はオーバーレイの黒を白にしてページを潰すので外す
 const VJAM_FILTERS_WITHOUT_INVERT = [
@@ -28,6 +28,7 @@ const VJAM_FILTERS_WITHOUT_INVERT = [
 const presetFiles = readdirSync(resolve(__dirname, '../content/presets'))
   .filter(f => f.endsWith('.js'))
   .map(f => f.slice(0, -3));
+const usesWebgl = (id) => /createCanvas\([^;]*WEBGL/.test(readFileSync(resolve(__dirname, `../content/presets/${id}.js`), 'utf-8'));
 
 describe('content/default-pool.json', () => {
   it('has the format of #1', () => {
@@ -41,11 +42,18 @@ describe('content/default-pool.json', () => {
     expect(pool).toEqual(selected);
   });
 
-  // 選び直し画面で選んだ 174 本から neon-sign を外したもの(看板の単語に成人向け・罵倒語・薬物が多いので、#35 で取り込まないことにした)
-  it('has the 173 presets that were picked in the review screen (without neon-sign)', () => {
-    expect(pool.presets.length).toBe(173);
+  // 選び直し画面で選んだ 331 本。neon-sign は入れない(看板の単語に成人向け・罵倒語・薬物が多いので、#35 で取り込まないことにした)
+  it('has the 331 presets that were picked in the review screen (without neon-sign)', () => {
+    expect(pool.presets.length).toBe(331);
     expect(pool.presets).not.toContain('neon-sign');
     expect(pool.presets).toEqual(userPool.presets);
+  });
+
+  // 2D の 173 本(#35)+ VJam 本体の WebGL 158 本(#44)
+  it('has the 173 2D presets and 158 WebGL ones', () => {
+    const webgl = pool.presets.filter(usesWebgl);
+    expect(webgl.length).toBe(158);
+    expect(pool.presets.length - webgl.length).toBe(173);
   });
 
   it('uses the VJam compound filters without invert, in the VJam order (all pool files agree)', () => {

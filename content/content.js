@@ -68,6 +68,23 @@
     return list[Math.floor(Math.random() * list.length)];
   }
 
+  // Auto の抽選: names からランダムに count 本。webgl(WebGL のプリセット名の Set)は 1 本まで。
+  // WebGL のレイヤーは同時に 1 枚までなので(_removeOtherWebglLayers)、2 本引くと 1 本がすぐ消えてその回のレイヤーが減る
+  function pickLayers(names, count, webgl) {
+    const shuffled = names.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
+    const chosen = [];
+    let hasWebgl = false;
+    for (let i = 0; i < shuffled.length && chosen.length < count; i++) {
+      if (webgl.has(shuffled[i])) {
+        if (hasWebgl) continue;
+        hasWebgl = true;
+      }
+      chosen.push(shuffled[i]);
+    }
+    return chosen;
+  }
+
   // プールの filters(CSS の filter 文字列)。空・不正なら既定
   function poolFilters(pool) {
     const list = pool && Array.isArray(pool.filters) ? pool.filters.filter(f => typeof f === 'string' && f) : [];
@@ -141,6 +158,7 @@
       this._heavyHoldMs = 0; // 次のフレームから数えない時間(レイヤーを足した・外した)
       this._heavyHoldUntil = 0;
       this._poolPresets = null; // 入れ替え先を選ぶプール(Auto / Next が渡す)
+      this._webglPresets = new Set(); // WebGL のプリセット名(Auto はプールの webgl、Next は webgl で渡す)。抽選では 1 回に 1 本まで
       this._effectLock = false; // エフェクトのロック(Auto / Next が渡す)。ロック中は入れ替えない
       this._pendingPreset = null; // SW に読み込みを頼んだ入れ替え先
       this._heavyPending = null; // 外したあと、本当に軽くなったかを見ているもの { name, fps, replacement, samples }
@@ -999,7 +1017,7 @@
       const layer = name && this.activeLayers.get(name);
       if (!layer || !layer.auto || this._effectLock) return;
       this._heavyPresets.add(name);
-      const replacement = this._pickReplacement();
+      const replacement = this._pickReplacement(name);
       this._removeLayer(name);
       if (this.currentPresetName === name) {
         this.currentPreset = null;
@@ -1030,9 +1048,15 @@
       }, window.location.origin || '*');
     }
 
-    // 入れ替え先: プールから、出ているもの・このページで重いと分かったものを除いて 1 つ。読み込み済みのものを優先
-    _pickReplacement() {
-      const pool = (this._poolPresets || []).filter(n => !this.activeLayers.has(n) && !this._heavyPresets.has(n));
+    // 入れ替え先: プールから、出ているもの・このページで重いと分かったものを除いて 1 つ。読み込み済みのものを優先。
+    // 外すもの(replacing)のほかに WebGL のレイヤーが残るなら WebGL は選ばない(足すと残っている方が消える)
+    _pickReplacement(replacing) {
+      let webglLeft = false;
+      for (const [name, layer] of this.activeLayers) {
+        if (name !== replacing && isWebglPreset(layer.preset)) webglLeft = true;
+      }
+      const pool = (this._poolPresets || []).filter(n => !this.activeLayers.has(n) && !this._heavyPresets.has(n)
+        && !(webglLeft && this._webglPresets.has(n)));
       if (pool.length === 0) return null;
       const ready = pool.filter(n => window.VJamFX && window.VJamFX.presets[n]);
       return pickOne(ready.length ? ready : pool);
@@ -1185,6 +1209,7 @@
      * ロックしていない filter は外し、blend は options.blendMode(無ければ screen)にする。どちらもすぐ掛ける(押した反応)。
      * 不透明度は人が設定した値のまま。Auto / Rnd のタイマーは止める(popup が必要なら送り直す)
      * options.poolPresets: Next が選んだプール(入れたレイヤーが重かったときの入れ替え先)
+     * options.webgl: WebGL のプリセット名(入れ替え先で WebGL を 2 枚にしない)
      */
     crossfade(presetNames, options) {
       const locks = (options && options.locks) || {};
@@ -1194,6 +1219,7 @@
       if (!locks.blend) this.setBlendMode((options && options.blendMode) || 'screen');
       this._effectLock = !!locks.effect;
       if (options && Array.isArray(options.poolPresets)) this._poolPresets = options.poolPresets;
+      if (options && Array.isArray(options.webgl)) this._webglPresets = new Set(options.webgl);
       if (locks.effect) return;
 
       for (const name of [...this.activeLayers.keys()]) this._removeLayer(name);
@@ -1261,6 +1287,8 @@
       this._autoCycleLocks = (options && options.locks) || {};
       this._autoCyclePool = (options && options.pool) || null;
       this._poolPresets = presetNames;
+      // プールの webgl: WebGL のプリセット名(popup がカタログから入れる。SW もプールごと渡す)
+      if (this._autoCyclePool && Array.isArray(this._autoCyclePool.webgl)) this._webglPresets = new Set(this._autoCyclePool.webgl);
       this._effectLock = !!this._autoCycleLocks.effect;
       this._autoSwitchCount = 0;
       this._autoRestAt = 4 + Math.floor(Math.random() * 3);
@@ -1353,7 +1381,7 @@
       const presets = usable.length ? usable : this._autoCyclePresets;
       const locks = this._autoCycleLocks || {};
 
-      // Choose 1-3 random layers (unless effect locked)
+      // Choose 1-3 random layers (unless effect locked)。WebGL は 1 本まで
       let chosen;
       if (locks.effect) {
         chosen = [...this.activeLayers.keys()];
@@ -1363,9 +1391,7 @@
         }
       } else {
         const count = 1 + Math.floor(Math.random() * Math.min(3, presets.length));
-        const shuffled = presets.slice();
-        for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
-        chosen = shuffled.slice(0, count);
+        chosen = pickLayers(presets, count, this._webglPresets);
 
         // Remove layers not in chosen set
         for (const name of this.activeLayers.keys()) {
@@ -1487,7 +1513,7 @@
           this.kill({ locks: msg.locks });
           break;
         case 'crossfade':
-          this.crossfade(msg.presets, { blendMode: msg.blendMode, locks: msg.locks, poolPresets: msg.poolPresets });
+          this.crossfade(msg.presets, { blendMode: msg.blendMode, locks: msg.locks, poolPresets: msg.poolPresets, webgl: msg.webgl });
           break;
         case 'randomizeFX':
           this.randomizeFX({ skipBlend: !!msg.skipBlend, pool: msg.pool });

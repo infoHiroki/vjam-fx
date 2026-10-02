@@ -37,8 +37,8 @@ describe('PopupController', () => {
   });
 
   describe('preset list', () => {
-    it('should have 212 presets available', () => {
-      expect(controller.presets.length).toBe(212);
+    it('should have 370 presets available', () => {
+      expect(controller.presets.length).toBe(370);
     });
 
     it('should have all expected preset names', () => {
@@ -187,7 +187,7 @@ describe('PopupController', () => {
       await controller._saveState();
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.autoCyclePresets).not.toBeNull();
-      expect(call[0].state.autoCyclePresets.length).toBe(212);
+      expect(call[0].state.autoCyclePresets.length).toBe(370);
     });
 
     it('should have null autoCyclePresets when not cycling', async () => {
@@ -623,6 +623,8 @@ describe('PopupController', () => {
       filters: ['saturate(2)', 'hue-rotate(90deg) saturate(2)'],
       blends: ['screen', 'difference'],
     };
+    // カタログで webgl: true のもの(#44)
+    const WEBGL_IDS = new PopupController().presets.filter(p => p.webgl).map(p => p.id);
 
     // executeScript に渡ったコマンド(_sendCommand の args[0])
     const sentCommands = () => chrome.scripting.executeScript.mock.calls
@@ -639,22 +641,23 @@ describe('PopupController', () => {
       await controller._loadPool();
       expect(fetchMock).toHaveBeenCalledWith('/content/default-pool.json');
       expect(controller.poolPresets.map(p => p.id).sort()).toEqual(['neon-tunnel', 'rain']);
-      expect(controller.pool).toEqual({ filters: POOL.filters, blends: POOL.blends });
+      // webgl: カタログの WebGL のプリセット(#44。エンジンが Auto の抽選で 1 回に 1 本までにする)
+      expect(controller.pool).toEqual({ filters: POOL.filters, blends: POOL.blends, webgl: WEBGL_IDS });
       // 手動の一覧は全部
-      expect(controller.presets.length).toBe(212);
+      expect(controller.presets.length).toBe(370);
     });
 
     it('falls back to all presets when the pool cannot be read', async () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('not found')));
       await controller._loadPool();
-      expect(controller.poolPresets.length).toBe(212);
+      expect(controller.poolPresets.length).toBe(370);
       expect(controller.pool).toBeNull();
     });
 
     it('falls back to all presets when the pool has no known preset', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: () => Promise.resolve({ ...POOL, presets: ['no-such-preset'] }) }));
       await controller._loadPool();
-      expect(controller.poolPresets.length).toBe(212);
+      expect(controller.poolPresets.length).toBe(370);
     });
 
     it('Next picks presets only from the pool', async () => {
@@ -1457,6 +1460,97 @@ describe('PopupController', () => {
       await vi.waitFor(() => expect(chrome.storage.local.set).toHaveBeenCalled());
       expect(chrome.storage.local.remove).not.toHaveBeenCalled();
       expect(controller.heavyPresets).toEqual(HEAVY);
+    });
+  });
+
+  // VJam 本体の WebGL のプリセット(#44)。エンジンは WebGL のレイヤーを同時に 1 枚までにする(#42)ので、
+  // 抽選(Next / トグル ON の Auto)で 2 本引くと 1 本がすぐ消えてその回のレイヤーが減る。1 回に 1 本まで
+  describe('WebGL presets (#44)', () => {
+    const presetsDir = resolve(__dirname, '../content/presets');
+    const usesWebgl = (id) => /createCanvas\([^;]*WEBGL/.test(readFileSync(resolve(presetsDir, `${id}.js`), 'utf-8'));
+    const webglCount = (ids) => ids.filter(id => controller.presets.find(p => p.id === id).webgl).length;
+    const pick = (ids) => ids.map(id => controller.presets.find(p => p.id === id));
+    const sentCommands = () => chrome.scripting.executeScript.mock.calls
+      .map(c => c[0].args && c[0].args[0])
+      .filter(m => m && m.action);
+
+    afterEach(() => {
+      if (Math.random.mockRestore) Math.random.mockRestore();
+      vi.unstubAllGlobals();
+    });
+
+    it('marks exactly the presets that draw with a WEBGL canvas (158)', () => {
+      const marked = controller.presets.filter(p => p.webgl).map(p => p.id);
+      expect(marked.length).toBe(158);
+      for (const p of controller.presets) expect([p.id, usesWebgl(p.id)]).toEqual([p.id, !!p.webgl]);
+    });
+
+    it('Next picks at most one WebGL preset, and still 3 when 2D ones are left', () => {
+      controller.poolPresets = pick(['3d-tunnel', 'fire-shader', 'mandelbulb', 'rain', 'radar']);
+      const sizes = new Set();
+      let withWebgl = 0;
+      for (let i = 0; i < 300; i++) {
+        const ids = controller._randomPoolPresets().map(p => p.id);
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(webglCount(ids)).toBeLessThanOrEqual(1);
+        sizes.add(ids.length);
+        if (webglCount(ids) === 1) withWebgl++;
+      }
+      // 1〜3 本は今まで通り(WebGL を飛ばした分は 2D で埋める)
+      expect([...sizes].sort()).toEqual([1, 2, 3]);
+      expect(withWebgl).toBeGreaterThan(0);
+
+      vi.spyOn(Math, 'random').mockReturnValue(0.99); // 3 本・並べ替えは元の順(WebGL が先頭に 3 本)
+      expect(controller._randomPoolPresets().map(p => p.id)).toEqual(['3d-tunnel', 'rain', 'radar']);
+    });
+
+    it('Next picks one when the pool is all WebGL', () => {
+      controller.poolPresets = pick(['3d-tunnel', 'fire-shader', 'mandelbulb']);
+      vi.spyOn(Math, 'random').mockReturnValue(0.99);
+      expect(controller._randomPoolPresets().length).toBe(1);
+    });
+
+    it('never picks two from the default pool (331)', async () => {
+      const POOL = JSON.parse(readFileSync(resolve(__dirname, '../content/default-pool.json'), 'utf-8'));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: () => Promise.resolve(POOL) }));
+      await controller._loadPool();
+      expect(controller.poolPresets.length).toBe(331);
+      let withWebgl = 0;
+      for (let i = 0; i < 1000; i++) {
+        const ids = controller._randomPoolPresets().map(p => p.id);
+        expect(webglCount(ids)).toBeLessThanOrEqual(1);
+        if (webglCount(ids) === 1) withWebgl++;
+      }
+      expect(withWebgl).toBeGreaterThan(0);
+    });
+
+    it('Next tells the engine which presets are WebGL (it picks a replacement for a heavy layer)', async () => {
+      const btn = document.createElement('button');
+      btn.id = 'btn-next';
+      container.querySelector('.popup').appendChild(btn);
+      controller._bindEvents();
+      controller.isActive = true;
+      controller._coreInjected = true;
+      controller.poolPresets = controller.presets.filter(p => ['3d-tunnel', 'rain'].includes(p.id));
+
+      btn.click();
+      await vi.waitFor(() => expect(controller._busy).toBe(false));
+      const cmd = sentCommands().find(m => m.action === 'crossfade');
+      expect(cmd.webgl.length).toBe(158);
+      expect(cmd.webgl).toContain('3d-tunnel');
+      expect(cmd.webgl).not.toContain('rain');
+    });
+
+    it('Auto gets the WebGL list in the pool (the SW passes the pool on after navigation too)', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: () => Promise.resolve({ version: 1, presets: ['3d-tunnel', 'rain'], filters: [], blends: [] }) }));
+      await controller._loadPool();
+      const cmd = controller._autoCycleCommand();
+      expect(cmd.pool.webgl.length).toBe(158);
+      expect(cmd.pool.webgl).toContain('3d-tunnel');
+      controller.isActive = true;
+      await controller._saveState();
+      const saved = chrome.runtime.sendMessage.mock.calls.map(c => c[0]).filter(m => m.type === 'setState').pop();
+      expect(saved.state.pool.webgl).toEqual(cmd.pool.webgl);
     });
   });
 });
