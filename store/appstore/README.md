@@ -52,7 +52,7 @@ App Store Connect が受け付ける大きさで撮る(違うと上げられな�
 
 - iPad 13 インチ:2064 × 2752 / 2048 × 2732(横向きはその逆)。13 インチの iPad で撮るのがいちばん楽
 - 手元に 13 インチが無いとき:Xcode のシミュレータ(iPad Pro 13-inch)に入れて、`xcrun simctl io booted screenshot <ファイル>.png` で撮ると、ちょうどの大きさになる(保存先は内蔵ディスクの絶対パスに。外付けのディスクには書けないことがある)
-- iPhone も出すなら(`TARGETED_DEVICE_FAMILY` に 1 が入っているとき)iPhone 6.9 インチ:1320 × 2868 / 1290 × 2796 も要る
+- 今は iPad だけ(`TARGETED_DEVICE_FAMILY` = 2)なので iPad のスクショだけでよい。iPhone を足したら 6.9 インチ:1320 × 2868 / 1290 × 2796 も要る
 
 ## 音を作り直す
 
