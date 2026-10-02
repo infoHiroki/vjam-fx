@@ -1858,7 +1858,6 @@ export { PopupController };
 // CTA rotation — show a different value prop each time popup opens
 const _ctaMessages = [
   'Take it to a party → VJam Full (HDMI output)',
-  '270+ presets with GLSL shaders → VJam Full',
   'Beat detection from mic → VJam Full',
   'Works offline on any device → VJam Full',
 ];
