@@ -190,6 +190,23 @@ export function readState(page) {
   });
 }
 
+// エンジンの Auto / Rnd の状態
+export function readAuto(page) {
+  return page.evaluate(() => {
+    const e = window._vjamFxEngine;
+    if (!e) return { engine: false };
+    return {
+      engine: true,
+      cycling: !!e._autoCycleTimer,
+      presets: e._autoCyclePresets ? e._autoCyclePresets.length : 0,
+      pool: !!(e._autoCyclePool && e._autoCyclePool.filters && e._autoCyclePool.blends),
+      blend: !!e._autoBlend,
+      filters: !!e._autoFilters,
+      fx: !!e._autoFXTimer,
+    };
+  });
+}
+
 // shadow root の中の、表示されているキャンバス(createGraphics の裏バッファは display: none)の位置と見え方
 export function readCanvases(page) {
   return page.evaluate(() => {

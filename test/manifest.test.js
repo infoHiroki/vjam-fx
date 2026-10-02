@@ -48,6 +48,10 @@ describe('manifest.json', () => {
     expect(manifest.host_permissions).toBeUndefined();
   });
 
+  it('should ask for all hosts only as optional (全タブで ON を ON にしたときに求める)', () => {
+    expect(manifest.optional_host_permissions).toEqual(['<all_urls>']);
+  });
+
   it('should have web_accessible_resources for p5.js and content modules', () => {
     expect(manifest.web_accessible_resources).toBeDefined();
     const resources = manifest.web_accessible_resources[0].resources;

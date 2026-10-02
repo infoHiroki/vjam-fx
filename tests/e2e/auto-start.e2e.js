@@ -5,28 +5,11 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { startSite, launchWithExtension, openPopup, readState, isAudioPlaying, diffScore } from './helpers.js';
+import { startSite, launchWithExtension, openPopup, readState, readAuto, isAudioPlaying, diffScore } from './helpers.js';
 
 const POOL = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../content/default-pool.json'), 'utf8')).presets;
 const VISIBLE_DIFF = 0.1; // smoke.e2e.js と同じ(ベースラインとの差がこれを超えたら「見えている」)
 const MOVING_DIFF = 0.05; // 同じ(1 秒あけた 2 枚の差がこれを超えたら「動いている」)
-
-// エンジンの Auto / Rnd の状態
-function readAuto(page) {
-  return page.evaluate(() => {
-    const e = window._vjamFxEngine;
-    if (!e) return { engine: false };
-    return {
-      engine: true,
-      cycling: !!e._autoCycleTimer,
-      presets: e._autoCyclePresets ? e._autoCyclePresets.length : 0,
-      pool: !!(e._autoCyclePool && e._autoCyclePool.filters && e._autoCyclePool.blends),
-      blend: !!e._autoBlend,
-      filters: !!e._autoFilters,
-      fx: !!e._autoFXTimer,
-    };
-  });
-}
 
 test.describe.serial('トグル ON だけで Auto が始まる(既定の設定)', () => {
   let site, ext, page, popup, baseline, drawn;
