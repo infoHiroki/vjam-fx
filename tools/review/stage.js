@@ -3,7 +3,7 @@
 import { createFeed, mergeUnread } from './audio.js';
 
 const PAGE = 'bench/site/article.html';
-const PRESET_DIR = { fx: '../content/presets/', candidates: 'bench/candidates/' };
+const PRESET_DIR = { fx: '../content/presets/', candidates: 'bench/candidates/', webgl: 'bench/candidates-webgl/' };
 const BASE = ['../lib/p5.min.js', '../content/base-preset.js'];
 const ENGINE = '../content/content.js';
 const BATCH = 20; // プリセットの読み込みを何本ずつ並べるか(popup の _injectAllPresets と同じ)

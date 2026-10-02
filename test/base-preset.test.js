@@ -40,6 +40,64 @@ describe('BasePreset', () => {
     expect(() => preset.destroy()).not.toThrow();
   });
 
+  // VJam 本体と同じ: WebGL のコンテキストを remove の前に WEBGL_lose_context で手放す(#42)
+  describe('WebGL context', () => {
+    function canvasWith(contexts) {
+      return { getContext: vi.fn(type => contexts[type] || null) };
+    }
+    function glWithLoseContext() {
+      const ext = { loseContext: vi.fn() };
+      return { ext, gl: { getExtension: vi.fn(name => name === 'WEBGL_lose_context' ? ext : null) } };
+    }
+
+    it('loses the WebGL2 context before p5.remove()', () => {
+      const { ext, gl } = glWithLoseContext();
+      const order = [];
+      ext.loseContext.mockImplementation(() => order.push('lose'));
+      const p5 = { canvas: canvasWith({ webgl2: gl }), remove: vi.fn(() => order.push('remove')) };
+      preset.p5 = p5;
+      preset.destroy();
+      expect(gl.getExtension).toHaveBeenCalledWith('WEBGL_lose_context');
+      expect(order).toEqual(['lose', 'remove']);
+      expect(preset.p5).toBeNull();
+    });
+
+    it('loses a WebGL1 context too', () => {
+      const { ext, gl } = glWithLoseContext();
+      preset.p5 = { canvas: canvasWith({ webgl: gl }), remove: vi.fn() };
+      preset.destroy();
+      expect(ext.loseContext).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing extra for a 2D canvas (getContext returns null for WebGL)', () => {
+      const remove = vi.fn();
+      const canvas = canvasWith({});
+      preset.p5 = { canvas, remove };
+      preset.destroy();
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(preset.p5).toBeNull();
+    });
+
+    it('still removes p5 when getContext throws or the extension is missing', () => {
+      const remove = vi.fn();
+      preset.p5 = { canvas: { getContext: () => { throw new Error('lost'); } }, remove };
+      expect(() => preset.destroy()).not.toThrow();
+      expect(remove).toHaveBeenCalledTimes(1);
+
+      const remove2 = vi.fn();
+      preset.p5 = { canvas: canvasWith({ webgl2: { getExtension: () => null } }), remove: remove2 };
+      expect(() => preset.destroy()).not.toThrow();
+      expect(remove2).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops the shader (it belongs to the lost context)', () => {
+      preset._shader = { program: 1 };
+      preset.p5 = { canvas: canvasWith({}), remove: vi.fn() };
+      preset.destroy();
+      expect(preset._shader).toBeNull();
+    });
+  });
+
   // VJam 本体の BasePreset と同じ: static paramDefs の default を params に入れる
   describe('paramDefs', () => {
     it('hydrates params from paramDefs defaults', () => {

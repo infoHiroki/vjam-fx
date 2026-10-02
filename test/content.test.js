@@ -2898,4 +2898,160 @@ describe('VJamFXEngine', () => {
       });
     });
   });
+
+  // WebGL のレイヤーは同時に 1 枚まで(#42)。2 枚目が来たら古い WebGL のレイヤーをフェードで外す
+  describe('WebGL layers (#42)', () => {
+    const GL = ['gl-a', 'gl-b', 'gl-c'];
+    const FLAT = ['flat-a', 'flat-b'];
+    const destroyed = [];
+
+    beforeAll(() => {
+      // p5 の WEBGL で描くプリセットは renderer の isP3D が true(2D は false)
+      const make = (name, isP3D) => class {
+        constructor() { this.p5 = { _renderer: { isP3D }, frameRate() {}, remove() {} }; }
+        setup(container) { container.appendChild(document.createElement('canvas')); }
+        destroy() { destroyed.push(name); }
+      };
+      for (const name of GL) window.VJamFX.presets[name] = make(name, true);
+      for (const name of FLAT) window.VJamFX.presets[name] = make(name, false);
+    });
+
+    afterAll(() => {
+      for (const name of [...GL, ...FLAT]) delete window.VJamFX.presets[name];
+    });
+
+    beforeEach(() => {
+      destroyed.length = 0;
+      vi.useFakeTimers();
+      engine.createOverlay();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const layerDivs = (name) => [...engine._stage.querySelectorAll(`[data-vjam-layer="${name}"]`)];
+
+    it('fades out the older WebGL layer when a second one comes in', () => {
+      engine.startPreset(GL[0]);
+      const [old] = layerDivs(GL[0]);
+      engine._addLayer(GL[1]);
+      expect(engine.getActiveLayerNames()).toEqual([GL[1]]);
+      // 古い方はフェードアウト中(DOM に残る)。フェードが終わったら destroy
+      expect(old.isConnected).toBe(true);
+      expect(old.style.opacity).toBe('0');
+      expect(old.style.transition).toBe('opacity 1.5s linear');
+      expect(destroyed).toEqual([]);
+      vi.advanceTimersByTime(1700);
+      expect(old.isConnected).toBe(false);
+      expect(destroyed).toEqual([GL[0]]);
+    });
+
+    it('keeps 2D layers alongside the one WebGL layer', () => {
+      engine.startPreset(FLAT[0]);
+      engine._addLayer(GL[0]);
+      engine._addLayer(FLAT[1]);
+      engine._addLayer(GL[1]);
+      expect(engine.getActiveLayerNames()).toEqual([FLAT[0], FLAT[1], GL[1]]);
+      // 2D 同士は今まで通り重なる
+      engine._addLayer(GL[2]);
+      expect(engine.getActiveLayerNames().filter(n => GL.includes(n))).toEqual([GL[2]]);
+      expect(engine.getActiveLayerNames()).toEqual([FLAT[0], FLAT[1], GL[2]]);
+    });
+
+    it('applies to every way a layer comes in (addLayer / Next / Auto)', () => {
+      engine.handleMessage({ action: 'addLayer', preset: GL[0] });
+      engine.handleMessage({ action: 'addLayer', preset: GL[1] });
+      expect(engine.getActiveLayerNames()).toEqual([GL[1]]);
+
+      engine.crossfade([GL[0], FLAT[0], GL[2]], { poolPresets: GL });
+      expect(engine.getActiveLayerNames()).toEqual([FLAT[0], GL[2]]);
+
+      vi.spyOn(Math, 'random').mockReturnValue(0.99); // 3 枚選ぶ
+      try {
+        engine.startAutoCycle([GL[0], GL[1], GL[2]], 100000, {});
+        expect(engine.getActiveLayerNames().filter(n => GL.includes(n))).toHaveLength(1);
+      } finally {
+        engine._stopAutoCycle();
+        Math.random.mockRestore();
+      }
+    });
+
+    it('clears currentPreset when the current layer is the one faded out', () => {
+      engine.startPreset(GL[0]);
+      expect(engine.currentPresetName).toBe(GL[0]);
+      engine._addLayer(GL[1]);
+      expect(engine.currentPreset).toBeNull();
+      expect(engine.currentPresetName).toBeNull();
+      // 2D の current はそのまま
+      engine.startPreset(FLAT[0]);
+      engine._addLayer(GL[2]);
+      expect(engine.currentPresetName).toBe(FLAT[0]);
+    });
+
+    it('removes the older WebGL layer at once when the fade is 0', () => {
+      engine._fadeDuration = 0;
+      engine._addLayer(GL[0]);
+      engine._addLayer(GL[1]);
+      expect(layerDivs(GL[0])).toEqual([]);
+      expect(destroyed).toEqual([GL[0]]);
+    });
+
+    it('removes the default 2D canvas p5 leaves in the shadow root and blends the WebGL canvas', () => {
+      // p5 の WEBGL は既定の 2D キャンバス(同じ id)を document.getElementById で外すので、shadow root の中では残る
+      const make = (isP3D) => class {
+        setup(container) {
+          const stale = document.createElement('canvas');
+          stale.id = 'defaultCanvas0';
+          stale.className = 'p5Canvas';
+          const gfx = document.createElement('canvas'); // createGraphics のキャンバス(id 違い)は残す
+          gfx.id = 'gfx';
+          container.append(stale, gfx);
+          let main = stale;
+          if (isP3D) {
+            main = document.createElement('canvas');
+            main.id = 'defaultCanvas0';
+            main.className = 'p5Canvas';
+            container.appendChild(main);
+          }
+          this.p5 = { canvas: main, _renderer: { isP3D }, frameRate() {}, remove() {} };
+          this.main = main;
+        }
+        destroy() {}
+      };
+      window.VJamFX.presets['gl-real'] = make(true);
+      window.VJamFX.presets['flat-real'] = make(false);
+      try {
+        engine.setBlendMode('difference');
+        engine._addLayer('gl-real');
+        const gl = engine.activeLayers.get('gl-real');
+        expect([...gl.container.querySelectorAll('canvas')]).toEqual([gl.container.querySelector('#gfx'), gl.preset.main]);
+        expect(gl.preset.main.style.mixBlendMode).toBe('difference');
+
+        // 2D はそのまま(既定のキャンバスが p5 の描いているキャンバス)
+        engine._addLayer('flat-real');
+        const flat = engine.activeLayers.get('flat-real');
+        expect(flat.container.querySelectorAll('canvas')).toHaveLength(2);
+        expect(flat.preset.main.style.mixBlendMode).toBe('difference');
+      } finally {
+        delete window.VJamFX.presets['gl-real'];
+        delete window.VJamFX.presets['flat-real'];
+      }
+    });
+
+    it('does not count a WebGL preset whose p5 has not set up yet (no renderer)', () => {
+      window.VJamFX.presets['gl-late'] = class {
+        constructor() { this.p5 = { frameRate() {}, remove() {} }; }
+        setup(container) { container.appendChild(document.createElement('canvas')); }
+        destroy() {}
+      };
+      try {
+        engine._addLayer('gl-late');
+        engine._addLayer(GL[0]);
+        expect(engine.getActiveLayerNames()).toEqual(['gl-late', GL[0]]);
+      } finally {
+        delete window.VJamFX.presets['gl-late'];
+      }
+    });
+  });
 });

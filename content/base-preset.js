@@ -32,6 +32,16 @@
     }
 
     destroy() {
+      // VJam 本体と同じ: WebGL のコンテキストは p5.remove() の前に WEBGL_lose_context で手放す。
+      // remove だけだと GC まで残り、ページあたりの WebGL コンテキストの上限に当たる(2D のキャンバスでは getContext が null で何もしない)
+      this._shader = null;
+      if (this.p5 && this.p5.canvas) {
+        try {
+          const gl = this.p5.canvas.getContext('webgl') || this.p5.canvas.getContext('webgl2');
+          const ext = gl && gl.getExtension && gl.getExtension('WEBGL_lose_context');
+          if (ext) ext.loseContext();
+        } catch (e) { /* 手放せなくても remove は続ける */ }
+      }
       if (this.p5) {
         this.p5.remove();
         this.p5 = null;

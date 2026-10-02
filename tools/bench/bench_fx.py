@@ -6,8 +6,9 @@ VJam FX の計測(元のページが分かるか・軽いか・音に反応す�
 usage(リポのルートから):
   python3 tools/bench/bench_fx.py fx [name ...]           content/presets
   python3 tools/bench/bench_fx.py candidates [name ...]   tools/bench/candidates
+  python3 tools/bench/bench_fx.py webgl [name ...]        tools/bench/candidates-webgl(VJam の WebGL の候補)
   python3 tools/bench/bench_fx.py combos [--reps a,b,c]   代表プリセット × filter × blend × 白・暗
-  python3 tools/bench/bench_fx.py all                     上の 3 つを順に
+  python3 tools/bench/bench_fx.py all                     上の 4 つを順に
 名前を省くと全部。out/<set>/results.json にあるものは飛ばす(やり直すときは out/<set>/ を消す)
 """
 import os, sys, json, time, threading, functools, http.server
@@ -19,7 +20,8 @@ from scipy.ndimage import uniform_filter
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 OUT_ROOT = os.path.join(HERE, 'out')
-SETS = {'fx': os.path.join(REPO, 'content', 'presets'), 'candidates': os.path.join(HERE, 'candidates')}
+SETS = {'fx': os.path.join(REPO, 'content', 'presets'), 'candidates': os.path.join(HERE, 'candidates'),
+        'webgl': os.path.join(HERE, 'candidates-webgl')}
 VIEWPORT = {'width': 1280, 'height': 800}
 THROTTLE = 4      # iPad 第 9 世代くらい
 N_REPS = 4        # Filter / Blend を試す代表プリセットの数
@@ -350,18 +352,19 @@ def run_combos(bench, reps):
 
 def main():
     args = sys.argv[1:]
-    if not args or args[0] not in ('fx', 'candidates', 'combos', 'all'):
+    if not args or args[0] not in ('fx', 'candidates', 'webgl', 'combos', 'all'):
         print(__doc__); sys.exit(1)
     cmd, rest = args[0], args[1:]
     srv, url = serve()
     try:
         with sync_playwright() as pw:
             bench = Bench(pw, url)
-            if cmd in ('fx', 'candidates'):
+            if cmd in ('fx', 'candidates', 'webgl'):
                 run_presets(bench, cmd, rest)
             if cmd == 'all':
                 run_presets(bench, 'fx', [])
                 run_presets(bench, 'candidates', [])
+                run_presets(bench, 'webgl', [])
             if cmd in ('combos', 'all'):
                 reps = rest[1].split(',') if len(rest) == 2 and rest[0] == '--reps' else pick_reps()
                 print('[combos] reps: ' + ', '.join(reps), flush=True)

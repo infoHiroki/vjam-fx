@@ -2,7 +2,8 @@
 (() => {
   const H = window.__vjamBench;
   const L = [...window._vjamFxEngine.activeLayers.values()][0];
-  const cv = L && L.container.querySelector('canvas');
+  // p5 が描いているキャンバス(先頭の canvas とは限らない。WEBGL が残す既定の 2D キャンバスはエンジンが外すが、念のため)
+  const cv = L && ((L.preset.p5 && L.preset.p5.canvas) || L.container.querySelector('canvas'));
   const small = document.createElement('canvas'); small.width = 64; small.height = 40;
   const sx = small.getContext('2d', { willReadFrequently: true });
   let prev = null;

@@ -1,7 +1,7 @@
 // デフォルトプールの選び直し画面。1 本ずつライブで動かして 採用 / ボツ を付け、content/default-pool.json の形で書き出す
 import { filterList, filterLabel, reactScore, presetChecks, summarizeCombos, cellKey, DEFAULT_THRESHOLDS } from '../curate/logic.js';
 import {
-  FIXED_PRESETS, FLASH_WARN, VIEWS, presetItems, comboItems, poolSets, verdictOf, isManual, matchesView, counts,
+  FIXED_PRESETS, FLASH_WARN, VIEWS, SOURCES, presetItems, parseSources, comboItems, poolSets, verdictOf, isManual, matchesView, counts,
   stepKey, nextAfterJudge, buildPool, metricsFor, parseListing,
 } from './logic.js';
 import { parseTrace } from './audio.js';
@@ -10,6 +10,7 @@ import { createStage } from './stage.js';
 const STORE_KEY = 'vjam-fx-review/v1';
 const OUT = 'bench/out/';
 const VERDICT_LABEL = { yes: '採用', no: 'ボツ' };
+const SOURCE_TITLE = { candidates: 'tools/bench/candidates(まだ content/presets に無い)', webgl: 'tools/bench/candidates-webgl(VJam の WebGL。まだ content/presets に無い)' };
 
 const $ = sel => document.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -31,7 +32,7 @@ const state = {
   items: { presets: [], combos: [] },
   pool: poolSets(null),
   saved: { presets: {}, filters: {}, blends: {} }, // 手で付けた判定
-  results: { fx: null, candidates: null }, combos: null, comboSum: null,
+  results: { fx: null, candidates: null, webgl: null }, combos: null, comboSum: null,
   vjam: { reactivity: {}, adopted: new Set() },
   traces: [],
   view: { tab: 'presets', filter: 'all', cur: { presets: null, combos: null } },
@@ -89,11 +90,12 @@ async function loadTraces() {
 
 async function init() {
   load();
-  const [defs, pool, fx, cand, combos, reactivity, review, fxNames, candNames, traces, ipad] = await Promise.all([
+  const [defs, pool, fx, cand, webgl, combos, reactivity, review, fxNames, candNames, webglNames, traces, ipad] = await Promise.all([
     getJSON('bench/filters.json'), getJSON('../content/default-pool.json'),
-    getJSON(`${OUT}fx/results.json`), getJSON(`${OUT}candidates/results.json`), getJSON(`${OUT}combos/results.json`),
+    getJSON(`${OUT}fx/results.json`), getJSON(`${OUT}candidates/results.json`), getJSON(`${OUT}webgl/results.json`),
+    getJSON(`${OUT}combos/results.json`),
     getJSON('review/vjam-reactivity.json'), getJSON('review/vjam-review.json'),
-    listDir('../content/presets/', '.js'), listDir('bench/candidates/', '.js'), loadTraces(),
+    listDir('../content/presets/', '.js'), listDir('bench/candidates/', '.js'), listDir('bench/candidates-webgl/', '.js'), loadTraces(),
     getJSON('bench/ipad-results-2026-10-02.json'),
   ]);
   state.ipad = ipad || {};
@@ -102,9 +104,10 @@ async function init() {
   state.filters = filterList(defs);
   state.blends = defs.blends;
   state.pool = poolSets(pool);
-  state.results = { fx, candidates: cand };
+  state.results = { fx, candidates: cand, webgl };
   // 一覧が取れないサーバーでは計測結果の名前で代わりにする
-  state.items.presets = presetItems(fxNames || Object.keys(fx || {}), candNames || Object.keys(cand || {}));
+  state.items.presets = presetItems(fxNames || Object.keys(fx || {}), candNames || Object.keys(cand || {}),
+    webglNames || Object.keys(webgl || {}));
   state.items.combos = comboItems(state.filters, state.blends);
   if (combos && combos.rows && combos.rows.length) {
     state.combos = combos;
@@ -129,9 +132,13 @@ async function init() {
 const verdict = item => verdictOf(state.saved, state.pool, item);
 // ?only=a,b,c でプリセットを絞って回る(点滅系だけ見る、など)。並びも URL の順にする
 const ONLY = (() => { const q = new URLSearchParams(location.search).get('only'); return q ? q.split(',').map(x => x.trim()).filter(Boolean) : null; })();
+// ?source=webgl でプリセットを出どころで絞る(WebGL 候補だけ見る、など。カンマ区切りで fx / candidates / webgl)
+const SOURCE = parseSources(new URLSearchParams(location.search).get('source'));
 const tabItems = () => {
-  const items = state.items[state.view.tab];
-  if (!ONLY || state.view.tab !== 'presets') return items;
+  let items = state.items[state.view.tab];
+  if (state.view.tab !== 'presets') return items;
+  if (SOURCE) items = items.filter(it => SOURCE.includes(it.source));
+  if (!ONLY) return items;
   const byKey = new Map(items.map(it => [it.key, it]));
   return ONLY.map(k => byKey.get(k)).filter(Boolean);
 };
@@ -387,7 +394,9 @@ function presetInfo(item) {
   const react = state.vjam.reactivity[item.key];
   const flashWarn = r && r.flash != null && r.flash > FLASH_WARN;
   const checks = r && !r.error ? presetChecks(r, DEFAULT_THRESHOLDS) : null;
-  const metrics = !r ? h('p', { class: 'note' }, state.results.fx ? '計測なし' : '計測結果が無い(python3 tools/bench/bench_fx.py all)') :
+  const measured = state.results[item.source];
+  const metrics = !r ? h('p', { class: 'note' }, measured ? '計測なし' :
+    `計測結果が無い(python3 tools/bench/bench_fx.py ${item.source === 'fx' ? 'all' : item.source})`) :
     r.error ? h('p', { class: 'fail' }, '計測で落ちた: ' + r.error) :
     kv([
       ['元のページ', h('span', {}, h('span', { class: passCls(checks.recLight) }, `白 ${fmt(r.recLight)}`), ' / ',
@@ -402,7 +411,7 @@ function presetInfo(item) {
   return [
     h('h2', {}, item.key),
     h('div', { class: 'badges' }, ...verdictBadges(item),
-      item.source === 'candidates' ? badge('cand', '候補', 'tools/bench/candidates(まだ content/presets に無い)') : badge('', 'FX'),
+      item.source === 'fx' ? badge('', SOURCES.fx) : badge('cand', SOURCES[item.source], SOURCE_TITLE[item.source]),
       state.vjam.adopted.has(item.key) ? badge('vjam', 'VJam 採用', 'VJam 本体の人のレビュー(seed-review.md)で採用') : null,
       flashWarn ? badge('warn', '⚠️ 点滅', `点滅が ${FLASH_WARN} 回/秒を超える`) : null),
     h('h3', {}, 'iPad 第 9 世代での実測(Safari・1 本だけ)'),
@@ -498,9 +507,9 @@ function poolJSON() {
 }
 
 function summary(pool) {
-  const cand = pool.presets.filter(n => state.items.presets.some(i => i.key === n && i.source === 'candidates')).length;
+  const from = source => pool.presets.filter(n => state.items.presets.some(i => i.key === n && i.source === source)).length;
   const empty = ['presets', 'filters', 'blends'].filter(k => !pool[k].length);
-  return `プリセット ${pool.presets.length}(うち候補 ${cand})/ filter ${pool.filters.length} / blend ${pool.blends.length}` +
+  return `プリセット ${pool.presets.length}(うち候補 ${from('candidates')}・WebGL 候補 ${from('webgl')})/ filter ${pool.filters.length} / blend ${pool.blends.length}` +
     (empty.length ? ` ⚠ 空: ${empty.join(', ')}` : '');
 }
 
