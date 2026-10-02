@@ -1051,11 +1051,11 @@ describe('PopupController', () => {
     });
   });
 
-  // SW が入れたタブ(ページ遷移・全タブで ON)で popup を開いたとき、エンジンから読めない分(Rnd・不透明度・ロック)を SW の状態で埋める
+  // SW が入れたタブ(ページ遷移・全タブで ON)で popup を開いたとき、エンジンから読めない分(不透明度・ロック・テキスト)を SW の状態で埋める
   describe('sync state of a tab the SW injected', () => {
-    const LIVE = { active: true, layers: ['radar'], blendMode: 'screen', filters: ['sepia'], autoCycle: true, isLightPage: false };
+    const LIVE = { active: true, layers: ['radar'], blendMode: 'screen', filters: ['sepia'], autoCycle: true, autoBlend: true, autoFilters: true, isLightPage: false };
 
-    it('takes the layers etc. from the engine and Rnd / opacity / locks / text from the SW', async () => {
+    it('takes the layers / Auto / Rnd from the engine and opacity / locks / text from the SW', async () => {
       chrome.scripting.executeScript.mockResolvedValueOnce([{ result: LIVE }]);
       chrome.runtime.sendMessage.mockResolvedValueOnce({ state: {
         active: true, layers: ['rain'], blendMode: 'difference', filters: [], opacity: 0.5, audioEnabled: false,
@@ -1083,7 +1083,9 @@ describe('PopupController', () => {
       await controller._syncState();
       expect(controller.isActive).toBe(true);
       expect([...controller.activeLayers]).toEqual(['radar']);
-      expect(controller.autoBlend).toBe(false);
+      expect(controller.autoCycleActive).toBe(true);
+      expect(controller.autoBlend).toBe(true);
+      expect(controller.autoFilters).toBe(true);
       expect(controller.opacity).toBe(0.8);
     });
 
@@ -1100,6 +1102,73 @@ describe('PopupController', () => {
       chrome.runtime.sendMessage.mockResolvedValueOnce({ state: null });
       await controller._syncState();
       expect(controller.isActive).toBe(false);
+    });
+  });
+
+  // 動いているタブで popup を開き直したとき、Auto / Rnd のボタンがエンジンと合う(#33)。
+  // Auto / Rnd はエンジンの状態を優先(SW の状態は拡張の更新・再読み込みで消える。エンジンはページに残って回り続ける)
+  describe('sync Auto / Rnd from the engine on reopen', () => {
+    const isActive = (id) => document.getElementById(id).classList.contains('active');
+    const buttons = () => ({ auto: isActive('btn-auto-cycle'), blend: isActive('auto-blend'), filters: isActive('auto-filters') });
+    // _syncState がページで走らせる func を、この偽エンジンを置いた window で実際に走らせる
+    const reopen = async (engine, swState = null) => {
+      window._vjamFxEngine = {
+        active: true, blendMode: 'screen', activeFilters: new Set(), isLightPage: false,
+        getActiveLayerNames: () => ['rain'],
+        _autoCycleTimer: null, _autoFXTimer: null,
+        ...engine,
+      };
+      chrome.scripting.executeScript.mockImplementationOnce(async ({ func, args }) => [{ result: func(...(args || [])) }]);
+      chrome.runtime.sendMessage.mockResolvedValueOnce({ state: swState });
+      try {
+        await controller._syncState();
+      } finally {
+        delete window._vjamFxEngine;
+      }
+    };
+
+    beforeEach(() => {
+      container.querySelector('.popup').insertAdjacentHTML('beforeend', `
+        <button id="btn-auto-cycle"></button>
+        <button id="auto-blend"></button>
+        <button id="auto-filters"></button>
+      `);
+    });
+
+    it('Auto running: Auto / Blend Rnd / Filter Rnd are ON', async () => {
+      await reopen({ _autoCycleTimer: 1, _autoBlend: true, _autoFilters: true });
+      expect(buttons()).toEqual({ auto: true, blend: true, filters: true });
+      expect(controller).toMatchObject({ isActive: true, autoCycleActive: true, autoBlend: true, autoFilters: true });
+    });
+
+    it('Auto running with Blend Rnd only: Filter Rnd stays OFF', async () => {
+      await reopen({ _autoCycleTimer: 1, _autoBlend: true, _autoFilters: false });
+      expect(buttons()).toEqual({ auto: true, blend: true, filters: false });
+    });
+
+    it('Rnd only (Auto stopped): Auto is OFF, Rnd is ON', async () => {
+      // Auto を止めても _autoBlend / _autoFilters は残る(Auto の値ではなく単独の Rnd を見る)
+      await reopen({ _autoBlend: true, _autoFilters: true, _autoFXTimer: 2, _autoFXBlend: true, _autoFXFilters: true });
+      expect(buttons()).toEqual({ auto: false, blend: true, filters: true });
+      expect(controller).toMatchObject({ autoCycleActive: false, autoBlend: true, autoFilters: true });
+    });
+
+    it('both OFF: everything is OFF even with leftover values', async () => {
+      await reopen({ _autoBlend: true, _autoFilters: true, _autoFXBlend: true, _autoFXFilters: true });
+      expect(buttons()).toEqual({ auto: false, blend: false, filters: false });
+      expect(controller).toMatchObject({ isActive: true, autoCycleActive: false, autoBlend: false, autoFilters: false });
+    });
+
+    it('the engine wins over the SW state', async () => {
+      // SW の状態は Auto・Rnd ON のまま、エンジンでは止まっている
+      await reopen({}, { active: true, layers: ['rain'], autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true, opacity: 0.5 });
+      expect(buttons()).toEqual({ auto: false, blend: false, filters: false });
+      expect(controller.opacity).toBe(0.5); // エンジンから読まない分は SW から
+    });
+
+    it('SW state lost (extension updated / reloaded): Auto and Rnd still come from the engine', async () => {
+      await reopen({ _autoCycleTimer: 1, _autoBlend: true, _autoFilters: true }, null);
+      expect(buttons()).toEqual({ auto: true, blend: true, filters: true });
     });
   });
 });
