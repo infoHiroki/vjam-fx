@@ -96,11 +96,15 @@ export async function startSite() {
 
 // --- 拡張を読み込んだ Chromium ---
 
-// activeTab はテストでは付与できないので、host_permissions を足したコピーを読み込む(本番の manifest は変えない)
-function makeExtensionCopy() {
+// activeTab はテストでは付与できないので、host_permissions を足したコピーを読み込む(本番の manifest は変えない)。
+// files: コピーの中で差し替えるファイル({ 'content/default-pool.json': '...' } のように拡張のルートからの相対パス → 中身)
+function makeExtensionCopy(files = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vjam-fx-ext-'));
   for (const entry of EXT_ENTRIES) {
     fs.cpSync(path.join(ROOT, entry), path.join(dir, entry), { recursive: true });
+  }
+  for (const [rel, body] of Object.entries(files)) {
+    fs.writeFileSync(path.join(dir, rel), body);
   }
   const manifestPath = path.join(dir, 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -110,8 +114,8 @@ function makeExtensionCopy() {
 }
 
 // 公式の Chrome(137 以降)は --load-extension を無視するので、Playwright の Chromium を使う
-export async function launchWithExtension({ headless = true } = {}) {
-  const extDir = makeExtensionCopy();
+export async function launchWithExtension({ headless = true, files } = {}) {
+  const extDir = makeExtensionCopy(files);
   const context = await chromium.launchPersistentContext('', {
     channel: 'chromium',
     headless,

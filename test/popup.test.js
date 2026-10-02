@@ -818,15 +818,22 @@ describe('PopupController', () => {
     it('runs addLayer in the engine and returns what was dropped', async () => {
       await controller._sendAddLayer('rain');
       const { func, args } = chrome.scripting.executeScript.mock.calls[0][0];
-      expect(args).toEqual(['rain']);
+      expect(args).toEqual(['rain', false]);
+      const sent = [];
       const engine = {
         layers: ['a', 'b'],
         getActiveLayerNames() { return this.layers.slice(); },
-        handleMessage(msg) { this.layers.push(msg.preset); this.layers.shift(); },
+        handleMessage(msg) { sent.push(msg); this.layers.push(msg.preset); this.layers.shift(); },
       };
       window._vjamFxEngine = engine;
-      expect(func('rain')).toEqual(['a']);
+      expect(func('rain', false)).toEqual(['a']);
+      expect(sent).toEqual([{ action: 'addLayer', preset: 'rain', auto: false }]);
       delete window._vjamFxEngine;
+    });
+
+    it('passes auto (picked by Auto) to the engine', async () => {
+      await controller._sendAddLayer('rain', true);
+      expect(chrome.scripting.executeScript.mock.calls[0][0].args).toEqual(['rain', true]);
     });
   });
 
@@ -1273,6 +1280,183 @@ describe('PopupController', () => {
     it('SW state lost (extension updated / reloaded): Auto and Rnd still come from the engine', async () => {
       await reopen({ _autoCycleTimer: 1, _autoBlend: true, _autoFilters: true }, null);
       expect(buttons()).toEqual({ auto: true, blend: true, filters: true });
+    });
+  });
+
+  // 重いプリセット(#40): SW が覚えたものを Next / Auto のプールから除く。設定パネルに数と「戻す」
+  describe('heavy presets (#40)', () => {
+    const HEAVY = { rain: { fps: 5.6, at: '2026-10-02T00:00:00.000Z' } };
+    const sentCommands = () => chrome.scripting.executeScript.mock.calls
+      .map(c => c[0].args && c[0].args[0])
+      .filter(m => m && m.action);
+    const injectedPresets = () => chrome.scripting.executeScript.mock.calls
+      .map(c => c[0].files && c[0].files[0])
+      .filter(f => f && f.startsWith('content/presets/'))
+      .sort();
+    let onChanged;
+
+    beforeEach(() => {
+      const settingsHtml = readFileSync(resolve(__dirname, '../popup/popup.html'), 'utf-8');
+      const settings = new DOMParser().parseFromString(settingsHtml, 'text/html').getElementById('settings-section');
+      container.querySelector('.popup').insertAdjacentHTML('beforeend', settings.outerHTML + `
+        <button id="btn-next"></button>
+        <button id="btn-auto-cycle"></button>
+        <button id="auto-blend"></button>
+        <button id="auto-filters"></button>
+      `);
+      onChanged = [];
+      chrome.storage.onChanged = { addListener: vi.fn((cb) => onChanged.push(cb)) };
+      chrome.storage.local.remove = vi.fn().mockResolvedValue(undefined);
+      controller.poolPresets = controller.presets.filter(p => ['rain', 'radar', 'neon-tunnel'].includes(p.id));
+      controller.pool = { filters: ['saturate(2)'], blends: ['screen'] };
+    });
+
+    afterEach(() => {
+      delete chrome.storage.onChanged;
+      delete chrome.storage.local.remove;
+    });
+
+    const load = async (heavy) => {
+      chrome.storage.local.get.mockResolvedValueOnce(heavy ? { heavyPresets: heavy } : {});
+      await controller._loadHeavyPresets();
+    };
+    const count = () => document.getElementById('heavy-count').textContent;
+    const restoreBtn = () => document.getElementById('btn-heavy-reset');
+
+    it('popup.html has the count and the Restore button in the settings panel', () => {
+      const html = readFileSync(resolve(__dirname, '../popup/popup.html'), 'utf-8');
+      const settings = new DOMParser().parseFromString(html, 'text/html').getElementById('settings-section');
+      expect(settings.querySelector('#heavy-count')).not.toBeNull();
+      expect(settings.querySelector('#btn-heavy-reset')).not.toBeNull();
+    });
+
+    it('loads what the SW saved and shows how many', async () => {
+      await load({ ...HEAVY, radar: { fps: 20, at: '' } });
+      expect(chrome.storage.local.get).toHaveBeenCalledWith('heavyPresets');
+      expect(controller.heavyPresets).toEqual({ ...HEAVY, radar: { fps: 20, at: '' } });
+      expect(count()).toBe('2');
+      expect(document.getElementById('heavy-count').title).toBe('rain, radar');
+      expect(restoreBtn().disabled).toBe(false);
+    });
+
+    it('shows 0 and disables Restore when there is none', async () => {
+      await load(null);
+      expect(controller.heavyPresets).toEqual({});
+      expect(count()).toBe('0');
+      expect(restoreBtn().disabled).toBe(true);
+    });
+
+    it('follows what the engine finds while the popup is open (storage.onChanged)', async () => {
+      await load(null);
+      expect(onChanged).toHaveLength(1);
+      onChanged[0]({ heavyPresets: { newValue: HEAVY } }, 'local');
+      expect(controller.heavyPresets).toEqual(HEAVY);
+      expect(count()).toBe('1');
+      onChanged[0]({ vjamfx_settings: { newValue: {} } }, 'local'); // ほかのキーは見ない
+      onChanged[0]({ heavyPresets: { newValue: {} } }, 'session');
+      expect(count()).toBe('1');
+      onChanged[0]({ heavyPresets: { oldValue: HEAVY } }, 'local'); // 消された
+      expect(count()).toBe('0');
+    });
+
+    it('Next never picks a heavy one, and passes the pool without it for the engine to replace', async () => {
+      await load(HEAVY);
+      controller._bindEvents();
+      controller.isActive = true;
+      controller._coreInjected = true;
+      for (let i = 0; i < 10; i++) {
+        document.getElementById('btn-next').click();
+        await vi.waitFor(() => expect(controller._busy).toBe(false));
+      }
+      const fades = sentCommands().filter(m => m.action === 'crossfade');
+      expect(fades).toHaveLength(10);
+      for (const cmd of fades) {
+        expect(cmd.presets).not.toContain('rain');
+        expect(cmd.poolPresets.sort()).toEqual(['neon-tunnel', 'radar']);
+      }
+      expect(injectedPresets()).not.toContain('content/presets/rain.js');
+    });
+
+    it('Auto gets the pool without it (also what is injected and saved for the SW)', async () => {
+      await load(HEAVY);
+      controller._bindEvents();
+      controller.isActive = true;
+      controller._coreInjected = true;
+      document.getElementById('btn-auto-cycle').click();
+      await vi.waitFor(() => expect(sentCommands().some(m => m.action === 'startAutoCycle')).toBe(true));
+      expect(sentCommands().find(m => m.action === 'startAutoCycle').presets.sort()).toEqual(['neon-tunnel', 'radar']);
+      expect(injectedPresets()).toEqual(['content/presets/neon-tunnel.js', 'content/presets/radar.js']);
+      await vi.waitFor(() => expect(chrome.runtime.sendMessage.mock.calls.some(c => c[0].type === 'setState')).toBe(true));
+      const saved = chrome.runtime.sendMessage.mock.calls.map(c => c[0]).filter(m => m.type === 'setState').pop();
+      expect(saved.state.autoCyclePresets.sort()).toEqual(['neon-tunnel', 'radar']);
+    });
+
+    it('toggle ON (Auto start) picks no heavy one and tells the engine it picked them for Auto', async () => {
+      await load(HEAVY);
+      controller._buildPresetList();
+      controller._bindEvents();
+      const toggle = document.getElementById('toggle');
+      toggle.checked = true;
+      toggle.dispatchEvent(new Event('change'));
+      await vi.waitFor(() => expect(sentCommands().some(m => m.action === 'startAutoCycle')).toBe(true));
+      const start = sentCommands().find(m => m.action === 'start');
+      expect(start.auto).toBe(true);
+      expect(start.preset).not.toBe('rain');
+      const added = chrome.scripting.executeScript.mock.calls.map(c => c[0].args).filter(a => a && typeof a[0] === 'string');
+      for (const args of added) {
+        expect(args[0]).not.toBe('rain');
+        expect(args[1]).toBe(true);
+      }
+    });
+
+    it('a preset checked by hand is started as not-Auto (never skipped)', async () => {
+      controller.settings.autoOnStart = false;
+      controller.activeLayers.add('rain');
+      await controller._startAll();
+      expect(sentCommands().find(m => m.action === 'start')).toMatchObject({ preset: 'rain', auto: false });
+    });
+
+    it('uses the whole pool when every preset in it is heavy', async () => {
+      await load({ rain: {}, radar: {}, 'neon-tunnel': {} });
+      expect(controller._usablePool().map(p => p.id).sort()).toEqual(['neon-tunnel', 'radar', 'rain']);
+    });
+
+    it('Restore clears the list, tells the engine to forget, and lets Auto pick them again', async () => {
+      await load(HEAVY);
+      controller._bindEvents();
+      controller.isActive = true;
+      controller._coreInjected = true;
+      controller.autoCycleActive = true;
+      restoreBtn().click();
+      await vi.waitFor(() => expect(chrome.runtime.sendMessage.mock.calls.some(c => c[0].type === 'setState')).toBe(true));
+      expect(chrome.storage.local.remove).toHaveBeenCalledWith('heavyPresets');
+      expect(controller.heavyPresets).toEqual({});
+      expect(count()).toBe('0');
+      expect(restoreBtn().disabled).toBe(true);
+      const actions = sentCommands().map(m => m.action);
+      expect(actions).toContain('clearHeavyPresets');
+      expect(sentCommands().find(m => m.action === 'updateAutoCycleOptions').presets.sort()).toEqual(['neon-tunnel', 'radar', 'rain']);
+      expect(injectedPresets()).toContain('content/presets/rain.js');
+      const saved = chrome.runtime.sendMessage.mock.calls.map(c => c[0]).filter(m => m.type === 'setState').pop();
+      expect(saved.state.autoCyclePresets.sort()).toEqual(['neon-tunnel', 'radar', 'rain']);
+    });
+
+    it('Restore while OFF only clears (and tells a stopped engine to forget)', async () => {
+      await load(HEAVY);
+      await controller._resetHeavyPresets();
+      expect(chrome.storage.local.remove).toHaveBeenCalledWith('heavyPresets');
+      expect(sentCommands().map(m => m.action)).toEqual(['clearHeavyPresets']);
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('Reset keeps the list (it is about this device, not a setting)', async () => {
+      await load(HEAVY);
+      container.querySelector('.popup').insertAdjacentHTML('beforeend', '<button id="btn-reset"></button>');
+      controller._bindEvents();
+      document.getElementById('btn-reset').click();
+      await vi.waitFor(() => expect(chrome.storage.local.set).toHaveBeenCalled());
+      expect(chrome.storage.local.remove).not.toHaveBeenCalled();
+      expect(controller.heavyPresets).toEqual(HEAVY);
     });
   });
 });

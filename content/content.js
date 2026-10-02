@@ -48,6 +48,14 @@
   const LOW_FPS_SECONDS = 2;
   const THROTTLED_FPS = 30;
 
+  // 重いプリセットを飛ばす(#40): 全体の fps が HEAVY_FPS を HEAVY_SECONDS 秒続けて割ったら、一番重いレイヤーを入れ替える。
+  // 全体の fps は描画ループ(_startLoop)の rAF で測る。30fps 落としは p5 の描画を間引くだけで rAF は画面の更新どおり回るので、
+  // 落とし中でも描画が 30fps に収まっていれば下がらない。下がるのは描画 1 回が 1 フレームに収まらないときだけ(しきい値は 30 の 8 割)
+  // レイヤーを足した・外したら、フェードが終わって HEAVY_SETTLE_MS たつまで数えない
+  const HEAVY_FPS = 24;
+  const HEAVY_SECONDS = 3;
+  const HEAVY_SETTLE_MS = 2000;
+
   // iPad / iPhone(iPadOS は Mac の UA を名乗るのでタッチ点の数で見分ける)
   function isIOS() {
     const ua = navigator.userAgent || '';
@@ -119,6 +127,16 @@
       this._fpsThrottled = false;
       this._fpsMeter = null;
 
+      // 重いプリセット(#40)。_heavyPresets はこのページで重いと分かったもの(Auto / 入れ替えで選ばない)
+      this._heavyPresets = new Set();
+      this._heavyMeter = null;
+      this._heavyHoldMs = 0; // 次のフレームから数えない時間(レイヤーを足した・外した)
+      this._heavyHoldUntil = 0;
+      this._poolPresets = null; // 入れ替え先を選ぶプール(Auto / Next が渡す)
+      this._effectLock = false; // エフェクトのロック(Auto / Next が渡す)。ロック中は入れ替えない
+      this._pendingPreset = null; // SW に読み込みを頼んだ入れ替え先
+      this._autoResting = false; // Auto の休み中
+
       // MSE タップの BPM(Auto / Rnd の間隔用。取れていなければ 0)
       this._mseBpm = 0;
 
@@ -166,6 +184,10 @@
         this._onBridgeMessage = (event) => {
           if (event.data && event.data.source === 'vjam-fx-bridge' && event.data.type === 'audioData') {
             this._externalAudioData = event.data.data;
+          }
+          // SW が入れ替え先のプリセットを読み込んだ(_addReplacement)
+          if (event.data && event.data.source === 'vjam-fx-bridge' && event.data.type === 'presetInjected') {
+            this._onPresetInjected(event.data.name);
           }
         };
         window.addEventListener('message', this._onBridgeMessage);
@@ -660,7 +682,8 @@
       }
     }
 
-    _addLayer(presetName) {
+    // auto: Auto / Next が選んだレイヤー(重いときに入れ替えてよい)。手で選んだものは false
+    _addLayer(presetName, auto) {
       if (typeof p5 !== 'function') {
         console.warn('VJam FX: p5 not loaded, cannot add layer', presetName);
         return;
@@ -695,7 +718,10 @@
       }
       if (this._fpsThrottled) this._setLayerFps(preset, THROTTLED_FPS);
 
-      this.activeLayers.set(presetName, { preset: preset, container: layerDiv });
+      const layer = { preset: preset, container: layerDiv, auto: !!auto, drawMs: 0, draws: 0 };
+      this._timeLayer(layer);
+      this.activeLayers.set(presetName, layer);
+      this._holdHeavyCheck();
 
       // レイヤー上限(iPad / iPhone は 3、それ以外は 5)。超えたら古いものから外す
       while (this.activeLayers.size > this._maxLayers) {
@@ -712,6 +738,7 @@
       if (!layer) return;
 
       this.activeLayers.delete(presetName);
+      this._holdHeavyCheck();
 
       // Fade out then remove
       const container = layer.container;
@@ -737,8 +764,9 @@
 
     /**
      * Start a single preset (legacy single-layer mode, also adds as a layer)
+     * auto: Auto が選んだもの(popup のトグル ON で Auto を始めるとき)
      */
-    startPreset(presetName) {
+    startPreset(presetName, auto) {
       this._ensureListeners();
       this.createOverlay();
 
@@ -752,7 +780,7 @@
       this.active = true;
 
       // Add as layer
-      this._addLayer(presetName);
+      this._addLayer(presetName, auto);
       const layer = this.activeLayers.get(presetName);
       if (layer) {
         this.currentPreset = layer.preset;
@@ -806,6 +834,7 @@
         if (self._textOverlay) self._textOverlay.tick();
         if (audioData && audioData.beat) self._onBeat();
         self._trackFps(timestamp);
+        self._trackHeavy(timestamp);
 
         self._rafId = requestAnimationFrame(loop);
       };
@@ -839,6 +868,136 @@
       if (preset && preset.p5 && typeof preset.p5.frameRate === 'function') preset.p5.frameRate(fps);
     }
 
+    // --- 重いプリセット(#40) ---
+
+    // レイヤーの p5 の redraw を包んで、1 フレームを描く時間を貯める(どのレイヤーが重いかを決める)
+    _timeLayer(layer) {
+      const p = layer.preset && layer.preset.p5;
+      if (!p || typeof p.redraw !== 'function') return;
+      const redraw = p.redraw;
+      p.redraw = function() {
+        const t = performance.now();
+        try {
+          return redraw.apply(this, arguments);
+        } finally {
+          layer.drawMs += performance.now() - t;
+          layer.draws++;
+        }
+      };
+    }
+
+    _resetDrawTimes() {
+      for (const [, layer] of this.activeLayers) {
+        layer.drawMs = 0;
+        layer.draws = 0;
+      }
+    }
+
+    // レイヤーを足した・外したとき: フェードが終わって HEAVY_SETTLE_MS たつまで数えない(次のフレームの時刻から)
+    _holdHeavyCheck() {
+      const fadeMs = this._fadeDuration > 0 ? this._fadeDuration * 1000 : 0;
+      this._heavyHoldMs = Math.max(this._heavyHoldMs, fadeMs + HEAVY_SETTLE_MS);
+    }
+
+    // 1 秒ごとの fps を見て、HEAVY_FPS を HEAVY_SECONDS 秒続けて割ったら _skipHeavy。
+    // タブが裏・フェード中(とその後)・dip 中・Auto の休み中は数えず、続けて割った秒数も数え直す
+    _trackHeavy(now) {
+      if (this._heavyHoldMs > 0) {
+        this._heavyHoldUntil = Math.max(this._heavyHoldUntil, now + this._heavyHoldMs);
+        this._heavyHoldMs = 0;
+      }
+      if (document.hidden || now < this._heavyHoldUntil || this._dipDownTimer || this._dipUpTimer
+        || this._autoResting || this.activeLayers.size === 0) {
+        this._heavyMeter = null;
+        return;
+      }
+      const m = this._heavyMeter;
+      // 初回・rAF が止まっていた(タブが裏にいた)ときは数え直す
+      if (!m || now - m.last > 1000) {
+        this._heavyMeter = { start: now, last: now, frames: 0, low: 0, lowFps: 0 };
+        this._resetDrawTimes();
+        return;
+      }
+      m.last = now;
+      m.frames++;
+      if (now - m.start < 1000) return;
+      const fps = m.frames * 1000 / (now - m.start);
+      m.start = now;
+      m.frames = 0;
+      if (fps >= HEAVY_FPS) {
+        // 描く時間は、割り続けている間の分だけで比べる
+        m.low = 0;
+        m.lowFps = 0;
+        this._resetDrawTimes();
+        return;
+      }
+      m.low++;
+      m.lowFps += fps;
+      if (m.low >= HEAVY_SECONDS) {
+        this._heavyMeter = null;
+        this._skipHeavy(m.lowFps / m.low);
+      }
+    }
+
+    // 1 フレームを描く時間が一番長いレイヤー(1 枚ならそれ)
+    _heaviestLayer() {
+      let heaviest = null;
+      let worst = -1;
+      for (const [name, layer] of this.activeLayers) {
+        const ms = layer.draws > 0 ? layer.drawMs / layer.draws : 0;
+        if (ms > worst) {
+          heaviest = name;
+          worst = ms;
+        }
+      }
+      return heaviest;
+    }
+
+    // 一番重いレイヤーをフェードで外して、プールの別のものに入れ替える。SW に知らせて端末に覚えてもらう(bridge 経由)。
+    // 手で選んだレイヤー・エフェクトのロック中は外さない(覚えもしない)
+    _skipHeavy(fps) {
+      const name = this._heaviestLayer();
+      const layer = name && this.activeLayers.get(name);
+      if (!layer || !layer.auto || this._effectLock) return;
+      this._heavyPresets.add(name);
+      const replacement = this._pickReplacement();
+      this._removeLayer(name);
+      if (this.currentPresetName === name) {
+        this.currentPreset = null;
+        this.currentPresetName = null;
+      }
+      if (replacement) this._addReplacement(replacement);
+      window.postMessage({
+        source: 'vjam-fx-engine', type: 'heavyPreset',
+        name: name, fps: Math.round(fps * 10) / 10, replacement: replacement || null,
+      }, window.location.origin || '*');
+    }
+
+    // 入れ替え先: プールから、出ているもの・このページで重いと分かったものを除いて 1 つ。読み込み済みのものを優先
+    _pickReplacement() {
+      const pool = (this._poolPresets || []).filter(n => !this.activeLayers.has(n) && !this._heavyPresets.has(n));
+      if (pool.length === 0) return null;
+      const ready = pool.filter(n => window.VJamFX && window.VJamFX.presets[n]);
+      return pickOne(ready.length ? ready : pool);
+    }
+
+    // 読み込み済みならすぐ足す。Next で選んだものしか読み込んでいないときは、SW に読み込んでもらってから足す(_onPresetInjected)
+    _addReplacement(name) {
+      if (window.VJamFX && window.VJamFX.presets[name]) {
+        this._addLayer(name, true);
+        return;
+      }
+      this._pendingPreset = name;
+      window.postMessage({ source: 'vjam-fx-engine', type: 'injectPreset', name: name }, window.location.origin || '*');
+    }
+
+    // 頼んだ入れ替え先が読み込まれた。その間に Auto / Next / OFF で入れ替わっていたら(_pendingPreset が消えていたら)足さない
+    _onPresetInjected(name) {
+      if (!name || name !== this._pendingPreset) return;
+      this._pendingPreset = null;
+      if (this.active && !this.activeLayers.has(name)) this._addLayer(name, true);
+    }
+
     stop() {
       this.active = false;
       this._stopAutoCycle();
@@ -862,6 +1021,10 @@
       // OFF にしたら fps の制限を解く(次に ON にしたときは 60fps から測り直す)
       this._fpsThrottled = false;
       this._fpsMeter = null;
+      this._heavyMeter = null;
+      this._heavyHoldMs = 0;
+      this._heavyHoldUntil = 0;
+      this._pendingPreset = null;
     }
 
     destroy() {
@@ -942,6 +1105,7 @@
         this.activeLayers.clear();
         this.currentPreset = null;
         this.currentPresetName = null;
+        this._pendingPreset = null;
       }
       if (!locks.filter) {
         this.clearFilters();
@@ -958,6 +1122,7 @@
      * Next: 今のレイヤーをフェードアウトして、presetNames をフェードインする(kill + start のフェード版)。
      * ロックしていない filter は外し、blend は options.blendMode(無ければ screen)にする。どちらもすぐ掛ける(押した反応)。
      * 不透明度は人が設定した値のまま。Auto / Rnd のタイマーは止める(popup が必要なら送り直す)
+     * options.poolPresets: Next が選んだプール(入れたレイヤーが重かったときの入れ替え先)
      */
     crossfade(presetNames, options) {
       const locks = (options && options.locks) || {};
@@ -965,15 +1130,18 @@
       this._stopAutoFX();
       if (!locks.filter) this.clearFilters();
       if (!locks.blend) this.setBlendMode((options && options.blendMode) || 'screen');
+      this._effectLock = !!locks.effect;
+      if (options && Array.isArray(options.poolPresets)) this._poolPresets = options.poolPresets;
       if (locks.effect) return;
 
       for (const name of [...this.activeLayers.keys()]) this._removeLayer(name);
       this.currentPreset = null;
       this.currentPresetName = null;
+      this._pendingPreset = null;
       if (!presetNames || presetNames.length === 0) return;
 
       this._ensureListeners();
-      for (const name of presetNames) this._addLayer(name);
+      for (const name of presetNames) this._addLayer(name, true);
       this.currentPresetName = presetNames[0];
       const first = this.activeLayers.get(presetNames[0]);
       if (first) this.currentPreset = first.preset;
@@ -1030,6 +1198,8 @@
       this._barsPerCycle = (options && options.barsPerCycle) || SWITCH_BEATS;
       this._autoCycleLocks = (options && options.locks) || {};
       this._autoCyclePool = (options && options.pool) || null;
+      this._poolPresets = presetNames;
+      this._effectLock = !!this._autoCycleLocks.effect;
       this._autoSwitchCount = 0;
       this._autoRestAt = 4 + Math.floor(Math.random() * 3);
 
@@ -1070,6 +1240,7 @@
     // その 0.5 秒後に普通の切り替え(次のセットがフェードイン)。エフェクトのロック中はレイヤーが残るので、待たずに dip で戻す
     _autoCycleRest() {
       const locks = this._autoCycleLocks || {};
+      this._autoResting = true;
       if (!locks.effect) {
         for (const name of [...this.activeLayers.keys()]) this._removeLayer(name);
       }
@@ -1077,6 +1248,7 @@
         if (this._autoBlend && !locks.blend) this.setBlendMode('screen', locks.effect);
         if (this._autoFilters && !locks.filter) this.clearFilters(locks.effect);
         this._autoCycleLater(REST_MS, () => {
+          this._autoResting = false;
           this._autoCycleTick();
           this._scheduleAutoCycle();
         });
@@ -1101,12 +1273,22 @@
       if (!this._autoCyclePresets) return;
       if (options.autoBlend !== undefined) this._autoBlend = !!options.autoBlend;
       if (options.autoFilters !== undefined) this._autoFilters = !!options.autoFilters;
-      if (options.locks !== undefined) this._autoCycleLocks = options.locks;
+      if (options.locks !== undefined) {
+        this._autoCycleLocks = options.locks || {};
+        this._effectLock = !!this._autoCycleLocks.effect;
+      }
+      // プールを差し替える(popup で重いものを戻したとき)
+      if (Array.isArray(options.presets) && options.presets.length > 0) {
+        this._autoCyclePresets = options.presets;
+        this._poolPresets = options.presets;
+      }
     }
 
     _autoCycleTick() {
-      const presets = this._autoCyclePresets;
-      if (!presets || presets.length === 0) return;
+      if (!this._autoCyclePresets || this._autoCyclePresets.length === 0) return;
+      // このページで重いと分かったものは選ばない(全部重ければプールのまま)
+      const usable = this._autoCyclePresets.filter(n => !this._heavyPresets.has(n));
+      const presets = usable.length ? usable : this._autoCyclePresets;
       const locks = this._autoCycleLocks || {};
 
       // Choose 1-3 random layers (unless effect locked)
@@ -1130,12 +1312,15 @@
           }
         }
 
-        // Add missing layers
+        // Add missing layers(残したものも Auto が選んだもの)
         for (const name of chosen) {
           if (!this.activeLayers.has(name)) {
-            this._addLayer(name);
+            this._addLayer(name, true);
+          } else {
+            this.activeLayers.get(name).auto = true;
           }
         }
+        this._pendingPreset = null;
       }
 
       // Auto-blend / Auto-filters: プールから(unless locked)
@@ -1148,6 +1333,7 @@
         clearTimeout(this._autoCycleTimer);
         this._autoCycleTimer = null;
       }
+      this._autoResting = false;
     }
 
     // --- Standalone Auto Blend/Filter (without preset Auto-Cycle) ---
@@ -1192,7 +1378,7 @@
     handleMessage(msg) {
       switch (msg.action) {
         case 'start':
-          this.startPreset(msg.preset);
+          this.startPreset(msg.preset, msg.auto);
           if (msg.blendMode) this.setBlendMode(msg.blendMode);
           break;
         case 'stop':
@@ -1217,7 +1403,7 @@
           break;
         case 'addLayer':
           if (!this.activeLayers.has(msg.preset)) {
-            this._addLayer(msg.preset);
+            this._addLayer(msg.preset, msg.auto);
           }
           break;
         case 'removeLayer':
@@ -1239,7 +1425,7 @@
           this.kill({ locks: msg.locks });
           break;
         case 'crossfade':
-          this.crossfade(msg.presets, { blendMode: msg.blendMode, locks: msg.locks });
+          this.crossfade(msg.presets, { blendMode: msg.blendMode, locks: msg.locks, poolPresets: msg.poolPresets });
           break;
         case 'randomizeFX':
           this.randomizeFX({ skipBlend: !!msg.skipBlend, pool: msg.pool });
@@ -1261,7 +1447,10 @@
           this._stopAutoCycle();
           break;
         case 'updateAutoCycleOptions':
-          this.updateAutoCycleOptions({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, locks: msg.locks });
+          this.updateAutoCycleOptions({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, locks: msg.locks, presets: msg.presets });
+          break;
+        case 'clearHeavyPresets':
+          this._heavyPresets.clear();
           break;
         case 'startAutoFX':
           this.startAutoFX({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, pool: msg.pool });

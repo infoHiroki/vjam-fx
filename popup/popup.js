@@ -267,6 +267,7 @@ class PopupController {
     // デフォルトプール(Next / Auto / Rnd の抽選対象)。読めるまで・読めないときは全プリセット + エンジン既定の filter / blend
     this.poolPresets = ALL_PRESETS;
     this.pool = null; // { filters, blends } — エンジンに引数で渡す(エンジンは MAIN world なので fetch しない)
+    this.heavyPresets = {}; // この端末で重いと分かったもの(SW が storage.local に保存)。Next / Auto のプールから除く
     this.activeLayers = new Set();  // preset IDs currently active
     this.activeFilters = new Set();
     this.selectedBlendMode = 'screen';
@@ -280,6 +281,7 @@ class PopupController {
     this._injectedPresets = new Set(); // track which preset files have been injected
     this._coreInjected = false;
     this._busy = false; // concurrency guard for async operations
+    this._autoPicked = false; // 次の _startAll のレイヤーは Auto がプールから選んだもの(_prepareAutoStart)
     this.settings = { ...DEFAULT_SETTINGS };
     this.locks = { effect: false, blend: false, filter: false };
     this.scenes = new Array(12).fill(null); // 12 scene slots
@@ -302,6 +304,7 @@ class PopupController {
     await this._loadSettings();
     await this._loadScenes();
     await this._loadPool();
+    await this._loadHeavyPresets();
     this._buildPresetList();
     await this._syncState();
     this._bindEvents();
@@ -510,9 +513,58 @@ class PopupController {
     } catch (e) { /* 読めない: 今の全プリセットで動く */ }
   }
 
+  // この端末で重いもの(エンジンが見つけて SW が保存)を読み、エンジンが見つけたらその場で追う
+  async _loadHeavyPresets() {
+    try {
+      const result = await chrome.storage.local.get('heavyPresets');
+      this.heavyPresets = (result && result.heavyPresets) || {};
+    } catch (e) { /* storage not available */ }
+    this._updateHeavyUI();
+    if (chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local' || !changes.heavyPresets) return;
+        this.heavyPresets = changes.heavyPresets.newValue || {};
+        this._updateHeavyUI();
+      });
+    }
+  }
+
+  // Next / Auto の抽選対象: プールから重いものを除く(全部重ければプールのまま)
+  _usablePool() {
+    const light = this.poolPresets.filter(p => !this.heavyPresets[p.id]);
+    return light.length ? light : this.poolPresets;
+  }
+
+  _updateHeavyUI() {
+    const names = Object.keys(this.heavyPresets);
+    const countEl = document.getElementById('heavy-count');
+    if (countEl) {
+      countEl.textContent = String(names.length);
+      countEl.title = names.join(', ');
+    }
+    const resetBtn = document.getElementById('btn-heavy-reset');
+    if (resetBtn) resetBtn.disabled = names.length === 0;
+  }
+
+  // 戻す: 覚えた重いものを全部消して、エンジンにも忘れさせる。Auto 中なら戻したものも回す
+  async _resetHeavyPresets() {
+    this.heavyPresets = {};
+    this._updateHeavyUI();
+    try {
+      await chrome.storage.local.remove('heavyPresets');
+    } catch (e) { /* storage not available */ }
+    await this._sendCommand({ action: 'clearHeavyPresets' });
+    if (!this.isActive) return;
+    if (this.autoCycleActive) {
+      await this._injectAllPresets();
+      await this._sendCommand({ action: 'updateAutoCycleOptions', presets: this._usablePool().map(p => p.id) });
+    }
+    await this._saveState();
+  }
+
   // Auto / Rnd の開始コマンド(抽選対象はプール)
   _autoCycleCommand(extra) {
-    return { action: 'startAutoCycle', presets: this.poolPresets.map(p => p.id), interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, pool: this.pool, ...extra };
+    return { action: 'startAutoCycle', presets: this._usablePool().map(p => p.id), interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, pool: this.pool, ...extra };
   }
 
   _autoFXCommand() {
@@ -521,8 +573,9 @@ class PopupController {
 
   // Next の選び方: プールからランダムに 1〜3 本
   _randomPoolPresets() {
-    const count = 1 + Math.floor(Math.random() * Math.min(3, this.poolPresets.length));
-    const shuffled = this.poolPresets.slice();
+    const pool = this._usablePool();
+    const count = 1 + Math.floor(Math.random() * Math.min(3, pool.length));
+    const shuffled = pool.slice();
     for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
     return shuffled.slice(0, count);
   }
@@ -673,7 +726,7 @@ class PopupController {
           opacity: this.opacity,
           audioEnabled: this.audioEnabled,
           filters: [...this.activeFilters],
-          autoCyclePresets: this.autoCycleActive ? this.poolPresets.map(p => p.id) : null,
+          autoCyclePresets: this.autoCycleActive ? this._usablePool().map(p => p.id) : null,
           autoBlend: this.autoBlend,
           autoFilters: this.autoFilters,
           pool: this.pool, // SW がページ遷移後に Auto / Rnd を再開するときにエンジンへ渡す
@@ -759,6 +812,12 @@ class PopupController {
         // 今のタブが ON なら、その状態をほかのタブへ持っていくものとして SW に渡す
         if (this.settings.allTabs && this.isActive) this._saveState();
       });
+    }
+
+    // Settings: この端末で重いので外したもの → 戻す
+    const heavyResetBtn = document.getElementById('btn-heavy-reset');
+    if (heavyResetBtn) {
+      heavyResetBtn.addEventListener('click', () => this._resetHeavyPresets());
     }
 
     // Settings: Fade duration
@@ -1114,7 +1173,8 @@ class PopupController {
         for (const p of chosen) {
           await this._injectPreset(p.id);
         }
-        await this._sendCommand({ action: 'crossfade', presets: chosen.map(p => p.id), blendMode: this.selectedBlendMode, locks: this.locks });
+        // poolPresets: 選んだものが重かったときの入れ替え先(エンジンが選ぶ)
+        await this._sendCommand({ action: 'crossfade', presets: chosen.map(p => p.id), blendMode: this.selectedBlendMode, locks: this.locks, poolPresets: this._usablePool().map(p => p.id) });
         if (!this.locks.effect) {
           this.activeLayers.clear();
           for (const p of chosen) this.activeLayers.add(p.id);
@@ -1300,9 +1360,9 @@ class PopupController {
     this._injectedPresets.add(presetId);
   }
 
-  // Auto 用: プールのプリセットを全部 inject
+  // Auto 用: プールのプリセットを全部 inject(重いものは除く)
   async _injectAllPresets() {
-    const toInject = this.poolPresets.filter(p => !this._injectedPresets.has(p.id));
+    const toInject = this._usablePool().filter(p => !this._injectedPresets.has(p.id));
     if (toInject.length === 0) return;
     const BATCH = 20;
     for (let i = 0; i < toInject.length; i += BATCH) {
@@ -1317,6 +1377,7 @@ class PopupController {
   _prepareAutoStart() {
     if (this.activeLayers.size === 0) {
       for (const p of this._randomPoolPresets()) this.activeLayers.add(p.id);
+      this._autoPicked = true; // エンジンには Auto が選んだものとして渡す(重いときに入れ替えてよい)
     }
     this.autoCycleActive = true;
     this.autoBlend = true;
@@ -1338,6 +1399,8 @@ class PopupController {
     if (!this._tabId) return;
     if (this._busy) { this._pendingStart = true; this._pendingStop = false; return; }
     this._busy = true;
+    const autoPicked = !!this._autoPicked;
+    this._autoPicked = false;
 
     if (this.activeLayers.size === 0) {
       this.activeLayers.add('neon-tunnel');
@@ -1360,10 +1423,11 @@ class PopupController {
         action: 'start',
         preset: first,
         blendMode: this.selectedBlendMode,
+        auto: autoPicked,
       });
 
       for (let i = 1; i < layers.length; i++) {
-        await this._sendAddLayer(layers[i]);
+        await this._sendAddLayer(layers[i], autoPicked);
       }
 
       for (const f of this.activeFilters) {
@@ -1438,22 +1502,23 @@ class PopupController {
     }
   }
 
-  // addLayer を送り、エンジンのレイヤー上限(iPad / iPhone は 3、それ以外は 5)で外れたものを popup のチェックからも外す
-  async _sendAddLayer(presetId) {
+  // addLayer を送り、エンジンのレイヤー上限(iPad / iPhone は 3、それ以外は 5)で外れたものを popup のチェックからも外す。
+  // auto: Auto が選んだもの(トグル ON で Auto を始めるとき)
+  async _sendAddLayer(presetId, auto) {
     if (!this._tabId) return;
     try {
       const [{ result }] = await chrome.scripting.executeScript({
         target: { tabId: this._tabId },
         world: 'MAIN',
-        func: (preset) => {
+        func: (preset, isAuto) => {
           const e = window._vjamFxEngine;
           if (!e) return [];
           const before = e.getActiveLayerNames();
-          e.handleMessage({ action: 'addLayer', preset: preset });
+          e.handleMessage({ action: 'addLayer', preset: preset, auto: isAuto });
           const after = e.getActiveLayerNames();
           return before.filter(n => !after.includes(n));
         },
-        args: [presetId],
+        args: [presetId, !!auto],
       });
       if (!Array.isArray(result) || result.length === 0) return;
       for (const id of result) this.activeLayers.delete(id);
