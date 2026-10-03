@@ -36,14 +36,14 @@ test.describe.serial('トグル ON だけで Auto が始まる(既定の設定)'
     expect((await readState(page)).engine).toBe(false);
   });
 
-  test('トグル ON → プールの 1〜3 本で描き始める', async () => {
+  test('トグル ON → プールの 1 本で描き始める(Auto は 1 枚から積み上げる。#59)', async () => {
     await popup.click('.toggle-switch');
     await expect.poll(async () => {
       const s = await readState(page);
       return s.active && s.canvases >= 1 && s.layers.length >= 1;
     }, { timeout: 15_000 }).toBe(true);
     const { layers } = await readState(page);
-    expect(layers.length).toBeLessThanOrEqual(3);
+    expect(layers).toHaveLength(1);
     for (const id of layers) expect(POOL).toContain(id);
 
     await expect.poll(async () => {
@@ -58,7 +58,7 @@ test.describe.serial('トグル ON だけで Auto が始まる(既定の設定)'
     await expect.poll(() => readAuto(page), { timeout: 20_000 }).toMatchObject({
       cycling: true, presets: POOL.length, pool: true, blend: true, filters: true,
     });
-    // Auto が切り替えるたびに Rnd が blend / filter を選び直すのを数える
+    // Rnd が blend / filter を選び直すのを数える(1 手ずつの Auto では、ブレイクと入れ替えの 3 割だけ。#59)
     await page.evaluate(() => {
       const e = window._vjamFxEngine;
       window.__vjRnd = { blend: 0, filter: 0 };
@@ -76,12 +76,14 @@ test.describe.serial('トグル ON だけで Auto が始まる(既定の設定)'
     await expect(popup.locator('#auto-filters')).toHaveClass(/\bactive\b/);
   });
 
-  test('Auto でプリセットが入れ替わり、Rnd が blend / filter を選び直す', async () => {
-    const layersNow = async () => (await readState(page)).layers.join(',');
-    const before = await layersNow();
-    // 最初の場面(トグル ON で選んだレイヤー)の次から、Cycle の 15 秒がたった後の拍(待つのは最大 1 秒)で切り替わる
-    await expect.poll(layersNow, { timeout: 25_000 }).not.toBe(before);
-    await expect.poll(() => page.evaluate(() => window.__vjRnd.blend > 0 && window.__vjRnd.filter > 0)).toBe(true);
+  test('Auto は 1 手ずつ: 1 枚足して 2 枚になる(積み上げの手では Rnd は blend / filter を変えない)', async () => {
+    const { layers: before } = await readState(page);
+    // 最初の場面(トグル ON で選んだ 1 枚)の次から、Cycle の 15 秒がたった後の拍(待つのは最大 1 秒)で 1 枚足す
+    await expect.poll(async () => (await readState(page)).layers.length, { timeout: 25_000 }).toBe(2);
+    const { layers } = await readState(page);
+    expect(layers[0]).toBe(before[0]);
+    for (const id of layers) expect(POOL).toContain(id);
+    expect(await page.evaluate(() => window.__vjRnd)).toEqual({ blend: 0, filter: 0 });
   });
 });
 
