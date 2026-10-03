@@ -59,3 +59,10 @@ App Store Connect が受け付ける大きさで撮る(違うと上げられな�
 ```bash
 python3 store/appstore/demo/make_loop.py   # brew install ffmpeg が要る
 ```
+
+## 出したもの(1.1.0・2026-10-03)
+
+- `screenshots-ipad13/`:App Store に上げた iPad 13 インチのスクショ 5 枚(2064 × 2752、この順)
+  - iPad Pro 13 インチのシミュレータ(英語)で撮影ページを開き、`tools/ios-sim/` と同じやり方でエンジンを入れて撮った(拡張の popup は写っていない)
+  - 01 エフェクト(neon-tunnel / fireflies / neon-frame)・02 kaleidoscope / pulse-ring・03 明るいページ(synth-wave / radial-burst)・04 WebGL(tunnel-shader / neon-frame)・05 アプリの案内画面
+- App Store Connect の設定:価格 無料・配信 147 の国と地域(EU 27 か国と中国本土は外した。EU はデジタルサービス法の申告、中国は ICP 届出が要るため)・Mac / Vision Pro での配信オフ・データの収集なし・他社のコンテンツなし・年齢 4+・審査に通ったら自動で公開
