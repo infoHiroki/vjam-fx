@@ -13,12 +13,13 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - p5.js (2D graphics)
 - Chrome Extension Manifest V3
 - Service Worker (状態永続化)
-- Vitest + jsdom (testing, 4066 tests) + Playwright e2e (`tests/e2e/`, 103)
+- Vitest + jsdom (testing, 4068 tests) + Playwright e2e (`tests/e2e/`, 103)
 
 ## Architecture
 - **Popup**: `popup/` — UI controller, injects via `chrome.scripting.executeScript`
 - **Content (MAIN world)**: `content/` — VJamFXEngine, 370 presets, video audio capture
 - **デフォルトプール**: `content/default-pool.json`(Next / Auto / Rnd の抽選対象。手動は全部選べる)。選ぶ画面と計測は `tools/`(`tools/README.md`)、決定版の記録は `tools/curate/selected-pool.json`
+- **ストア**: `store/`(Chrome ウェブストアの手順は `store/README.md`、zip は `scripts/package-chrome.sh` → `dist/`。App Store は `store/appstore/`)
 - **Safari(iPad)版**: `safari/`(Xcode)+ `scripts/build-safari-ext.sh`(共有ソース → `build/safari-ext/`、manifest は `safari/manifest.patch.json`)。手順は `safari/README.md`
 - **MSE タップ**: `content/mse-tap.js`(Safari のみ。document_start / MAIN world)。MediaSource の append と標準 HLS の区切りから音声をデコードして BPM・ビートを出す。`__vjamMse` があるときエンジンは createMediaElementSource を張らない
 - **Audio Bridge**: `content/audio-bridge.js` — ISOLATED world, SW→MAIN audioData relay
@@ -103,7 +104,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 
 ## Testing
 ```bash
-npm test          # vitest run (4066 tests)
+npm test          # vitest run (4068 tests)
 npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(103)
 npm run test:watch
 ```
