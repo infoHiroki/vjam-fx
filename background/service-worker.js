@@ -266,8 +266,9 @@ async function injectAndStart(tabId, state) {
 
         // Restart auto-cycle if it was active(Rnd の filter / blend は popup と同じデフォルトプールから)
         // Auto が OFF でも Rnd が ON なら、Rnd だけ再開する(popup と同じ)。interval は popup の Cycle(無ければエンジン既定の 15 秒)
+        // 戻したレイヤーから 1 手ずつ続ける(skipFirstTick。Auto のときはレイヤーが無くてもプールの 1 本目を戻している)
         if (autoCyclePresets && autoCyclePresets.length > 0) {
-          engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: interval, autoBlend: autoBlend, autoFilters: autoFilters, locks: locks || {}, pool: pool });
+          engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: interval, autoBlend: autoBlend, autoFilters: autoFilters, locks: locks || {}, pool: pool, skipFirstTick: !!(layers && layers.length) });
         } else if (autoBlend || autoFilters) {
           engine.handleMessage({ action: 'startAutoFX', autoBlend: autoBlend, autoFilters: autoFilters, interval: interval, pool: pool });
         }
