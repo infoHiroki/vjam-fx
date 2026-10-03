@@ -27,7 +27,7 @@ When a page doesn't allow that, VJam FX uses Chrome's tab audio capture instead,
 PRIVATE BY DESIGN
 • The sound is analyzed only on your computer
 • No account, no ads, no tracking
-• Nothing is collected or sent
+• Nothing is collected, and the sound never leaves your device
 • The effects run only on the tab where you turn VJam FX on, unless you turn on All tabs
 
 Free. From the makers of VJam, the browser-based VJ app.

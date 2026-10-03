@@ -21,7 +21,7 @@ VJ effects for any web page
 Turn any web page into a VJ stage. Play a video with sound, switch VJam FX on, and 370 visual effects move with the beat — right inside Safari.
 ```
 
-## Description — 1,542 / 4,000
+## Description — 1,574 / 4,000
 
 ```text
 VJam FX is a Safari extension that lays music-reactive VJ visuals over any web page. Open a page with a video, turn VJam FX on, and the effects follow the beat of the music.
@@ -47,7 +47,7 @@ FEATURES
 PRIVATE BY DESIGN
 • The sound is analyzed only on your device
 • No account, no ads, no tracking
-• Nothing is collected or sent
+• Nothing is collected, and the sound never leaves your device
 
 WHY IT ASKS FOR ALL WEBSITES
 To read the sound of a video, VJam FX needs to start together with the page. You choose which websites it can access in Settings › Apps › Safari › Extensions.
@@ -90,5 +90,5 @@ HOW TO TEST
 WHY ACCESS TO ALL WEBSITES IS NEEDED
 VJam FX reads the sound of the video on the page to detect the beat. Safari does not let extensions capture a tab's audio, so VJam FX runs a small script at document_start on each page. It reads a copy of the audio data the page passes to MediaSource, or the audio segments of a standard HLS stream. This has to start together with the page, which is why the extension asks for access to all websites.
 
-All audio is analyzed on the device. Nothing is collected or sent, and no account or login is needed.
+All audio is analyzed on the device and never leaves it. Nothing is collected, and no account or login is needed.
 ```
