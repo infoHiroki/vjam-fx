@@ -14,8 +14,8 @@ VJam FX overlays visual effects on webpages. It is available as a Chrome extensi
 - **No browsing history** is accessed or recorded
 - **No analytics or tracking** of any kind
 - **No cookies** are set
-- **No third-party services** are used
-- **Nothing is sent anywhere.** VJam FX has no server and never sends data to us or to anyone else. Apart from loading its own files, the only network requests it makes are in Safari, where it may download a video's audio segments again from the same address the page is already streaming the video from (see "Safari" below)
+- **No third-party services** are used, with one exception: when you use the **Text** feature with a decorative font, the font is loaded from Google Fonts (`fonts.googleapis.com`). Like any web font, this is a normal web request, so Google receives technical information such as your IP address. VJam FX itself sends nothing with it
+- **Nothing is sent anywhere.** VJam FX has no server and never sends data to us or to anyone else. Apart from loading its own files and the Google Fonts above, the only network requests it makes are in Safari, where it may download a video's audio segments again from the same address the page is already streaming the video from (see "Safari" below)
 
 ## Audio Capture
 
@@ -53,6 +53,7 @@ Safari does not let extensions capture a tab's audio, so the Safari version read
 - **tabCapture**: Used to capture tab audio for beat detection when video element audio is unavailable. Audio is processed locally only.
 - **offscreen**: Required to create an offscreen document for processing tab audio capture data.
 - **storage**: Used to save your scene configurations (preset selections, blend modes, filter settings) locally in your browser.
+- **Access to all websites (optional)**: Requested only when you turn on **All tabs**. Used to show the same effects in the tabs you switch to or open, and to stop them in the tab you leave. If you never turn on All tabs, it is never requested.
 
 ### Safari
 

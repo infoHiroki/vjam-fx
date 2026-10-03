@@ -36,8 +36,8 @@ a:hover{text-decoration:underline}
 <li><strong>No browsing history</strong> is accessed or recorded</li>
 <li><strong>No analytics or tracking</strong> of any kind</li>
 <li><strong>No cookies</strong> are set</li>
-<li><strong>No third-party services</strong> are used</li>
-<li><strong>Nothing is sent anywhere.</strong> VJam FX has no server and never sends data to us or to anyone else. Apart from loading its own files, the only network requests it makes are in Safari, where it may download a video's audio segments again from the same address the page is already streaming the video from (see <a href="#safari">&ldquo;Safari&rdquo;</a> below)</li>
+<li><strong>No third-party services</strong> are used, with one exception: when you use the <strong>Text</strong> feature with a decorative font, the font is loaded from Google Fonts (<code>fonts.googleapis.com</code>). Like any web font, this is a normal web request, so Google receives technical information such as your IP address. VJam FX itself sends nothing with it</li>
+<li><strong>Nothing is sent anywhere.</strong> VJam FX has no server and never sends data to us or to anyone else. Apart from loading its own files and the Google Fonts above, the only network requests it makes are in Safari, where it may download a video's audio segments again from the same address the page is already streaming the video from (see <a href="#safari">&ldquo;Safari&rdquo;</a> below)</li>
 </ul>
 
 <h2>Audio Capture</h2>
@@ -73,6 +73,7 @@ a:hover{text-decoration:underline}
 <li><strong>tabCapture</strong>: Used to capture tab audio for beat detection when video element audio is unavailable. Audio is processed locally only.</li>
 <li><strong>offscreen</strong>: Required to create an offscreen document for processing tab audio capture data.</li>
 <li><strong>storage</strong>: Used to save your scene configurations (preset selections, blend modes, filter settings) locally in your browser.</li>
+<li><strong>Access to all websites (optional)</strong>: Requested only when you turn on <strong>All tabs</strong>. Used to show the same effects in the tabs you switch to or open, and to stop them in the tab you leave. If you never turn on All tabs, it is never requested.</li>
 </ul>
 <h3>Safari</h3>
 <ul>
