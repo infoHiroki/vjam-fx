@@ -21,7 +21,7 @@ VJ effects for any web page
 Turn any web page into a VJ stage. Play a video with sound, switch VJam FX on, and 370 visual effects move with the beat — right inside Safari.
 ```
 
-## Description — 1,574 / 4,000
+## Description — 1,691 / 4,000
 
 ```text
 VJam FX is a Safari extension that lays music-reactive VJ visuals over any web page. Open a page with a video, turn VJam FX on, and the effects follow the beat of the music.
@@ -34,8 +34,8 @@ HOW IT WORKS
 FEATURES
 • 370 visual effects: neon tunnels, kaleidoscopes, particles, aurora, glitch, plasma and more
 • Beat detection: reads the sound of the video on the page and finds the BPM — no microphone needed
-• Auto mode: effects change on the beat every few bars, with random blend modes and filters
-• Next: a fresh combination of effects with one tap
+• Auto mode: every 15 seconds, on the beat, it adds, swaps or clears one effect at a time — starting from one and building up, with smooth fades and random blend modes and filters
+• Next: a fresh combination of effects with one tap — Auto carries on from there
 • Layers: stack effects and mix them with blend modes (Lighten, Difference, Exclusion, Dodge)
 • Filters: invert, hue, saturation, grayscale and contrast
 • Adjustable opacity, fade time, cycle length and sensitivity
