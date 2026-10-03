@@ -113,8 +113,8 @@ export function createStage(frame) {
 
   /** 製品の Auto ON と同じ: プールのプリセットを 1〜3 枚重ねて拍で切り替え、blend / filter もプールから回す */
   async function startAuto(presets, pool, opts) {
-    auto = { action: 'startAutoCycle', presets: presets.map(p => p.key), interval: 8000,
-      autoBlend: true, autoFilters: true, barsPerCycle: 16, locks: {}, pool };
+    auto = { action: 'startAutoCycle', presets: presets.map(p => p.key), interval: 15000,
+      autoBlend: true, autoFilters: true, locks: {}, pool };
     const mine = auto;
     if (!(await load(presets)) || auto !== mine) return false;
     const e = engine();
