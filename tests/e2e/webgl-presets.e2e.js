@@ -1,7 +1,7 @@
 /**
  * VJam 本体から取り込んだ WebGL のプリセット(#44)が popup から動く。一覧で 1 本ずつ選んで、レイヤーが乗る・WebGL で描いている・
  * 見える・動く・ページのエラーが無いことを見る(数本。ヘッドレスの WebGL は SwiftShader なので、計測で軽かったものから)。
- * あわせて、Next / Auto の抽選で WebGL が 1 回に 1 本までになっていること(引いた本数のレイヤーが残る)を実物で確かめる
+ * あわせて、Next / Auto の抽選で WebGL が 1 回に 1 本までになっていること(引いた本数のレイヤーが残る・Auto は 3 枚まで積み上がる)を実物で確かめる
  */
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
@@ -129,7 +129,8 @@ test.describe.serial('Next / Auto の抽選で WebGL は 1 回に 1 本まで', 
     expect(withWebgl).toBeGreaterThan(0);
   });
 
-  test('Auto: エンジンが WebGL の一覧を受け取り、3 本引いても WebGL は 1 本で 3 枚とも残る', async () => {
+  // Auto は 1 手ずつ(#59): WebGL が出ているときは 2D を足すので、WebGL が 2 枚になってレイヤーが減ることはない
+  test('Auto: エンジンが WebGL の一覧を受け取り、1 手ずつ足しても WebGL は 1 本で 3 枚まで積み上がる', async () => {
     await popup.click('#btn-auto-cycle');
     // presets の数は見ない(この端末で重いと分かったものは popup がプールから除く)
     await expect.poll(() => readAuto(page), { timeout: 20_000 }).toMatchObject({ cycling: true, pool: true });
@@ -137,28 +138,33 @@ test.describe.serial('Next / Auto の抽選で WebGL は 1 回に 1 本まで', 
       const e = window._vjamFxEngine;
       e._stopAutoCycle(); // タイマーの切り替えと混ざらないように、ここからは手で回す
       e._fadeDuration = 0; // 外した WebGL のコンテキストをすぐ手放す
-      const random = Math.random;
+      e._heavySkipOff = true; // 手の外で入れ替えない
+      e._loudnessCap = () => 0; // 上限は 3 枚
+      e._autoRestAt = Infinity; // 休みは出さない
       const rounds = [];
-      try {
-        for (let i = 0; i < 12; i++) {
-          let first = true;
-          Math.random = () => (first ? ((first = false), 0.99) : random()); // 3 本(並べ替えは本物の乱数)
-          e._autoCycleTick();
-          Math.random = random;
-          rounds.push([...e.activeLayers.keys()]);
+      for (let round = 0; round < 6; round++) {
+        e._autoBegin(); // 1 枚から
+        const steps = [[...e.activeLayers.keys()]];
+        for (let i = 0; i < 8; i++) {
+          e._autoSwitch();
+          steps.push([...e.activeLayers.keys()]);
         }
-      } finally {
-        Math.random = random;
+        rounds.push(steps);
       }
+      e._stopAutoCycle();
       return { webgl: [...e._webglPresets], rounds };
     });
     expect(result.webgl.length).toBe(158);
     expect(new Set(result.webgl)).toEqual(WEBGL);
     let withWebgl = 0;
-    for (const layers of result.rounds) {
-      expect(layers.length).toBe(3);
-      expect(layers.filter((n) => WEBGL.has(n)).length).toBeLessThanOrEqual(1);
-      if (layers.some((n) => WEBGL.has(n))) withWebgl++;
+    for (const steps of result.rounds) {
+      // 1 → 2 → 3(WebGL を引いても、ほかのレイヤーが消えない)
+      expect(steps.slice(0, 3).map((l) => l.length)).toEqual([1, 2, 3]);
+      for (const layers of steps) {
+        expect(layers.length).toBeLessThanOrEqual(3);
+        expect(layers.filter((n) => WEBGL.has(n)).length).toBeLessThanOrEqual(1);
+        if (layers.some((n) => WEBGL.has(n))) withWebgl++;
+      }
     }
     expect(withWebgl).toBeGreaterThan(0);
   });

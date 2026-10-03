@@ -785,7 +785,11 @@ describe('PopupController', () => {
       expect(fetchMock).toHaveBeenCalledWith('/content/default-pool.json');
       expect(controller.poolPresets.map(p => p.id).sort()).toEqual(['neon-tunnel', 'rain']);
       // webgl: カタログの WebGL のプリセット(#44。エンジンが Auto の抽選で 1 回に 1 本までにする)
-      expect(controller.pool).toEqual({ filters: POOL.filters, blends: POOL.blends, webgl: WEBGL_IDS });
+      // categories: プリセット → カタログのカテゴリ(#59。Auto が足すものを今出ているものとかぶりにくくする)
+      const { categories, ...rest } = controller.pool;
+      expect(rest).toEqual({ filters: POOL.filters, blends: POOL.blends, webgl: WEBGL_IDS });
+      expect(Object.keys(categories).length).toBe(370);
+      expect(categories).toMatchObject({ 'neon-tunnel': 'Immersive', 'rain': 'Weather', '3d-particles': 'Particles' });
       // 手動の一覧は全部
       expect(controller.presets.length).toBe(370);
     });
@@ -1038,14 +1042,16 @@ describe('PopupController', () => {
       expect(chrome.storage.local.set).toHaveBeenCalledWith({ vjamfx_settings: expect.objectContaining({ autoOnStart: false }) });
     });
 
-    it('setting ON: toggle ON starts 1-3 pool presets (not neon-tunnel) and Auto + Rnd with the pool', async () => {
+    it('setting ON: toggle ON starts 1 pool preset (not neon-tunnel) and Auto + Rnd with the pool', async () => {
       // 前に手で選んでいた表示(ランダムに委ねるので外れる)
       document.querySelector('.blend-btn').classList.add('active');
+      // Next なら 2 本引く乱数でも、Auto は 1 枚から積み上げる(#59)
+      vi.spyOn(Math, 'random').mockReturnValue(0.99);
       await setToggle(true);
+      Math.random.mockRestore();
 
       const picked = startedLayers();
-      expect(picked.length).toBeGreaterThanOrEqual(1);
-      expect(picked.length).toBeLessThanOrEqual(2); // プールが 2 本
+      expect(picked).toHaveLength(1);
       for (const id of picked) expect(['rain', 'radar']).toContain(id);
       expect([...controller.activeLayers].sort()).toEqual([...picked].sort());
 
@@ -1140,6 +1146,31 @@ describe('PopupController', () => {
       expect(controller.autoFilters).toBe(false);
       expect(isActive('btn-auto-cycle')).toBe(false);
       expect(isActive('auto-filters')).toBe(false);
+    });
+
+    // Next(#59): 今までどおりすぐ 1〜3 本のセットへクロスフェード。Auto が ON なら Auto は切らず、そのセットから 1 手ずつ続ける
+    it('Next while Auto is ON keeps Auto and continues it from the new set', async () => {
+      await setToggle(true);
+      chrome.scripting.executeScript.mockClear();
+      vi.spyOn(Math, 'random').mockReturnValue(0.99); // Next は 2 本(プールが 2 本)
+      document.getElementById('btn-next').click();
+      await vi.waitFor(() => expect(actions()).toContain('startAutoCycle'));
+      await vi.waitFor(() => expect(controller._busy).toBe(false));
+      Math.random.mockRestore();
+
+      const fade = sentCommands().find(m => m.action === 'crossfade');
+      expect(fade.presets.sort()).toEqual(['radar', 'rain']);
+      // crossfade のあとに、出したセットから続ける Auto(すぐ差し替えない)
+      const cmd = sentCommands().find(m => m.action === 'startAutoCycle');
+      expect(cmd).toMatchObject({ skipFirstTick: true, autoBlend: true, autoFilters: true, pool: controller.pool });
+      expect(cmd.presets.sort()).toEqual(['radar', 'rain']);
+      expect(actions().indexOf('crossfade')).toBeLessThan(actions().indexOf('startAutoCycle'));
+      expect(actions()).not.toContain('startAutoFX');
+      expect(controller.autoCycleActive).toBe(true);
+      expect(isActive('btn-auto-cycle')).toBe(true);
+      expect([...controller.activeLayers].sort()).toEqual(['radar', 'rain']);
+      const saved = chrome.runtime.sendMessage.mock.calls.map(c => c[0]).filter(m => m.type === 'setState').pop();
+      expect(saved.state.autoCyclePresets.sort()).toEqual(['radar', 'rain']);
     });
 
     it('toggle OFF → ON starts Auto + Rnd again (each ON is a new session)', async () => {

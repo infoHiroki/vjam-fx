@@ -410,6 +410,9 @@ const ALL_PRESETS = PRESET_CATEGORIES.flatMap(c => c.presets);
 // Next / Auto の抽選では 1 回に 1 本まで(2 本引くと 1 本がすぐ消えて、その回のレイヤーが減る)
 const WEBGL_PRESETS = ALL_PRESETS.filter(p => p.webgl).map(p => p.id);
 
+// プリセット → カタログのカテゴリ。Auto が足すものを、今出ているものと見た目がかぶりにくくする(同じカテゴリを避ける。#59)
+const PRESET_CATEGORY = Object.fromEntries(PRESET_CATEGORIES.flatMap(c => c.presets.map(p => [p.id, c.label])));
+
 const FILTER_NAMES = ['invert', 'hue-rotate', 'grayscale', 'saturate', 'brightness', 'contrast', 'sepia', 'blur'];
 const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'color-dodge'];
 
@@ -830,8 +833,9 @@ class PopupController {
       const ids = new Set(Array.isArray(pool.presets) ? pool.presets : []);
       const presets = ALL_PRESETS.filter(p => ids.has(p.id));
       if (presets.length > 0) this.poolPresets = presets;
-      // webgl: Auto の抽選で 1 回に 1 本までにするため、エンジンへプールごと渡す(SW もページ遷移後にプールごと渡す)
-      this.pool = { filters: pool.filters, blends: pool.blends, webgl: WEBGL_PRESETS };
+      // webgl: Auto の抽選で 1 回に 1 本までにするため、categories: Auto が足すものを今出ているものとかぶりにくくするため、
+      // エンジンへプールごと渡す(SW もページ遷移後にプールごと渡す)
+      this.pool = { filters: pool.filters, blends: pool.blends, webgl: WEBGL_PRESETS, categories: PRESET_CATEGORY };
     } catch (e) { /* 読めない: 今の全プリセットで動く */ }
   }
 
@@ -905,10 +909,10 @@ class PopupController {
     return Math.min(this.settings.fadeDuration, this.settings.cycleSeconds / 2);
   }
 
-  // Next の選び方: プールからランダムに 1〜3 本。WebGL は 1 本まで
-  _randomPoolPresets() {
+  // Next の選び方: プールからランダムに 1〜3 本(count を渡せばその本数)。WebGL は 1 本まで
+  _randomPoolPresets(count) {
     const pool = this._usablePool();
-    const count = 1 + Math.floor(Math.random() * Math.min(3, pool.length));
+    if (!count) count = 1 + Math.floor(Math.random() * Math.min(3, pool.length));
     const shuffled = pool.slice();
     for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
     const chosen = [];
@@ -1535,10 +1539,11 @@ class PopupController {
         document.querySelectorAll('#preset-list input[type="checkbox"]').forEach(cb => {
           cb.checked = this.activeLayers.has(cb.value);
         });
-        this.autoCycleActive = false;
-        this._updateAutoUI();
-        // Re-start standalone Rnd if active (kill stops engine-side timers)
-        if (this.autoBlend || this.autoFilters) {
+        // crossfade でエンジンの Auto / Rnd は止まるので送り直す。Auto が ON なら、出したセットから 1 手ずつ続ける(#59)
+        if (this.autoCycleActive) {
+          await this._injectAllPresets();
+          await this._sendCommand(this._autoCycleCommand({ skipFirstTick: true }));
+        } else if (this.autoBlend || this.autoFilters) {
           await this._sendCommand(this._autoFXCommand());
         }
         // Start video audio if needed
@@ -1696,10 +1701,10 @@ class PopupController {
   }
 
   // トグル ON で Auto を始める(設定 ON のとき)。Auto・Blend Rnd・Filter Rnd を ON にし、見た目は Auto ボタンを押したときと同じ。
-  // レイヤーが無ければ Next と同じくプールから選ぶ。トグル ON のときだけ呼ぶので、動いている間に手で切ったものは戻さない
+  // レイヤーが無ければプールから 1 本(Auto は 1 枚から積み上げる。#59)。トグル ON のときだけ呼ぶので、動いている間に手で切ったものは戻さない
   _prepareAutoStart() {
     if (this.activeLayers.size === 0) {
-      for (const p of this._randomPoolPresets()) this.activeLayers.add(p.id);
+      for (const p of this._randomPoolPresets(1)) this.activeLayers.add(p.id);
       this._autoPicked = true; // エンジンには Auto が選んだものとして渡す(重いときに入れ替えてよい)
     }
     this.autoCycleActive = true;

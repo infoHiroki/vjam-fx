@@ -1027,17 +1027,18 @@ describe('VJamFXEngine', () => {
     });
 
     describe('Auto rest', () => {
-      // 休みの直前まで進める(1 回目の切り替えで休む)。Rnd の blend / filter を掛けた状態にしておく
+      // 休みの直前まで進める(入れ替えを終えたところ = 次の手がブレイクで、そのブレイクで休む)。Rnd の blend / filter を掛けた状態にしておく
       function startUntilRest(options) {
         vi.spyOn(Math, 'random').mockReturnValue(0);
         engine.startAutoCycle(FADE_NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL, ...options });
+        engine._autoSwapsLeft = 0;
         engine._autoRestAt = 1;
         vi.advanceTimersByTime(DIP); // 最初の切り替えの dip
         expect(engine.overlay.style.mixBlendMode).toBe('lighten');
         expect(engine.overlay.style.filter).toBe('saturate(2)');
       }
 
-      it('fades all layers out, resets blend / filter after the fade, and fades the next set in 0.5 s later', () => {
+      it('fades all layers out, resets blend / filter after the fade, and fades 1 layer in 0.5 s later', () => {
         startUntilRest();
         const old = [...engine._stage.querySelectorAll('[data-vjam-layer]')];
         expect(old.length).toBeGreaterThan(0);
@@ -1063,17 +1064,18 @@ describe('VJamFXEngine', () => {
         expect(engine.activeLayers.size).toBe(0);
         vi.advanceTimersByTime(200);
         for (const div of old) expect(div.isConnected).toBe(false);
-        // 0.5 秒空けてから次のセットがフェードイン
+        // 0.5 秒空けてから 1 枚からフェードイン(積み上げ直す)
         vi.advanceTimersByTime(299);
         expect(engine.activeLayers.size).toBe(0);
         vi.advanceTimersByTime(1);
-        expect(engine.activeLayers.size).toBeGreaterThan(0);
+        expect(engine.activeLayers.size).toBe(1);
+        expect(engine._autoSwapsLeft).toBeNull();
         for (const [, layer] of engine.activeLayers) {
           expect(layer.container.style.opacity).toBe('0');
           expect(layer.container.style.transition).toContain('opacity 5s');
         }
         // そのあとは普通に秒数で切り替わる
-        const tick = vi.spyOn(engine, '_autoCycleTick');
+        const tick = vi.spyOn(engine, '_autoSwitch');
         vi.advanceTimersByTime(7999);
         expect(tick).not.toHaveBeenCalled();
         vi.advanceTimersByTime(1);
@@ -1107,6 +1109,7 @@ describe('VJamFXEngine', () => {
         engine.handleMessage({ action: 'setFadeDuration', duration: 0 });
         vi.spyOn(Math, 'random').mockReturnValue(0);
         engine.startAutoCycle(FADE_NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL });
+        engine._autoSwapsLeft = 0;
         engine._autoRestAt = 1;
         const old = [...engine._stage.querySelectorAll('[data-vjam-layer]')];
         vi.advanceTimersByTime(8000);
@@ -1132,7 +1135,7 @@ describe('VJamFXEngine', () => {
         expect(engine.overlay.style.filter).toBe('none');
         expect(stage().style.opacity).toBe('1');
         // dip が戻りきってから 0.5 秒で次の切り替え(既定が見えている間がある)
-        const tick = vi.spyOn(engine, '_autoCycleTick');
+        const tick = vi.spyOn(engine, '_autoBegin');
         vi.advanceTimersByTime(DIP + 499);
         expect(stage().style.opacity).toBe('');
         expect(tick).not.toHaveBeenCalled();
@@ -2225,8 +2228,7 @@ describe('VJamFXEngine', () => {
       it('switches Auto after the seconds when there is no BPM (no beat wait)', () => {
         vi.useFakeTimers();
         engine.startAutoCycle(NAMES, 15000, {});
-        engine._autoRestAt = 100;
-        const tick = vi.spyOn(engine, '_autoCycleTick');
+        const tick = vi.spyOn(engine, '_autoSwitch');
         vi.advanceTimersByTime(14999);
         expect(tick).not.toHaveBeenCalled();
         vi.advanceTimersByTime(1);
@@ -2239,8 +2241,7 @@ describe('VJamFXEngine', () => {
         vi.useFakeTimers();
         withBpm();
         engine.startAutoCycle(NAMES, 15000, {});
-        engine._autoRestAt = 100;
-        const tick = vi.spyOn(engine, '_autoCycleTick');
+        const tick = vi.spyOn(engine, '_autoSwitch');
         // 秒数がたつまでは拍が来ても切り替えない(BPM で長さは変わらない)
         for (let i = 0; i < 100; i++) engine._onBeat();
         vi.advanceTimersByTime(15000);
@@ -2263,8 +2264,7 @@ describe('VJamFXEngine', () => {
         vi.useFakeTimers();
         withBpm();
         engine.startAutoCycle(NAMES, 8000, {});
-        engine._autoRestAt = 100;
-        const tick = vi.spyOn(engine, '_autoCycleTick');
+        const tick = vi.spyOn(engine, '_autoSwitch');
         vi.advanceTimersByTime(8999);
         expect(tick).not.toHaveBeenCalled();
         vi.advanceTimersByTime(1);
@@ -2278,7 +2278,7 @@ describe('VJamFXEngine', () => {
         vi.useFakeTimers();
         withBpm();
         engine.startAutoCycle(NAMES, 8000, {});
-        const tick = vi.spyOn(engine, '_autoCycleTick');
+        const tick = vi.spyOn(engine, '_autoSwitch');
         vi.advanceTimersByTime(8000);
         engine.kill({});
         engine._onBeat();
@@ -2321,7 +2321,10 @@ describe('VJamFXEngine', () => {
       });
     });
 
-    describe('rest (every 4-6 switches)', () => {
+    describe('rest (every 4-6 breaks)', () => {
+      // 次の手をブレイクにする(入れ替えを終えたところ)
+      const breakNext = () => { engine._autoSwapsLeft = 0; };
+
       it('draws the rest point from 4-6', () => {
         const seen = new Set();
         for (let i = 0; i < 100; i++) {
@@ -2332,17 +2335,44 @@ describe('VJamFXEngine', () => {
         expect([...seen].sort()).toEqual([4, 5, 6]);
       });
 
-      it('drops layers, resets blend / filter, then switches 0.5 s later', () => {
+      it('rests on the 4-6th break, not on the other steps', () => {
+        vi.useFakeTimers();
+        engine.startAutoCycle(NAMES, 8000, {});
+        engine._autoRestAt = 3;
+        const rest = vi.spyOn(engine, '_autoCycleRest');
+        const breaks = vi.spyOn(engine, '_autoBreak');
+        for (let i = 0; i < 2; i++) {
+          breakNext();
+          vi.advanceTimersByTime(8000);
+          expect(engine.activeLayers.size).toBe(1);
+        }
+        expect(breaks).toHaveBeenCalledTimes(2);
+        expect(rest).not.toHaveBeenCalled();
+        // 足す・入れ替えるだけの手では休まない
+        for (let i = 0; i < 10; i++) {
+          if (engine._autoSwapsLeft === 0) engine._autoSwapsLeft = 1;
+          vi.advanceTimersByTime(8000);
+        }
+        expect(rest).not.toHaveBeenCalled();
+        breakNext();
+        vi.advanceTimersByTime(8000); // 3 回目のブレイク = 休み
+        expect(rest).toHaveBeenCalledTimes(1);
+        expect(breaks).toHaveBeenCalledTimes(2);
+        expect(engine._autoBreaks).toBe(0);
+        expect(engine._autoRestAt).toBeGreaterThanOrEqual(4);
+        expect(engine._autoRestAt).toBeLessThanOrEqual(6);
+      });
+
+      it('drops layers, resets blend / filter, then starts again from 1 layer 0.5 s later', () => {
         vi.useFakeTimers();
         engine.startAutoCycle(NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL });
-        engine._autoRestAt = 4;
-        for (let i = 0; i < 3; i++) {
-          vi.advanceTimersByTime(8000);
-          expect(engine.activeLayers.size).toBeGreaterThan(0);
-        }
+        for (let i = 0; i < 3; i++) vi.advanceTimersByTime(8000);
+        expect(engine.activeLayers.size).toBe(3);
         engine._randomizeBlend(POOL, true);
         engine._randomizeFilter(POOL, true);
-        vi.advanceTimersByTime(8000); // 4 回目 = 休み
+        breakNext();
+        engine._autoRestAt = 1;
+        vi.advanceTimersByTime(8000); // 休み
         expect(engine.activeLayers.size).toBe(0);
         expect(engine.blendMode).toBe('screen');
         expect(engine.overlay.style.filter).toBe('none');
@@ -2351,22 +2381,20 @@ describe('VJamFXEngine', () => {
         vi.advanceTimersByTime(499);
         expect(engine.activeLayers.size).toBe(0);
         vi.advanceTimersByTime(1);
-        expect(engine.activeLayers.size).toBeGreaterThan(0);
-        expect(engine._autoRestAt).toBeGreaterThanOrEqual(4);
-        expect(engine._autoRestAt).toBeLessThanOrEqual(6);
-        // そのあとは普通に秒数で切り替わる
-        const tick = vi.spyOn(engine, '_autoCycleTick');
+        expect(engine.activeLayers.size).toBe(1);
+        // そのあとは普通に秒数で 1 枚ずつ積み上げる
         vi.advanceTimersByTime(8000);
-        expect(tick).toHaveBeenCalledTimes(1);
+        expect(engine.activeLayers.size).toBe(2);
       });
 
       it('also rests when the switch comes from a beat', () => {
         vi.useFakeTimers();
         engine._externalAudioData = { bpm: 120 };
         engine.startAutoCycle(NAMES, 8000, {});
+        breakNext();
         engine._autoRestAt = 1;
         vi.advanceTimersByTime(8000);
-        expect(engine.activeLayers.size).toBeGreaterThan(0);
+        expect(engine.activeLayers.size).toBe(1);
         engine._onBeat();
         expect(engine.activeLayers.size).toBe(0);
         engine._stopAutoCycle();
@@ -2378,6 +2406,7 @@ describe('VJamFXEngine', () => {
         engine.setBlendMode('lighten');
         engine.setFilter('sepia', true);
         engine.startAutoCycle(NAMES, 8000, { autoBlend: false, autoFilters: true, locks: { effect: true, filter: true }, skipFirstTick: true });
+        breakNext();
         engine._autoRestAt = 1;
         vi.advanceTimersByTime(8000);
         expect(engine.getActiveLayerNames()).toEqual([NAMES[0]]);
@@ -2388,12 +2417,297 @@ describe('VJamFXEngine', () => {
       it('does not switch after Auto is stopped during the rest', () => {
         vi.useFakeTimers();
         engine.startAutoCycle(NAMES, 8000, {});
+        breakNext();
         engine._autoRestAt = 1;
         vi.advanceTimersByTime(8000);
         expect(engine.activeLayers.size).toBe(0);
         engine.kill({});
         vi.advanceTimersByTime(10000);
         expect(engine.activeLayers.size).toBe(0);
+      });
+    });
+
+    // Auto を 1 手ずつ・1 枚から積み上げる(#59)
+    describe('Auto flow: one layer per step, build up, swap, break (#59)', () => {
+      const names = () => engine.getActiveLayerNames();
+
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      // Cycle 8 秒で n 手進めて、手ごとのレイヤー名を返す(休みは出さない)
+      function steps(n) {
+        engine._autoRestAt = Infinity;
+        const out = [];
+        for (let i = 0; i < n; i++) {
+          vi.advanceTimersByTime(8000);
+          out.push(names());
+        }
+        return out;
+      }
+
+      it('starts with 1 layer (fade in), then adds 1 per step up to 3', () => {
+        engine.startAutoCycle(NAMES, 8000, {});
+        const first = names();
+        expect(first).toHaveLength(1);
+        expect(engine.activeLayers.get(first[0]).auto).toBe(true);
+        const [two, three] = steps(2);
+        expect(two).toEqual([...first, two[1]]);
+        expect(three).toEqual([...two, three[2]]);
+        expect(new Set(three).size).toBe(3);
+        for (const [, layer] of engine.activeLayers) expect(layer.auto).toBe(true);
+      });
+
+      it('swaps the oldest layer for a new one 2-4 times, then keeps only the newest (break) and builds up again', () => {
+        const seenSwaps = new Set();
+        for (let round = 0; round < 20; round++) {
+          engine.startAutoCycle(NAMES, 8000, {});
+          let prev = names();
+          let swaps = 0;
+          let phase = 'build';
+          for (const now of steps(12)) {
+            if (phase === 'build' && now.length > prev.length) {
+              // 足す: 前のはそのまま、新しいものが 1 枚
+              expect(now.slice(0, prev.length)).toEqual(prev);
+              expect(now).toHaveLength(prev.length + 1);
+              if (now.length === 3) phase = 'swap';
+            } else if (phase === 'swap' && now.length === 3) {
+              // 入れ替え: 一番古いものが抜けて、出ていなかったものが 1 枚入る
+              expect(now.slice(0, 2)).toEqual(prev.slice(1));
+              expect(prev).not.toContain(now[2]);
+              swaps++;
+            } else {
+              // ブレイク: 一番新しいものだけ残る
+              expect(phase).toBe('swap');
+              expect(now).toEqual([prev[prev.length - 1]]);
+              seenSwaps.add(swaps);
+              swaps = 0;
+              phase = 'build';
+            }
+            prev = now;
+          }
+        }
+        expect([...seenSwaps].sort()).toEqual([2, 3, 4]);
+      });
+
+      it('cap: the device layer cap or the pool (without heavy ones) when smaller', () => {
+        // 1 → 2 → 入れ替え(2 枚のまま 2〜4 手)→ ブレイク(1 枚)→ 2 …
+        engine._maxLayers = 2;
+        engine.startAutoCycle(NAMES, 8000, {});
+        let seq = steps(12).map(n => n.length);
+        expect(seq[0]).toBe(2);
+        expect(Math.max(...seq)).toBe(2);
+        expect(seq).toContain(1);
+
+        engine._maxLayers = 5;
+        for (const n of NAMES.slice(2)) engine._heavyPresets.add(n);
+        engine.startAutoCycle(NAMES, 8000, {});
+        const layers = steps(12);
+        seq = layers.map(n => n.length);
+        expect(seq[0]).toBe(2);
+        expect(Math.max(...seq)).toBe(2);
+        for (const n of layers.flat()) expect(NAMES.slice(0, 2)).toContain(n);
+      });
+
+      it('a quiet stretch lowers the cap to 2 (drops the oldest one step at a time), a loud one brings back 3', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0.99); // 入れ替えは 4 手
+        engine.startAutoCycle(NAMES, 8000, {});
+        steps(2);
+        expect(names()).toHaveLength(3);
+        const loud = vi.spyOn(engine, '_loudnessCap').mockReturnValue(2);
+        const before = names();
+        const [after] = steps(1);
+        expect(after).toEqual(before.slice(1)); // 減らす(一番古い 1 枚だけ)
+        // 2 枚で入れ替える
+        let prev = after;
+        for (const now of steps(3)) {
+          expect(now.slice(0, 1)).toEqual(prev.slice(1));
+          expect(now).toHaveLength(2);
+          prev = now;
+        }
+        // 盛り上がった: 入れ替えの手で 1 枚足して 3 枚に戻り、入れ替えを終えたらブレイク
+        loud.mockReturnValue(3);
+        const [back, broke] = steps(2);
+        expect(back).toEqual([...prev, back[2]]);
+        expect(broke).toEqual([back[2]]);
+        // 音が無い(0)ときは 3 枚まで
+        loud.mockReturnValue(0);
+        expect(steps(2).map(n => n.length)).toEqual([2, 3]);
+      });
+
+      it('picks from the pool, never a heavy one or one already shown', () => {
+        engine._heavyPresets.add(NAMES[0]);
+        for (let round = 0; round < 10; round++) {
+          engine.startAutoCycle(NAMES, 8000, {});
+          for (const now of steps(8)) {
+            expect(now).not.toContain(NAMES[0]);
+            expect(new Set(now).size).toBe(now.length);
+          }
+        }
+      });
+
+      it('adds one whose category differs from the layers shown (when there is one)', () => {
+        const categories = { 'pool-a': 'A', 'pool-b': 'A', 'pool-c': 'B', 'pool-d': 'B', 'pool-e': 'C', 'pool-f': 'C' };
+        for (let round = 0; round < 20; round++) {
+          engine.startAutoCycle(NAMES, 8000, { pool: { categories } });
+          const seq = [names(), ...steps(2)];
+          // 3 枚までは全部カテゴリが違う(A / B / C から 1 枚ずつ)
+          expect(new Set(seq[2].map(n => categories[n])).size).toBe(3);
+          // 入れ替え: 残る 2 枚とかぶらないもの(抜けるものと同じカテゴリ)
+          const [swapped] = steps(1);
+          expect(new Set(swapped.map(n => categories[n])).size).toBe(3);
+        }
+        // カテゴリが渡らない(SW の古い状態)ときは気にしない
+        engine.startAutoCycle(NAMES, 8000, {});
+        expect(engine._presetCategories).toBeNull();
+        expect(steps(2)[1]).toHaveLength(3);
+      });
+
+      it('Next: continues from the set Next showed (skipFirstTick), one layer per step', () => {
+        engine.crossfade([NAMES[0], NAMES[1], NAMES[2]], {});
+        engine.startAutoCycle(NAMES, 8000, { skipFirstTick: true });
+        expect(names()).toEqual(NAMES.slice(0, 3));
+        const [swapped] = steps(1);
+        expect(swapped.slice(0, 2)).toEqual([NAMES[1], NAMES[2]]);
+        expect(NAMES.slice(3)).toContain(swapped[2]);
+
+        engine.crossfade([NAMES[4]], {});
+        engine.startAutoCycle(NAMES, 8000, { skipFirstTick: true });
+        const [added] = steps(1);
+        expect(added).toEqual([NAMES[4], added[1]]);
+      });
+
+      it('effect lock: never changes the layers; blend / filter only at a break and sometimes at a swap', () => {
+        engine._addLayer(NAMES[0]);
+        engine._addLayer(NAMES[1]);
+        engine.startAutoCycle(NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL, locks: { effect: true }, skipFirstTick: true });
+        const blend = vi.spyOn(engine, '_randomizeBlend');
+        for (const now of steps(30)) expect(now).toEqual([NAMES[0], NAMES[1]]);
+        expect(blend).toHaveBeenCalled();
+        expect(blend.mock.calls.length).toBeLessThan(30);
+      });
+
+      it('blend / filter (Rnd): not on build steps, always at a break, and on about 3 in 10 swaps', () => {
+        engine.startAutoCycle(NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL });
+        const blend = vi.spyOn(engine, '_randomizeBlend');
+        const filter = vi.spyOn(engine, '_randomizeFilter');
+        steps(2); // 足す 2 手
+        expect(blend).not.toHaveBeenCalled();
+        expect(filter).not.toHaveBeenCalled();
+        // 入れ替え: 乱数が 0.3 未満のときだけ
+        const random = vi.spyOn(Math, 'random').mockReturnValue(0.5); // 入れ替えは 3 手
+        steps(1);
+        expect(blend).not.toHaveBeenCalled();
+        random.mockReturnValue(0.29);
+        steps(1);
+        expect(blend).toHaveBeenCalledTimes(1);
+        expect(filter).toHaveBeenCalledTimes(1);
+        random.mockReturnValue(0.5);
+        steps(1);
+        expect(blend).toHaveBeenCalledTimes(1);
+        // ブレイク: 毎回
+        steps(1);
+        expect(names()).toHaveLength(1);
+        expect(blend).toHaveBeenCalledTimes(2);
+        expect(filter).toHaveBeenCalledTimes(2);
+      });
+
+      it('a pool of only WebGL presets swaps the one WebGL layer (never two at once)', () => {
+        const GL = NAMES.slice(0, 3);
+        engine.startAutoCycle(GL, 8000, { pool: { webgl: GL } });
+        let prev = names();
+        expect(prev).toHaveLength(1);
+        let changes = 0;
+        for (const now of steps(12)) {
+          // 足せない(WebGL が出ている)ので入れ替え。ブレイクは 1 枚のまま
+          expect(now).toHaveLength(1);
+          if (now[0] !== prev[0]) changes++;
+          prev = now;
+        }
+        expect(changes).toBeGreaterThanOrEqual(6);
+      });
+
+      it('one step at a time: Auto stays on its timer while a step fades', () => {
+        engine._fadeDuration = 4;
+        engine.startAutoCycle(NAMES, 8000, {});
+        const [div] = engine._stage.querySelectorAll('[data-vjam-layer]');
+        vi.advanceTimersByTime(8000);
+        // 足した 1 枚だけがフェードイン中。前のものは出たまま
+        const layers = [...engine.activeLayers.values()];
+        expect(layers[0].container).toBe(div);
+        expect(layers[1].container.style.transition).toBe('opacity 4s linear');
+        expect(engine._stage.querySelectorAll('[data-vjam-layer]')).toHaveLength(2);
+        vi.advanceTimersByTime(8000);
+        vi.advanceTimersByTime(8000); // 入れ替え: 一番古い 1 枚だけフェードアウト
+        expect(engine._stage.querySelectorAll('[data-vjam-layer]')).toHaveLength(4);
+        expect(div.style.opacity).toBe('0');
+      });
+    });
+
+    // 音の大きさ(#59): rms の長め(8 秒)の平均をその山と比べて、静かなら Auto の上限を 2 枚に
+    describe('loudness (Auto cap)', () => {
+      // fps 60 で seconds 秒ぶん rms を入れる。最後の時刻を返す
+      function feed(rms, seconds, t0) {
+        let t = t0 || 0;
+        for (let i = 0; i < seconds * 60; i++) {
+          t += 1000 / 60;
+          engine._trackLoudness(rms, t);
+        }
+        return t;
+      }
+
+      it('does not decide before 8 s of sound (cap stays 3)', () => {
+        engine._trackLoudness(0.3, 0);
+        feed(0.3, 7.5, 0);
+        expect(engine._loudnessCap()).toBe(0);
+        feed(0.3, 1, 7500);
+        expect(engine._loudnessCap()).toBe(3);
+      });
+
+      it('a long quiet stretch → 2, back loud → 3 (the long average does not flicker on a single quiet bar)', () => {
+        let t = feed(0.3, 30);
+        expect(engine._loudnessCap()).toBe(3);
+        t = feed(0.02, 2, t); // 2 秒だけ静か(1 小節)
+        expect(engine._loudnessCap()).toBe(3);
+        t = feed(0.02, 10, t);
+        expect(engine._loudnessCap()).toBe(2);
+        t = feed(0.3, 10, t);
+        expect(engine._loudnessCap()).toBe(3);
+      });
+
+      it('starts over after 2 s without sound, and is cleared on stop', () => {
+        let t = feed(0.3, 30);
+        t = feed(0.02, 15, t);
+        expect(engine._loudnessCap()).toBe(2);
+        feed(0.02, 1, t + 3000);
+        expect(engine._loudnessCap()).toBe(0);
+        feed(0.3, 10);
+        engine.stop();
+        expect(engine._loudness).toBeNull();
+        expect(engine._loudnessCap()).toBe(0);
+      });
+
+      it('the draw loop feeds the audio rms and forgets it 2 s after the sound stops', () => {
+        let frame;
+        requestAnimationFrame.mockImplementation((cb) => { frame = cb; return 1; });
+        try {
+          engine.active = true;
+          engine._startLoop();
+          let t = 0;
+          for (let i = 0; i < 600; i++) {
+            engine._externalAudioData = { rms: 0.3, bpm: 120 };
+            t += 1000 / 60;
+            frame(t);
+          }
+          expect(engine._loudnessCap()).toBe(3);
+          for (let i = 0; i < 60; i++) { t += 1000 / 60; frame(t); }
+          expect(engine._loudness).not.toBeNull();
+          for (let i = 0; i < 90; i++) { t += 1000 / 60; frame(t); }
+          expect(engine._loudness).toBeNull();
+        } finally {
+          engine.stop();
+          requestAnimationFrame.mockImplementation(() => 1);
+        }
       });
     });
 
@@ -2519,7 +2833,7 @@ describe('VJamFXEngine', () => {
       vi.spyOn(performance, 'now').mockImplementation(() => clock);
       posted = [];
       vi.spyOn(window, 'postMessage').mockImplementation((msg) => { posted.push(msg); });
-      engine._fadeDuration = 0; // 足してから 2 秒で数え始める
+      engine._fadeDuration = 0; // 足したらすぐ数え始める(フェードの間だけ数えない)
       engine.createOverlay();
       engine.active = true;
       skips = [];
@@ -2553,9 +2867,9 @@ describe('VJamFXEngine', () => {
     const injectPosts = () => posted.filter(m => m.source === 'vjam-fx-engine' && m.type === 'injectPreset');
 
     describe('detection', () => {
-      it('skips after 3 s below 24fps, counted from 2 s after the layer came in', () => {
+      it('skips after 3 s below 24fps, counted from when the layer came in (fade 0)', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 4.9); // 2 秒待って、割り続けて 2.9 秒
+        run(20, 2.9); // 割り続けて 2.9 秒
         expect(engine.getActiveLayerNames()).toEqual([NAMES[0]]);
         expect(skips).toEqual([]);
         run(20, 0.2);
@@ -2564,10 +2878,11 @@ describe('VJamFXEngine', () => {
         expect(skips[0]).toMatchObject({ name: NAMES[0], fps: 20 });
       });
 
-      it('waits for the fade-in to finish (+ 2 s) before counting', () => {
+      // 1 手ずつの Auto(#59)は毎手フェードが入るので、待つのはフェードの間だけ(前はフェード + 2 秒)
+      it('waits only for the fade-in to finish before counting', () => {
         engine._fadeDuration = 1.5;
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 6.4); // 1.5 + 2 + 2.9 秒
+        run(20, 4.4); // 1.5 + 2.9 秒
         expect(skips).toEqual([]);
         run(20, 0.2);
         expect(skips).toHaveLength(1);
@@ -2582,7 +2897,6 @@ describe('VJamFXEngine', () => {
 
       it('needs 3 seconds in a row', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 2);
         for (let i = 0; i < 5; i++) {
           run(20, 2);
           run(50, 1);
@@ -2592,14 +2906,25 @@ describe('VJamFXEngine', () => {
         expect(skips).toHaveLength(1);
       });
 
-      it('starts over when a layer is added or removed (fade)', () => {
+      it('starts over when a layer is added or removed', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 4);
+        run(20, 2);
         engine._addLayer(NAMES[1], true);
-        run(20, 4.9); // 足したので 2 秒待ってから 2.9 秒
+        run(20, 2.9); // 足したので数え直して 2.9 秒
         expect(skips).toEqual([]);
         engine._removeLayer(NAMES[1]);
-        run(20, 4.9);
+        run(20, 2.9);
+        expect(skips).toEqual([]);
+        run(20, 0.2);
+        expect(skips).toHaveLength(1);
+      });
+
+      it('waits for the fade of a layer that is removed too (it still draws while it fades out)', () => {
+        engine._fadeDuration = 1.5;
+        engine.crossfade([NAMES[0], NAMES[1]], { poolPresets: NAMES });
+        run(20, 1.5 + 2);
+        engine._removeLayer(NAMES[1]);
+        run(20, 1.5 + 2.9);
         expect(skips).toEqual([]);
         run(20, 0.2);
         expect(skips).toHaveLength(1);
@@ -2619,7 +2944,6 @@ describe('VJamFXEngine', () => {
 
       it('starts over after rAF stopped (the tab was in the background)', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 2);
         for (let i = 0; i < 5; i++) {
           run(20, 2);
           t += 3000; // rAF が止まっていた
@@ -2653,6 +2977,7 @@ describe('VJamFXEngine', () => {
       it('marks the Auto rest from the fade-out until the next set', () => {
         vi.useFakeTimers();
         engine.startAutoCycle(NAMES, 8000, {});
+        engine._autoSwapsLeft = 0;
         engine._autoRestAt = 1;
         vi.advanceTimersByTime(8000);
         expect(engine._autoResting).toBe(true);
@@ -2677,9 +3002,45 @@ describe('VJamFXEngine', () => {
         expect(skips).toHaveLength(1);
       });
 
+      // Auto を 1 手ずつ(#59): 毎手フェードが入っても、次の手より先に判定が効く
+      it('Auto (Cycle 8 s, fade 4 s): skips a heavy layer a step added before the next step (fade + 3 s = 7 s), and confirms before the step after', () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); // performance.now は描く時間の計測(clock)のまま
+        // 描画ループと同じ: 1 フレームずつタイマーも進める
+        const runAuto = (fps, seconds) => {
+          const n = Math.round(seconds * fps);
+          for (let i = 0; i < n; i++) {
+            vi.advanceTimersByTime(1000 / fps);
+            t += 1000 / fps;
+            for (const [, layer] of engine.activeLayers) if (layer.preset.p5) layer.preset.p5.redraw();
+            engine._trackFps(t);
+            engine._trackHeavy(t);
+          }
+        };
+        engine._fadeDuration = 4;
+        costs[NAMES[1]] = 30;
+        vi.spyOn(Math, 'random').mockReturnValue(0); // 先頭から選ぶ: 始めは NAMES[0]、1 手目で NAMES[1]
+        engine.startAutoCycle(NAMES, 8000, {});
+        const step = vi.spyOn(engine, '_autoSwitch');
+        runAuto(50, 8); // 8 秒: 1 手目で NAMES[1] を足す
+        expect(step).toHaveBeenCalledTimes(1);
+        expect(engine.getActiveLayerNames()).toEqual([NAMES[0], NAMES[1]]);
+        runAuto(20, 6.9); // フェードイン 4 秒 + 2.9 秒
+        expect(skips).toEqual([]);
+        runAuto(20, 0.2); // 7 秒で外す(次の手の 8 秒より前)
+        expect(skips).toHaveLength(1);
+        expect(skips[0]).toMatchObject({ name: NAMES[1], replacement: NAMES[2] });
+        expect(step).toHaveBeenCalledTimes(1);
+        // 入れ替えも 1 手と数え、次の手はそこから 8 秒後。その前に確かめ(フェード 4 秒 + 3 秒)が終わって覚える
+        runAuto(50, 7.1);
+        expect(heavyPosts().map(m => m.name)).toEqual([NAMES[1]]);
+        expect(step).toHaveBeenCalledTimes(1);
+        runAuto(50, 1);
+        expect(step).toHaveBeenCalledTimes(2);
+        engine._stopAutoCycle();
+      });
+
       it('reports the average fps of the 3 slow seconds (one decimal)', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 2);
         run(20, 1);
         run(10, 1);
         run(20, 1.1);
@@ -2688,8 +3049,8 @@ describe('VJamFXEngine', () => {
 
       it('OFF (stop) resets the measuring but keeps what it learned', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 5.1);
-        run(50, 5.1); // 軽くなったので覚える
+        run(20, 3.1);
+        run(50, 3.1); // 軽くなったので覚える
         expect(heavyPosts()).toHaveLength(1);
         expect(engine._heavyPresets.has(NAMES[0])).toBe(true);
         run(20, 3);
@@ -2704,10 +3065,10 @@ describe('VJamFXEngine', () => {
     describe('saving (only when it really got lighter)', () => {
       it('saves after the 3 s after the layer is gone are back at 24fps or more', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 5.1);
+        run(20, 3.1);
         expect(skips).toHaveLength(1);
         expect(heavyPosts()).toEqual([]); // 外しただけではまだ覚えない
-        run(50, 4.9); // 外したので 2 秒待って、2.9 秒
+        run(50, 2.9); // 外したので数え直して 2.9 秒
         expect(heavyPosts()).toEqual([]);
         run(50, 0.2);
         expect(heavyPosts()).toEqual([{ source: 'vjam-fx-engine', type: 'heavyPreset', name: NAMES[0], fps: 20, replacement: skips[0].replacement }]);
@@ -2717,10 +3078,10 @@ describe('VJamFXEngine', () => {
 
       it('does not save when the page stays heavy after the layer is gone (the layer was innocent)', () => {
         engine.crossfade([NAMES[0]], { poolPresets: [NAMES[0], NAMES[1]] });
-        run(20, 5.1);
+        run(20, 3.1);
         expect(skips.map(m => m.name)).toEqual([NAMES[0]]);
         expect(engine.getActiveLayerNames()).toEqual([NAMES[1]]);
-        run(20, 5.1); // 外しても重いまま
+        run(20, 3.1); // 外しても重いまま
         expect(heavyPosts()).toEqual([]);
         // このページでも重い扱いにしない(入れ替えだけで終わり。また選んでよい)
         expect(engine._heavyPresets.has(NAMES[0])).toBe(false);
@@ -2731,9 +3092,9 @@ describe('VJamFXEngine', () => {
 
       it('stops skipping in this page (this engine) once a skip did not make it lighter', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 5.1);
+        run(20, 3.1);
         const [replacement] = engine.getActiveLayerNames();
-        run(20, 5.1); // 外しても重いまま → 覚えず、ここで飛ばすのをやめる(同じ秒で次を外さない)
+        run(20, 3.1); // 外しても重いまま → 覚えず、ここで飛ばすのをやめる(同じ秒で次を外さない)
         expect(engine._heavySkipOff).toBe(true);
         expect(skips.map(m => m.name)).toEqual([NAMES[0]]);
         run(20, 30);
@@ -2757,8 +3118,7 @@ describe('VJamFXEngine', () => {
 
       it('decides on the average of the 3 s (one slow second is fine, two are not)', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 5.1); // 5050ms で外す
-        run(50, 2); // 外したので 2 秒待つ(7100ms まで)
+        run(20, 3.1); // 3050ms で外して、次のフレーム(3100ms)から数え直す
         run(40, 1);
         run(20, 1);
         run(25, 1); // (40 + 20 + 25) / 3 = 28.3
@@ -2766,9 +3126,8 @@ describe('VJamFXEngine', () => {
 
         engine._heavyPresets.clear();
         engine.crossfade([NAMES[1]], { poolPresets: NAMES });
-        run(20, 5.1);
+        run(20, 3.1);
         expect(skips.map(m => m.name)).toEqual([NAMES[0], NAMES[1]]);
-        run(50, 2);
         run(25, 1);
         run(20, 2); // (25 + 20 + 20) / 3 = 21.7
         expect(engine._heavyPending).toBeNull();
@@ -2778,10 +3137,10 @@ describe('VJamFXEngine', () => {
 
       it('measures 3 s in a row: starts over when layers change in between (Auto switch)', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 5.1);
-        run(50, 4);
+        run(20, 3.1);
+        run(50, 2);
         engine._addLayer(NAMES[2], true);
-        run(50, 4.9);
+        run(50, 2.9);
         expect(heavyPosts()).toEqual([]);
         run(50, 0.2);
         expect(heavyPosts()).toHaveLength(1);
@@ -2789,7 +3148,7 @@ describe('VJamFXEngine', () => {
 
       it('does not save what was not confirmed before OFF', () => {
         engine.crossfade([NAMES[0]], { poolPresets: NAMES });
-        run(20, 5.1);
+        run(20, 3.1);
         expect(engine._heavyPresets.has(NAMES[0])).toBe(true);
         engine.stop();
         expect(engine._heavyPending).toBeNull();
@@ -2884,11 +3243,16 @@ describe('VJamFXEngine', () => {
         expect(engine.activeLayers.get(NAMES[2]).auto).toBe(false);
       });
 
-      it('marks the layers Auto chose (also the ones it kept)', () => {
-        engine.handleMessage({ action: 'addLayer', preset: NAMES[0] });
-        vi.spyOn(Math, 'random').mockReturnValue(0.99); // 3 本、並びはそのまま
+      it('marks the layers Auto chose (also the ones it kept going from)', () => {
         engine.startAutoCycle(NAMES.slice(0, 3), 100000, {});
-        expect(engine.getActiveLayerNames().sort()).toEqual(NAMES.slice(0, 3));
+        const [first] = engine.getActiveLayerNames();
+        expect(engine.activeLayers.get(first).auto).toBe(true);
+        // シーンなどで出したもの(手で選んだもの)から続けると、1 手目から Auto のもの
+        engine.handleMessage({ action: 'addLayer', preset: NAMES[3] });
+        engine.startAutoCycle(NAMES, 100000, { skipFirstTick: true });
+        expect(engine.activeLayers.get(NAMES[3]).auto).toBe(false);
+        engine._autoSwitch();
+        expect(engine.activeLayers.size).toBe(3);
         for (const [, layer] of engine.activeLayers) expect(layer.auto).toBe(true);
         engine._stopAutoCycle();
       });
@@ -2916,11 +3280,11 @@ describe('VJamFXEngine', () => {
     describe('replacement', () => {
       it('Auto: fades the heavy layer out and another from the pool in, and never picks it again in this page', () => {
         engine._fadeDuration = 1.5;
-        vi.spyOn(Math, 'random').mockReturnValue(0); // 1 本
+        vi.spyOn(Math, 'random').mockReturnValue(0);
         engine.startAutoCycle(NAMES, 100000, {});
         const [heavy] = engine.getActiveLayerNames();
         const heavyDiv = engine.activeLayers.get(heavy).container;
-        run(20, 6.6);
+        run(20, 4.6); // フェードイン 1.5 秒 + 3 秒
 
         const [post] = skips;
         expect(post).toMatchObject({ name: heavy, fps: 20 });
@@ -2937,8 +3301,9 @@ describe('VJamFXEngine', () => {
 
         vi.restoreAllMocks();
         vi.spyOn(window, 'postMessage').mockImplementation(() => {});
+        engine._autoRestAt = Infinity;
         for (let i = 0; i < 50; i++) {
-          engine._autoCycleTick();
+          engine._autoSwitch();
           expect(engine.activeLayers.has(heavy)).toBe(false);
         }
         engine._stopAutoCycle();
@@ -3187,25 +3552,32 @@ describe('VJamFXEngine', () => {
         if (Math.random.mockRestore) Math.random.mockRestore();
       });
 
-      it('Auto picks at most one WebGL preset (pool.webgl) and keeps the count it drew', () => {
+      // 1 手ずつの Auto(#59): WebGL が出ていれば 2D を足す。WebGL が 2 枚になってレイヤーが減ることはない
+      it('Auto never shows two WebGL layers (pool.webgl): with a WebGL one shown it adds 2D ones, up to 3', () => {
         engine._fadeDuration = 0;
-        engine.handleMessage({ action: 'startAutoCycle', presets: [...GL, ...FLAT], interval: 100000, skipFirstTick: true, pool: { webgl: GL } });
-        expect([...engine._webglPresets]).toEqual(GL);
-        for (let i = 0; i < 100; i++) {
-          const spy = vi.spyOn(Math, 'random').mockImplementationOnce(() => 0.99); // 3 本(並べ替えは本物の乱数)
-          engine._autoCycleTick();
-          spy.mockRestore();
-          const names = engine.getActiveLayerNames();
-          // WebGL 3 本・2D 2 本のプールから 3 本 = 2D 2 本 + WebGL 1 本
-          expect(names).toHaveLength(3);
-          expect(names.filter(n => GL.includes(n))).toHaveLength(1);
+        for (let round = 0; round < 30; round++) {
+          engine.handleMessage({ action: 'startAutoCycle', presets: [...GL, ...FLAT], interval: 100000, pool: { webgl: GL } });
+          expect([...engine._webglPresets]).toEqual(GL);
+          engine._autoRestAt = Infinity;
+          const counts = [];
+          for (let i = 0; i < 12; i++) {
+            if (i > 0) engine._autoSwitch();
+            const names = engine.getActiveLayerNames();
+            expect(names.filter(n => GL.includes(n)).length).toBeLessThanOrEqual(1);
+            counts.push(names.length);
+          }
+          // WebGL 3 本・2D 2 本のプールでも、積み上げで 3 枚(2D 2 本 + WebGL 1 本)まで行く
+          expect(counts.slice(0, 3)).toEqual([1, 2, 3]);
         }
       });
 
-      it('Auto picks one when the pool is all WebGL', () => {
-        vi.spyOn(Math, 'random').mockReturnValue(0.99);
+      it('Auto starts with one and swaps it when the pool is all WebGL', () => {
         engine.startAutoCycle(GL, 100000, { pool: { webgl: GL } });
-        expect(engine.getActiveLayerNames()).toEqual([GL[0]]);
+        const [first] = engine.getActiveLayerNames();
+        expect(engine.getActiveLayerNames()).toHaveLength(1);
+        engine._autoSwitch(); // 足せない(WebGL が出ている)ので入れ替え
+        expect(engine.getActiveLayerNames()).toHaveLength(1);
+        expect(engine.getActiveLayerNames()).not.toEqual([first]);
       });
 
       it('a replacement for a heavy layer is not WebGL while another WebGL layer stays (webgl from Next)', () => {

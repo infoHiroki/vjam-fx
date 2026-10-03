@@ -13,7 +13,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - p5.js (2D graphics)
 - Chrome Extension Manifest V3
 - Service Worker (状態永続化)
-- Vitest + jsdom (testing, 3989 tests) + Playwright e2e (`tests/e2e/`, 92)
+- Vitest + jsdom (testing, 4066 tests) + Playwright e2e (`tests/e2e/`, 103)
 
 ## Architecture
 - **Popup**: `popup/` — UI controller, injects via `chrome.scripting.executeScript`
@@ -57,8 +57,14 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 ## UI: Auto が主役・手動は畳む(見本 `tools/design/mockup/index.html`)
 - **いつもの画面**(上から): ヘッダー(ロゴ `popup/lockup.png`・設定・ON/OFF)→ ステージ → `Next` / `Auto` → チップ → Opacity → `Manual` の行 → フッター
 - **ステージ**: `AUTO` / `MANUAL` / `OFF`、BPM(取れるときだけ)と拍の点(60 / BPM 秒で脈打つ)、出ているレイヤー名(最大 5)。名前と BPM は popup が開いている間 1 秒おきにエンジンから読む(表示だけ。popup の状態には入れない)
-- **Next**: ランダム1-3プリセット（選択分のみinject、FX維持）
-- **Auto** / **Stop Auto**: プリセットローテーション(設定の Cycle 秒数=既定 15 秒がたった後の次の拍で切り替え。拍を待つのは最大 1 秒、BPM が取れなければ秒数で。Rnd も同じ)。フェード既定 5 秒(Cycle の半分まで)、dip の片道はフェードの 1/4(0.3〜1.5 秒)。消えていくレイヤーは 20fps に落とし、フェードの半分で `noLoop()`
+- **Next**: ランダム1-3プリセット（選択分のみinject、FX維持）。Auto が ON なら Auto は切らず、そのセットから 1 手ずつ続ける
+- **Auto** / **Stop Auto**: 1 手ずつ積み上げる(#59)。1 手 = 設定の Cycle 秒数(既定 15 秒)がたった後の次の拍(拍を待つのは最大 1 秒、BPM が取れなければ秒数で。Rnd も同じ)で、変えるのは 1 枚だけ
+  - 流れ: 1 枚(トグル ON の Auto も 1 枚から)→ 1 枚ずつ足す → 上限で一番古い 1 枚を入れ替え(2〜4 手)→ ブレイク(新しい 1 枚だけ残す)→ また足す。4〜6 回のブレイクに 1 回は休み(全部消して 0.5 秒 → 1 枚から)
+  - 上限は 3。端末のレイヤー上限・重いものを除いたプールの本数・音(rms の 8 秒平均が山の半分未満なら 2)のほうが小さければそちら。超えたら一番古い 1 枚を減らす
+  - 足すものはプールから(出ているもの・重いものを除く)。WebGL は 1 枚まで、カテゴリ(popup がプールの `categories` で渡す)がかぶらないものを優先
+  - Auto 中の blend / filter(Rnd)はブレイクと入れ替えの 3 割で変える。エフェクトのロック中は枚数を変えない
+  - フェード既定 5 秒(Cycle の半分まで)、dip の片道はフェードの 1/4(0.3〜1.5 秒)。消えていくレイヤーは 20fps に落とし、フェードの半分で `noLoop()`
+  - 重いもの判定はレイヤーを足した・外したフェードの間だけ数えない(フェード + 3 秒で効く)。重いものの入れ替えも 1 手と数える
 - **チップ**: `Blend Rnd` / `Filter Rnd` / `All tabs`。ON は緑の点
   - **Blend Rnd** / **Filter Rnd**: ランダム変更（Auto ON/OFF問わず独立動作）。手動の Blend / Filters の `Rnd` と同じもの
   - Auto ONでBlend Rnd / Filter Rndも自動ON、Auto OFFでも独立動作を継続
@@ -97,8 +103,8 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 
 ## Testing
 ```bash
-npm test          # vitest run (3989 tests)
-npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(92)
+npm test          # vitest run (4066 tests)
+npm run test:e2e  # Playwright で実物の拡張を Chromium に読み込んで popup から操作(103)
 npm run test:watch
 ```
 

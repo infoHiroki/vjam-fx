@@ -145,7 +145,7 @@ test.describe.serial('ダークページ → ライトページ遷移', () => {
     const layersNow = async () => (await readState(page)).layers.join(',');
     const before = await layersNow();
     await popup.click('#btn-auto-cycle');
-    // 押した直後に 1 回入れ替わり、その後は Cycle の 15 秒がたった後の拍(待つのは最大 1 秒)で入れ替わる
+    // 押した直後に 1 枚から始め直し、その後は Cycle の 15 秒がたった後の拍(待つのは最大 1 秒)で 1 枚ずつ足す(#59)
     let first;
     await expect.poll(async () => (first = await layersNow()), { timeout: 15_000 }).not.toBe(before);
     await expect.poll(layersNow, { timeout: 25_000 }).not.toBe(first);

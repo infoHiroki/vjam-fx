@@ -34,13 +34,30 @@
   // invert はオーバーレイの黒を白にしてページを潰し、blur は iPad で重いので外す
   const FALLBACK_RND_FILTERS = ['hue-rotate', 'grayscale', 'saturate', 'brightness', 'contrast', 'sepia'].map(n => FILTER_VALUES[n]);
 
-  // VJam 本体と同じ回し方: blend は 90%・filter は 60% で変え、4〜6 回に 1 回 0.5 秒休む。
+  // VJam 本体と同じ回し方: blend は 90%・filter は 60% で変え、0.5 秒休む。
   // 切り替えは秒数(popup の Cycle、既定 15 秒)がたった後の次の拍。拍を待つのは最大 1 秒(長さは BPM で変わらない)
   const DEFAULT_CYCLE_MS = 15000;
   const BEAT_WAIT_MS = 1000;
   const BLEND_CHANGE_RATE = 0.9;
   const FILTER_CHANGE_RATE = 0.6;
   const REST_MS = 500;
+
+  // Auto の流れ(#59): 1 手(Cycle の秒数ごと)で変えるのは 1 枚だけ。1 枚から積み上げ → 上限で一番古いものを入れ替え(2〜4 手)
+  // → ブレイク(新しい 1 枚だけ残す)→ また積み上げ。4〜6 回のブレイクに 1 回は休み(全部消して 0.5 秒 → 1 枚から)。
+  // blend / filter(Rnd)はブレイクのときと、入れ替えの 3 割で変える
+  const AUTO_MAX_LAYERS = 3;
+  const SWAP_STEPS_MIN = 2;
+  const SWAP_STEPS_MAX = 4;
+  const SWAP_FX_RATE = 0.3;
+  const REST_BREAKS_MIN = 4;
+  const REST_BREAKS_MAX = 6;
+
+  // 音の大きさで Auto の上限を変える(静かなところは 2 枚・盛り上がると 3 枚)。rms の長め(8 秒)の平均を、その最近の山(1 分で減っていく)と比べて、
+  // 山の半分を割っていたら静か。平均が 8 秒たまるまでと、音が 2 秒来なければ使わない(上限は 3 枚のまま)
+  const LOUD_AVG_MS = 8000;
+  const LOUD_PEAK_MS = 60000;
+  const LOUD_QUIET = 0.5;
+  const LOUD_STALE_MS = 2000;
 
   // Rnd / Auto で blend・filter を変えるときの dip: オーバーレイ全体を片道(フェード時間の 1/4、この範囲に収める)で 0 へ下げ、変えてから同じ時間で戻す
   const DIP_MIN_MS = 300;
@@ -59,12 +76,11 @@
   // 重いプリセットを飛ばす(#40): 全体の fps が HEAVY_FPS を HEAVY_SECONDS 秒続けて割ったら、一番重いレイヤーを入れ替える。
   // 全体の fps は描画ループ(_startLoop)の rAF で測る。30fps 落としは p5 の描画を間引くだけで rAF は画面の更新どおり回るので、
   // 落とし中でも描画が 30fps に収まっていれば下がらない。下がるのは描画 1 回が 1 フレームに収まらないときだけ(しきい値は 30 の 8 割)
-  // レイヤーを足した・外したら、フェードが終わって HEAVY_SETTLE_MS たつまで数えない。
+  // レイヤーを足した・外したら、そのフェードが終わるまで数えない(Auto は 1 手ごとにフェードが入るので、フェード + 3 秒で判定が効く。#59)。
   // 端末に覚えるのは、外したあとの HEAVY_SECONDS 秒が HEAVY_FPS 以上に戻ったとき(本当に軽くなったとき)だけ。
   // 戻らなければページ自体が重い(外したレイヤーは無実)ので、入れ替えだけで終わり、そのページ(このエンジン)ではもう飛ばさない
   const HEAVY_FPS = 24;
   const HEAVY_SECONDS = 3;
-  const HEAVY_SETTLE_MS = 2000;
 
   // iPad / iPhone(iPadOS は Mac の UA を名乗るのでタッチ点の数で見分ける)
   function isIOS() {
@@ -76,21 +92,9 @@
     return list[Math.floor(Math.random() * list.length)];
   }
 
-  // Auto の抽選: names からランダムに count 本。webgl(WebGL のプリセット名の Set)は 1 本まで。
-  // WebGL のレイヤーは同時に 1 枚までなので(_removeOtherWebglLayers)、2 本引くと 1 本がすぐ消えてその回のレイヤーが減る
-  function pickLayers(names, count, webgl) {
-    const shuffled = names.slice();
-    for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
-    const chosen = [];
-    let hasWebgl = false;
-    for (let i = 0; i < shuffled.length && chosen.length < count; i++) {
-      if (webgl.has(shuffled[i])) {
-        if (hasWebgl) continue;
-        hasWebgl = true;
-      }
-      chosen.push(shuffled[i]);
-    }
-    return chosen;
+  // min〜max の整数
+  function randInt(min, max) {
+    return min + Math.floor(Math.random() * (max - min + 1));
   }
 
   // プールの filters(CSS の filter 文字列)。空・不正なら既定
@@ -276,6 +280,9 @@
       this._heavyPending = null; // 外したあと、本当に軽くなったかを見ているもの { name, fps, replacement, samples }
       this._heavySkipOff = false; // 外しても軽くならなかった(ページ自体が重い)。このエンジンではもう自動で飛ばさない(OFF でも戻さない)
       this._autoResting = false; // Auto の休み中
+      this._autoSwapsLeft = null; // Auto の入れ替えの残りの手数(積み上げ中は null。0 なら次の手はブレイク)
+      this._presetCategories = null; // プリセット名 → カテゴリ(Auto のプールが渡す。足すものを今出ているものとかぶりにくくする)
+      this._loudness = null; // 音の大きさ { avg, peak, since, last }(_trackLoudness)
 
       // MSE タップの BPM(Auto / Rnd の間隔用。取れていなければ 0)
       this._mseBpm = 0;
@@ -1137,6 +1144,8 @@
             self._externalAudioData = null; // consume once
           }
         }
+        if (audioData) self._trackLoudness(audioData.rms, timestamp);
+        else if (self._loudness && timestamp - self._loudness.last > LOUD_STALE_MS) self._loudness = null;
         if (audioData) {
           lastAudioTime = timestamp;
           for (const [, layer] of self.activeLayers) {
@@ -1187,6 +1196,28 @@
       if (preset && preset.p5 && typeof preset.p5.frameRate === 'function') preset.p5.frameRate(fps);
     }
 
+    // 音の大きさ(Auto の上限用): rms の長め(LOUD_AVG_MS)の平均と、その山(LOUD_PEAK_MS で減っていく)。
+    // 平均は 0 から上げていくので、鳴り始めは平均 = 山(静かと見ない)。音が LOUD_STALE_MS 来なかったら数え直す
+    _trackLoudness(rms, now) {
+      const L = this._loudness;
+      if (!L || now - L.last > LOUD_STALE_MS) {
+        this._loudness = { avg: 0, peak: 0, since: now, last: now };
+        return;
+      }
+      const dt = now - L.last;
+      const v = Number.isFinite(rms) && rms > 0 ? rms : 0;
+      L.avg += (v - L.avg) * (1 - Math.exp(-dt / LOUD_AVG_MS));
+      L.peak = Math.max(L.avg, L.peak * Math.exp(-dt / LOUD_PEAK_MS));
+      L.last = now;
+    }
+
+    // 音で決める Auto の上限(静かなら 2、盛り上がっていれば 3)。音が取れていない・平均がまだたまっていなければ 0(使わない)
+    _loudnessCap() {
+      const L = this._loudness;
+      if (!L || !(L.peak > 0) || L.last - L.since < LOUD_AVG_MS) return 0;
+      return L.avg / L.peak < LOUD_QUIET ? 2 : 3;
+    }
+
     // --- 重いプリセット(#40) ---
 
     // レイヤーの p5 の redraw を包んで、1 フレームを描く時間を貯める(どのレイヤーが重いかを決める)
@@ -1212,10 +1243,12 @@
       }
     }
 
-    // レイヤーを足した・外したとき: フェードが終わって HEAVY_SETTLE_MS たつまで数えない(次のフレームの時刻から)
+    // レイヤーを足した・外したとき: 続けて割った秒数を数え直し、そのフェードが終わるまで数えない(次のフレームの時刻から)。
+    // 足した方はフェードインの間、外した方は消えていく間(前半は 20fps で描いている)。フェード 0 なら数え直すだけ
     _holdHeavyCheck() {
       const fadeMs = this._fadeDuration > 0 ? this._fadeDuration * 1000 : 0;
-      this._heavyHoldMs = Math.max(this._heavyHoldMs, fadeMs + HEAVY_SETTLE_MS);
+      this._heavyHoldMs = Math.max(this._heavyHoldMs, fadeMs);
+      this._heavyMeter = null;
     }
 
     // 1 秒ごとの fps を見て、HEAVY_FPS を HEAVY_SECONDS 秒続けて割ったら _skipHeavy。
@@ -1291,9 +1324,12 @@
       }
       if (replacement) this._addReplacement(replacement);
       this._heavyPending = { name: name, fps: Math.round(fps * 10) / 10, replacement: replacement || null, samples: [] };
+      // Auto 中は、この入れ替えも 1 手と数えて次の手をここから Cycle 秒後にする。
+      // 外したあとの確かめ(フェード + 3 秒)が次の手より先に終わる(フェードは Cycle の半分まで・Cycle は 8 秒から)
+      if (this._autoCycleTimer && !this._autoResting) this._scheduleAutoCycle();
     }
 
-    // 外したあとの HEAVY_SECONDS 秒(フェードが終わって HEAVY_SETTLE_MS たってから続けて)の平均が HEAVY_FPS 以上なら、
+    // 外したあとの HEAVY_SECONDS 秒(フェードが終わってから続けて)の平均が HEAVY_FPS 以上なら、
     // SW に知らせて端末に覚えてもらう(bridge 経由)。割ったままならページ自体が重いので覚えない(このページでも選び直してよい)。
     // そのときは、外しても軽くならないので、このエンジンではもう飛ばさない(入れ替え続けない)
     _confirmHeavy(fps) {
@@ -1372,6 +1408,7 @@
       this._heavyHoldMs = 0;
       this._heavyHoldUntil = 0;
       this._pendingPreset = null;
+      this._loudness = null;
       // 確かめ終わっていないものは覚えない
       if (this._heavyPending) {
         this._heavyPresets.delete(this._heavyPending.name);
@@ -1533,8 +1570,9 @@
     }
 
     // --- Auto-Cycle ---
-    // 秒数(intervalMs、既定 15 秒)がたったら次の拍で切り替える。拍を待つのは最大 1 秒、BPM が取れないときは待たない。
-    // 4〜6 回に 1 回は休む(フェードアウトして、消えてから 0.5 秒後に切り替え)
+    // 秒数(intervalMs、既定 15 秒)がたったら次の拍で 1 手進める。拍を待つのは最大 1 秒、BPM が取れないときは待たない。
+    // 流れ(#59): 始めは 1 枚 → 1 手ごとに 1 枚足す(上限まで)→ 上限で一番古い 1 枚を入れ替え(2〜4 手)→ ブレイク(新しい 1 枚だけ残す)→ また足す。
+    // 4〜6 回のブレイクに 1 回は休み(フェードアウトして、消えてから 0.5 秒後に 1 枚から)
 
     startAutoCycle(presetNames, intervalMs, options) {
       this._stopAutoCycle();
@@ -1547,16 +1585,17 @@
       this._autoCycleLocks = (options && options.locks) || {};
       this._autoCyclePool = (options && options.pool) || null;
       this._poolPresets = presetNames;
-      // プールの webgl: WebGL のプリセット名(popup がカタログから入れる。SW もプールごと渡す)
-      if (this._autoCyclePool && Array.isArray(this._autoCyclePool.webgl)) this._webglPresets = new Set(this._autoCyclePool.webgl);
+      // プールの webgl: WebGL のプリセット名、categories: プリセット名 → カテゴリ(popup がカタログから入れる。SW もプールごと渡す)
+      const pool = this._autoCyclePool;
+      if (pool && Array.isArray(pool.webgl)) this._webglPresets = new Set(pool.webgl);
+      this._presetCategories = pool && pool.categories && typeof pool.categories === 'object' ? pool.categories : null;
       this._effectLock = !!this._autoCycleLocks.effect;
-      this._autoSwitchCount = 0;
-      this._autoRestAt = 4 + Math.floor(Math.random() * 3);
+      this._autoSwapsLeft = null;
+      this._autoBreaks = 0;
+      this._autoRestAt = randInt(REST_BREAKS_MIN, REST_BREAKS_MAX);
 
-      // Skip first tick when only updating options (e.g. toggling Auto Blend/Filter)
-      if (!(options && options.skipFirstTick)) {
-        this._autoCycleTick();
-      }
+      // skipFirstTick: 今出ているもの(トグル ON・Next・シーンで出したセット)から 1 手ずつ続ける
+      if (!(options && options.skipFirstTick)) this._autoBegin();
       this._scheduleAutoCycle();
     }
 
@@ -1573,22 +1612,128 @@
       });
     }
 
+    // 1 手。変えるのは 1 枚だけ: 入れ替えを終えたらブレイク / 上限を超えていたら一番古い 1 枚を減らす / 積み上げ中は足す / それ以外は入れ替える。
+    // エフェクトのロック中は枚数を変えず、入れ替えの手として数える(blend / filter はブレイクと、入れ替えの 3 割で変わる)
     _autoSwitch() {
       this._autoCycleDue = false;
-      this._autoSwitchCount++;
-      if (this._autoSwitchCount < this._autoRestAt) {
-        this._autoCycleTick();
-        this._scheduleAutoCycle();
-        return;
+      const locked = !!(this._autoCycleLocks || {}).effect;
+      if (this._autoSwapsLeft === 0) {
+        this._autoSwapsLeft = null;
+        if (++this._autoBreaks >= this._autoRestAt) {
+          // 休み(その間の拍では切り替えない)
+          this._autoBreaks = 0;
+          this._autoRestAt = randInt(REST_BREAKS_MIN, REST_BREAKS_MAX);
+          this._autoCycleRest();
+          return;
+        }
+        if (!locked) this._autoBreak();
+        this._autoRandomizeFX();
+      } else if (!locked && this.activeLayers.size > this._autoCap()) {
+        this._removeLayer(this.activeLayers.keys().next().value);
+      } else if (locked || !this._autoBuild()) {
+        if (this._autoSwapsLeft === null) this._autoSwapsLeft = randInt(SWAP_STEPS_MIN, SWAP_STEPS_MAX);
+        this._autoSwapsLeft--;
+        if (!locked) this._autoSwap();
+        if (Math.random() < SWAP_FX_RATE) this._autoRandomizeFX();
       }
-      // 休み(その間の拍では切り替えない)
-      this._autoSwitchCount = 0;
-      this._autoRestAt = 4 + Math.floor(Math.random() * 3);
-      this._autoCycleRest();
+      this._autoMarkLayers();
+      this._scheduleAutoCycle();
+    }
+
+    // 始め(Auto を始めたとき・休みのあと): 1 枚だけ(フェードイン)。エフェクトのロック中は今のまま(何も出ていなければ 1 枚)
+    _autoBegin() {
+      if (!(this._autoCycleLocks || {}).effect) {
+        for (const name of [...this.activeLayers.keys()]) this._removeLayer(name);
+        this._pendingPreset = null;
+      }
+      this._autoSwapsLeft = null;
+      if (this.activeLayers.size === 0) this._autoAdd([]);
+      this._autoMarkLayers();
+      this._autoRandomizeFX();
+    }
+
+    // 積み上げ: 上限まで 1 枚足す。入れ替えに入ったあと・上限に来た・足せるものが無ければ false(入れ替えにする)
+    _autoBuild() {
+      if (this._autoSwapsLeft !== null || this.activeLayers.size >= this._autoCap()) return false;
+      return this._autoAdd([...this.activeLayers.keys()]);
+    }
+
+    // 入れ替え: 一番古い 1 枚を外して、新しい 1 枚を足す(クロスフェード)。上限より少なければ足すだけ。
+    // 足せない(WebGL が出ていて 2D が無いなど)ときも、一番古いものと入れ替える
+    _autoSwap() {
+      const names = [...this.activeLayers.keys()];
+      if (names.length < this._autoCap() && this._autoAdd(names)) return;
+      if (names.length === 0) return;
+      const name = this._autoPick(names.slice(1));
+      if (!name) return;
+      this._removeLayer(names[0]);
+      this._addLayer(name, true);
+    }
+
+    // ブレイク: 新しい 1 枚だけ残して、ほかをフェードアウト。何も出ていなければ 1 枚足す
+    _autoBreak() {
+      const names = [...this.activeLayers.keys()];
+      for (let i = 0; i < names.length - 1; i++) this._removeLayer(names[i]);
+      if (names.length === 0) this._autoAdd([]);
+    }
+
+    // staying(残るレイヤー)の横に 1 枚足す(_autoPick)。足せたら true
+    _autoAdd(staying) {
+      const name = this._autoPick(staying);
+      if (!name) return false;
+      this._addLayer(name, true);
+      return this.activeLayers.has(name);
+    }
+
+    // Auto で足す 1 本: プール(このページで重いもの・出ているもの・読み込んでいないものを除く)から。
+    // staying に WebGL があれば 2D だけ(WebGL は同時に 1 枚まで)。カテゴリが staying とかぶらないものを優先(無ければかぶってもよい)
+    _autoPick(staying) {
+      const loaded = (window.VJamFX && window.VJamFX.presets) || {};
+      let list = this._autoUsable().filter(n => !this.activeLayers.has(n) && loaded[n]);
+      if (staying.some(n => this._isWebglLayer(n))) list = list.filter(n => !this._webglPresets.has(n));
+      const cats = this._presetCategories;
+      if (cats) {
+        const shown = new Set(staying.map(n => cats[n]).filter(Boolean));
+        const fresh = list.filter(n => !shown.has(cats[n]));
+        if (fresh.length) list = fresh;
+      }
+      return list.length ? pickOne(list) : null;
+    }
+
+    // Auto のプール: このページで重いと分かったものは選ばない(全部重ければプールのまま)
+    _autoUsable() {
+      const all = this._autoCyclePresets || [];
+      const usable = all.filter(n => !this._heavyPresets.has(n));
+      return usable.length ? usable : all;
+    }
+
+    // Auto の上限: 3 枚。端末のレイヤー上限・プール(重いものを除く)の本数・音の大きさ(_loudnessCap)のほうが小さければそちら
+    _autoCap() {
+      const cap = Math.min(AUTO_MAX_LAYERS, this._maxLayers, Math.max(1, this._autoUsable().length));
+      const loud = this._loudnessCap();
+      return loud ? Math.min(cap, loud) : cap;
+    }
+
+    _isWebglLayer(name) {
+      const layer = this.activeLayers.get(name);
+      return this._webglPresets.has(name) || !!(layer && isWebglPreset(layer.preset));
+    }
+
+    // Auto が回しているレイヤー(残したものも)は、重いときに入れ替えてよい。エフェクトのロック中は付けない
+    _autoMarkLayers() {
+      if ((this._autoCycleLocks || {}).effect) return;
+      for (const [, layer] of this.activeLayers) layer.auto = true;
+    }
+
+    // Auto の blend / filter(Rnd が ON で、ロックしていないもの)。blend は 90%・filter は 60% で変える(dip で)
+    _autoRandomizeFX() {
+      const locks = this._autoCycleLocks || {};
+      if (this._autoBlend && !locks.blend) this._randomizeBlend(this._autoCyclePool);
+      if (this._autoFilters && !locks.filter) this._randomizeFilter(this._autoCyclePool);
     }
 
     // 休み: ロックされていないレイヤーをフェードアウトし、消えたら Rnd が回している blend / filter を既定(screen / なし)に戻す。
-    // その 0.5 秒後に普通の切り替え(次のセットがフェードイン)。エフェクトのロック中はレイヤーが残るので、待たずに dip で戻す
+    // その 0.5 秒後に 1 枚からフェードイン(_autoBegin)。エフェクトのロック中はレイヤーが残るので、待たずに dip で戻す
     // (dip が戻りきってから 0.5 秒。dip は 0.5 秒より長いことがあり、途中で次の切り替えが来ると既定が見えないまま 1 つの dip になる)
     _autoCycleRest() {
       const locks = this._autoCycleLocks || {};
@@ -1602,7 +1747,7 @@
         const dipping = this._dipDownTimer || this._dipUpTimer;
         this._autoCycleLater((dipping ? this._dipMs() * 2 : 0) + REST_MS, () => {
           this._autoResting = false;
-          this._autoCycleTick();
+          this._autoBegin();
           this._scheduleAutoCycle();
         });
       });
@@ -1635,48 +1780,6 @@
         this._autoCyclePresets = options.presets;
         this._poolPresets = options.presets;
       }
-    }
-
-    _autoCycleTick() {
-      if (!this._autoCyclePresets || this._autoCyclePresets.length === 0) return;
-      // このページで重いと分かったものは選ばない(全部重ければプールのまま)
-      const usable = this._autoCyclePresets.filter(n => !this._heavyPresets.has(n));
-      const presets = usable.length ? usable : this._autoCyclePresets;
-      const locks = this._autoCycleLocks || {};
-
-      // Choose 1-3 random layers (unless effect locked)。WebGL は 1 本まで
-      let chosen;
-      if (locks.effect) {
-        chosen = [...this.activeLayers.keys()];
-        if (chosen.length === 0) {
-          // Fallback: pick random if nothing active
-          chosen = [presets[Math.floor(Math.random() * presets.length)]];
-        }
-      } else {
-        const count = 1 + Math.floor(Math.random() * Math.min(3, presets.length));
-        chosen = pickLayers(presets, count, this._webglPresets);
-
-        // Remove layers not in chosen set
-        for (const name of this.activeLayers.keys()) {
-          if (!chosen.includes(name)) {
-            this._removeLayer(name);
-          }
-        }
-
-        // Add missing layers(残したものも Auto が選んだもの)
-        for (const name of chosen) {
-          if (!this.activeLayers.has(name)) {
-            this._addLayer(name, true);
-          } else {
-            this.activeLayers.get(name).auto = true;
-          }
-        }
-        this._pendingPreset = null;
-      }
-
-      // Auto-blend / Auto-filters: プールから(unless locked)
-      if (this._autoBlend && !locks.blend) this._randomizeBlend(this._autoCyclePool);
-      if (this._autoFilters && !locks.filter) this._randomizeFilter(this._autoCyclePool);
     }
 
     _stopAutoCycle() {

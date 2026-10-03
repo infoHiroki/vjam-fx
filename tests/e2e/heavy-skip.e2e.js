@@ -2,7 +2,7 @@
  * 重いプリセットを端末ごとに見つけて飛ばす(#40)を、実物の Chromium + 拡張で確かめる。
  * テスト用の拡張のコピーで、プールを 3 本にし、そのうち film-grain を「draw の中で 60ms 回す」わざと重いものに差し替える
  * (radar / sonar-ping は軽いものに差し替え)。
- * - Auto を回して film-grain が出ると、フェードイン + 2 秒 + 3 秒で飛ばされる。外したあと fps が戻った(本当に軽くなった)のを
+ * - Auto を回して film-grain が出ると、フェードイン + 3 秒で飛ばされる。外したあと fps が戻った(本当に軽くなった)のを
  *   確かめてから、SW が storage.local の heavyPresets に入れる
  * - 次の Next では選ばれない(popup はプールから除いて渡す)。popup の設定パネルに数が出て、Restore で戻る
  * - Next 直後の重いレイヤーも飛ばす。入れ替え先がまだ読み込まれていなければ、SW が読み込んでから入る
@@ -101,7 +101,7 @@ test.describe.serial('重いプリセットを飛ばす(#40)', () => {
 
     popup = await openPopup(ext, `${site.base}/index.html`);
     expect(await heavyPresets(ext)).toBeNull();
-    // 切り替えを 60 秒にして、重さを測る間(フェード 5 + 2 + 3 秒、外したあとも同じだけ)に入れ替わらないようにする
+    // 切り替えを 60 秒にして、重さを測る間(フェード 5 + 3 秒、外したあとも同じだけ)に入れ替わらないようにする
     await popup.click('#btn-settings');
     await expect(popup.locator('#heavy-count')).toHaveText('0');
     await expect(popup.locator('#btn-heavy-reset')).toBeDisabled();
@@ -109,8 +109,8 @@ test.describe.serial('重いプリセットを飛ばす(#40)', () => {
     await popup.click('.toggle-switch');
     await expect.poll(() => readAuto(page), { timeout: 20_000 }).toMatchObject({ cycling: true, presets: 3 });
 
-    // 出ていなければ Auto を入れ直す(ON にした瞬間に選び直す)
-    for (let i = 0; i < 10 && !(await layersOf(page)).includes(HEAVY); i++) {
+    // 出ていなければ Auto を入れ直す(ON にした瞬間に 1 枚から選び直す。プール 3 本から 1 本なので多めに)
+    for (let i = 0; i < 25 && !(await layersOf(page)).includes(HEAVY); i++) {
       await popup.click('#btn-auto-cycle');
       await expect.poll(() => readAuto(page)).toMatchObject({ cycling: false });
       await popup.click('#btn-auto-cycle');
@@ -121,9 +121,9 @@ test.describe.serial('重いプリセットを飛ばす(#40)', () => {
 
   test('3 秒続けて 24fps を割ると飛ばされ、軽くなったのを確かめてから SW が heavyPresets に入れる', async () => {
     test.setTimeout(60_000);
-    // 足してから: フェードイン 5 秒 + 2 秒待って + 3 秒で外す
+    // 足してから: フェードイン 5 秒 + 3 秒で外す
     await expect.poll(() => layersOf(page), { timeout: 20_000, intervals: [200] }).not.toContain(HEAVY);
-    // 外しただけではまだ覚えない(外したあと: フェードアウト 5 秒 + 2 秒待って + 3 秒の fps で決める)
+    // 外しただけではまだ覚えない(外したあと: フェード 5 秒 + 3 秒の fps で決める)
     expect(await heavyPresets(ext)).toBeNull();
     await expect.poll(() => heavyPresets(ext), { timeout: 20_000, intervals: [500] }).not.toBeNull();
     const heavy = await heavyPresets(ext);
@@ -203,7 +203,7 @@ test.describe.serial('重いプリセットを飛ばす(#40)', () => {
     const loaded = await page2.evaluate((names) => names.filter((n) => window.VJamFX.presets[n]), LIGHT);
     expect(loaded).toEqual([]);
 
-    // フェードイン 5 + 2 + 3 秒で外し、フェードアウト 5 + 2 + 3 秒で覚える
+    // フェードイン 5 + 3 秒で外し、フェード 5 + 3 秒で覚える
     await expect.poll(() => heavyPresets(ext), { timeout: 40_000, intervals: [500] }).not.toBeNull();
     expect(Object.keys(await heavyPresets(ext))).toEqual([HEAVY]);
     // 入れ替え先は SW が読み込んでから入る
