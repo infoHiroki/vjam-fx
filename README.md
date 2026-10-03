@@ -130,4 +130,4 @@ ISC
 
 ---
 
-**[Get VJam Full](https://vjam.vercel.app)** — Full VJ system with 270+ presets, HDMI output, mic input, GLSL shaders, and more.
+**[Get VJam Full](https://vjam.art)** — Full VJ system with HDMI output, mic input, GLSL shaders, and more.
