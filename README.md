@@ -2,6 +2,8 @@
 
 Chrome extension that overlays music-reactive VJ visuals on any webpage. Open a page with a video or music, turn VJam FX on, and the effects follow the beat.
 
+**Chrome Web Store**: https://chromewebstore.google.com/detail/gflgnfgemeniehmjjpcbhdphdppnmoaf
+
 **Website**: https://infohiroki.github.io/vjam-fx/
 
 ![Effects layered over a page](store/screenshots/01-effects.png)
@@ -32,7 +34,11 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage. Open a 
 - **Heavy effects skipped**: effects too heavy for the computer are left out automatically (`N skipped` in the popup, Restore in the settings)
 - **On-demand injection**: p5.js, the engine and the effects are injected only when you turn VJam FX on
 
-## Install (Development)
+## Install
+
+Add it from the [Chrome Web Store](https://chromewebstore.google.com/detail/gflgnfgemeniehmjjpcbhdphdppnmoaf).
+
+### Development
 
 1. Clone this repo
 2. `npm install`
