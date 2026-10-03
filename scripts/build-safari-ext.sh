@@ -42,6 +42,12 @@ for (const [key, value] of Object.entries(patch)) {
   }
 }
 
+// App Store の検査:Safari の manifest の description は 112 文字まで(超えるとアップロードで ITMS-90849)
+if (typeof manifest.description !== 'string' || manifest.description.length > 112) {
+  console.error(`description must be a string of 112 or fewer characters (now ${manifest.description && manifest.description.length})`);
+  process.exit(1);
+}
+
 fs.writeFileSync(manifestFile, JSON.stringify(manifest, null, 2) + '\n');
 EOF
 

@@ -5,7 +5,7 @@ Chrome 版と同じソースから Safari 用の拡張を組み立て、Xcode �
 - `manifest.patch.json` — Safari 用の manifest の差分
   - `permissions_remove`: permissions から外す(`tabCapture` `offscreen` は Safari 非対応)
   - `content_scripts_add`: js が全部そろっているときだけ content_scripts に足す
-  - それ以外のキー: そのまま上書き
+  - それ以外のキー: そのまま上書き(`description` は App Store の検査で 112 文字まで。Chrome 用より短くしてある。超えると組み立てで止まる)
 - `VJam FX/VJam FX.xcodeproj` — `safari-web-extension-converter` で生成(iOS のみ・Swift)
   - アプリ `com.vjam.fx` / 拡張 `com.vjam.fx.Extension`
   - 拡張のリソースは `build/safari-ext/` を相対パスで参照する

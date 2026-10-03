@@ -1,11 +1,20 @@
 {
-  "permissions_remove": ["tabCapture", "offscreen"],
+  "permissions_remove": [
+    "tabCapture",
+    "offscreen"
+  ],
   "content_scripts_add": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content/mse-tap.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/mse-tap.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     }
-  ]
+  ],
+  "description": "Overlay 370 music-reactive VJ visuals on any web page. Auto mode, beat detection, layers, blends & filters."
 }
