@@ -416,10 +416,26 @@ const VALID_BLEND_MODES = ['screen', 'lighten', 'difference', 'exclusion', 'colo
 const DEFAULT_SETTINGS = {
   autoOnStart: true, // トグル ON で Auto / Rnd を始める
   allTabs: false, // 全タブで ON(切り替えたタブ・開いたタブにも SW が入れる)
-  fadeDuration: 1.5,
-  barsPerCycle: 16, // Auto が切り替える拍数
+  fadeDuration: 5, // 秒。エンジンに送るのは Cycle の半分まで(_fadeSeconds)
+  cycleSeconds: 15, // Auto / Rnd が切り替える秒数(たったら次の拍で切り替える)
   sensitivity: 'mid',
+  version: 2, // 2 = フェード・Cycle を秒にしたあと(#58)。無ければその前の保存(migrateSettings)
 };
+const FADE_OPTIONS = [0, 3, 5, 8, 12];
+const CYCLE_OPTIONS = [8, 15, 30, 60];
+
+// 保存された設定を今の形に読む。#58 より前の保存(version が無い)は、前の既定のフェード 1.5 秒のままなら新しい既定に。
+// 選択肢に無いフェード(昔の 0.5 / 1.5)は 3 秒、Cycle は既定に(昔の拍数 barsPerCycle は捨てる)
+function migrateSettings(saved) {
+  const settings = { ...DEFAULT_SETTINGS, ...saved };
+  if (!(saved.version >= 2) && saved.fadeDuration === 1.5) settings.fadeDuration = DEFAULT_SETTINGS.fadeDuration;
+  if (!FADE_OPTIONS.includes(settings.fadeDuration)) {
+    settings.fadeDuration = settings.fadeDuration === 0.5 || settings.fadeDuration === 1.5 ? 3 : DEFAULT_SETTINGS.fadeDuration;
+  }
+  if (!CYCLE_OPTIONS.includes(settings.cycleSeconds)) settings.cycleSeconds = DEFAULT_SETTINGS.cycleSeconds;
+  delete settings.barsPerCycle;
+  return settings;
+}
 
 const SENSITIVITY_MAP = { lo: 0.5, mid: 1.0, hi: 2.0 };
 
@@ -794,7 +810,7 @@ class PopupController {
     try {
       const result = await chrome.storage.local.get('vjamfx_settings');
       if (result.vjamfx_settings) {
-        this.settings = { ...DEFAULT_SETTINGS, ...result.vjamfx_settings };
+        this.settings = migrateSettings(result.vjamfx_settings);
       }
     } catch (e) { /* storage not available */ }
     this._updateSettingsUI();
@@ -875,13 +891,18 @@ class PopupController {
     await this._saveState();
   }
 
-  // Auto / Rnd の開始コマンド(抽選対象はプール)
+  // Auto / Rnd の開始コマンド(抽選対象はプール。interval は Cycle の秒数)
   _autoCycleCommand(extra) {
-    return { action: 'startAutoCycle', presets: this._usablePool().map(p => p.id), interval: 8000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, barsPerCycle: this.settings.barsPerCycle, locks: this.locks, pool: this.pool, ...extra };
+    return { action: 'startAutoCycle', presets: this._usablePool().map(p => p.id), interval: this.settings.cycleSeconds * 1000, autoBlend: this.autoBlend, autoFilters: this.autoFilters, locks: this.locks, pool: this.pool, ...extra };
   }
 
   _autoFXCommand() {
-    return { action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters, pool: this.pool };
+    return { action: 'startAutoFX', autoBlend: this.autoBlend, autoFilters: this.autoFilters, pool: this.pool, interval: this.settings.cycleSeconds * 1000 };
+  }
+
+  // エンジンに送るフェード秒数: 設定のフェード、ただし Cycle の半分まで(出ている時間がフェードだけにならないように)
+  _fadeSeconds() {
+    return Math.min(this.settings.fadeDuration, this.settings.cycleSeconds / 2);
   }
 
   // Next の選び方: プールからランダムに 1〜3 本。WebGL は 1 本まで
@@ -1033,7 +1054,7 @@ class PopupController {
     const fadeEl = document.getElementById('setting-fade');
     if (fadeEl) fadeEl.value = String(this.settings.fadeDuration);
     const cycleEl = document.getElementById('setting-cycle');
-    if (cycleEl) cycleEl.value = String(this.settings.barsPerCycle);
+    if (cycleEl) cycleEl.value = String(this.settings.cycleSeconds);
     const sensEl = document.getElementById('setting-sensitivity');
     if (sensEl) sensEl.value = this.settings.sensitivity;
     this._renderStage(); // OFF のひとことは Auto start の設定で変わる
@@ -1056,8 +1077,8 @@ class PopupController {
           autoBlend: this.autoBlend,
           autoFilters: this.autoFilters,
           pool: this.pool, // SW がページ遷移後に Auto / Rnd を再開するときにエンジンへ渡す
-          barsPerCycle: this.settings.barsPerCycle, // 同上(遷移後も設定した拍数で切り替える)
-          fadeDuration: this.settings.fadeDuration, // SW が遷移後にエンジンへ送る(フェード時間)
+          cycleSeconds: this.settings.cycleSeconds, // 同上(遷移後も設定した秒数で切り替える)
+          fadeDuration: this._fadeSeconds(), // SW が遷移後にエンジンへ送る(フェード時間。Cycle の半分まで)
           audioSensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0, // 同上(音の感度。エンジンに渡す倍率で)
           locks: this.locks,
           textState: this.textState,
@@ -1155,27 +1176,30 @@ class PopupController {
     if (fadeEl) {
       fadeEl.addEventListener('change', () => {
         const val = parseFloat(fadeEl.value);
-        this.settings.fadeDuration = isNaN(val) ? 1.5 : Math.max(0, val);
+        this.settings.fadeDuration = isNaN(val) ? DEFAULT_SETTINGS.fadeDuration : Math.max(0, val);
         this._saveSettings();
         if (this.isActive) {
-          this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+          this._sendCommand({ action: 'setFadeDuration', duration: this._fadeSeconds() });
           this._saveState(); // SW の状態にも入れる(ページ遷移後もこのフェード時間で)
         }
       });
     }
 
-    // Settings: Cycle bars
+    // Settings: Cycle(秒)
     const cycleEl = document.getElementById('setting-cycle');
     if (cycleEl) {
       cycleEl.addEventListener('change', async () => {
         const val = parseInt(cycleEl.value, 10);
-        this.settings.barsPerCycle = isNaN(val) || val < 1 ? DEFAULT_SETTINGS.barsPerCycle : val;
+        this.settings.cycleSeconds = isNaN(val) || val < 1 ? DEFAULT_SETTINGS.cycleSeconds : val;
         this._saveSettings();
-        // Re-send auto-cycle with updated bars if active
+        // フェードは Cycle の半分までなので送り直す。Auto / Rnd は新しい秒数で回し直す
+        if (this.isActive) await this._sendCommand({ action: 'setFadeDuration', duration: this._fadeSeconds() });
         if (this.autoCycleActive) {
           await this._sendCommand(this._autoCycleCommand());
+        } else if (this.autoBlend || this.autoFilters) {
+          await this._sendCommand(this._autoFXCommand());
         }
-        // SW の状態にも入れる(ページ遷移後もこの拍数で回す)
+        // SW の状態にも入れる(ページ遷移後もこの秒数で回す)
         if (this.isActive) this._saveState();
       });
     }
@@ -1447,7 +1471,7 @@ class PopupController {
         // Reset settings to defaults
         this.settings = { ...DEFAULT_SETTINGS };
         await this._saveSettings();
-        await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+        await this._sendCommand({ action: 'setFadeDuration', duration: this._fadeSeconds() });
         await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: 1.0 });
 
         // Reset all UI
@@ -1735,7 +1759,7 @@ class PopupController {
       }
 
       // Apply settings to engine
-      await this._sendCommand({ action: 'setFadeDuration', duration: this.settings.fadeDuration });
+      await this._sendCommand({ action: 'setFadeDuration', duration: this._fadeSeconds() });
       await this._sendCommand({ action: 'setAudioSensitivity', sensitivity: SENSITIVITY_MAP[this.settings.sensitivity] || 1.0 });
       await this._sendCommand({ action: 'setOpacity', opacity: this.opacity });
 

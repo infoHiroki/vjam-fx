@@ -836,13 +836,15 @@ describe('VJamFXEngine', () => {
   // 切り替えを全部フェードにする(#38): Next のクロスフェード・Auto の休み・Rnd / Auto の blend / filter の dip
   describe('transitions (#38)', () => {
     const FADE_NAMES = ['fade-a', 'fade-b', 'fade-c', 'fade-d'];
+    const FADE_MS = 5000; // エンジン既定のフェード
+    const DIP = 1250; // その dip の片道(フェードの 1/4)
     const POOL = { filters: ['saturate(2)', 'sepia(1)'], blends: ['lighten', 'difference'] };
     const destroyed = [];
 
     beforeAll(() => {
       for (const name of FADE_NAMES) {
         window.VJamFX.presets[name] = class {
-          constructor() { this.p5 = { frameRate() {}, remove() {} }; }
+          constructor() { this.p5 = { frameRate: vi.fn(), getTargetFrameRate: () => 60, noLoop: vi.fn(), remove() {} }; }
           setup(container) { container.appendChild(document.createElement('canvas')); }
           destroy() { destroyed.push(name); }
         };
@@ -879,26 +881,64 @@ describe('VJamFXEngine', () => {
         expect(engine.getActiveLayerNames()).toEqual([FADE_NAMES[2], FADE_NAMES[3]]);
         expect(engine.currentPresetName).toBe(FADE_NAMES[2]);
         expect(engine.currentPreset).toBe(engine.activeLayers.get(FADE_NAMES[2]).preset);
-        // 古いレイヤーはまだ DOM に残ってフェードアウト中(1.5 秒)、新しいレイヤーは 0 からフェードイン
+        // 古いレイヤーはまだ DOM に残ってフェードアウト中(5 秒)、新しいレイヤーは 0 からフェードイン
         for (const div of old) {
           expect(div.isConnected).toBe(true);
           expect(div.style.opacity).toBe('0');
-          expect(div.style.transition).toBe('opacity 1.5s linear');
+          expect(div.style.transition).toBe('opacity 5s linear');
         }
         expect(destroyed).toEqual([]);
         for (const name of FADE_NAMES.slice(2)) {
           const [div] = layerDivs(name);
           expect(div.style.opacity).toBe('0');
-          expect(div.style.transition).toContain('opacity 1.5s');
+          expect(div.style.transition).toContain('opacity 5s');
         }
 
         // transitionend が来なくても、フェード時間 + 200ms で外す
-        vi.advanceTimersByTime(1699);
+        vi.advanceTimersByTime(FADE_MS + 199);
         for (const div of old) expect(div.isConnected).toBe(true);
         vi.advanceTimersByTime(1);
         for (const div of old) expect(div.isConnected).toBe(false);
         expect(destroyed.sort()).toEqual([FADE_NAMES[0], FADE_NAMES[1]]);
         expect(engine._stage.querySelectorAll('[data-vjam-layer]').length).toBe(2);
+      });
+
+      it('slows the fading-out layers to 20 fps and stops them halfway; the new ones keep drawing', () => {
+        engine.startPreset(FADE_NAMES[0]);
+        engine._addLayer(FADE_NAMES[1]);
+        const old = [FADE_NAMES[0], FADE_NAMES[1]].map(n => engine.activeLayers.get(n).preset.p5);
+        engine.crossfade([FADE_NAMES[2]], {});
+        const fresh = engine.activeLayers.get(FADE_NAMES[2]).preset.p5;
+        for (const p of old) expect(p.frameRate).toHaveBeenCalledWith(20);
+        vi.advanceTimersByTime(FADE_MS / 2 - 1);
+        for (const p of old) expect(p.noLoop).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        for (const p of old) expect(p.noLoop).toHaveBeenCalledTimes(1);
+        // 止めた絵のまま、フェードの終わりまで残る
+        expect(destroyed).toEqual([]);
+        expect(fresh.frameRate).not.toHaveBeenCalled();
+        expect(fresh.noLoop).not.toHaveBeenCalled();
+      });
+
+      it('keeps a fading-out layer that already draws slower than 20 fps at its rate', () => {
+        engine.startPreset(FADE_NAMES[0]);
+        const p = engine.activeLayers.get(FADE_NAMES[0]).preset.p5;
+        p.getTargetFrameRate = () => 15;
+        engine.crossfade([FADE_NAMES[1]], {});
+        expect(p.frameRate).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(FADE_MS / 2);
+        expect(p.noLoop).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not stop a layer that is already gone (transitionend before halfway)', () => {
+        engine.startPreset(FADE_NAMES[0]);
+        const [div] = layerDivs(FADE_NAMES[0]);
+        const p = engine.activeLayers.get(FADE_NAMES[0]).preset.p5;
+        engine.crossfade([FADE_NAMES[1]], {});
+        div.dispatchEvent(new Event('transitionend'));
+        expect(destroyed).toEqual([FADE_NAMES[0]]);
+        vi.advanceTimersByTime(FADE_MS);
+        expect(p.noLoop).not.toHaveBeenCalled();
       });
 
       it('removes the old layers on transitionend', () => {
@@ -916,7 +956,7 @@ describe('VJamFXEngine', () => {
         engine.crossfade([FADE_NAMES[0]], {});
         expect(layerDivs(FADE_NAMES[0]).length).toBe(2);
         expect(engine.activeLayers.get(FADE_NAMES[0]).container).not.toBe(old);
-        vi.advanceTimersByTime(1700);
+        vi.advanceTimersByTime(FADE_MS + 200);
         expect(layerDivs(FADE_NAMES[0])).toEqual([engine.activeLayers.get(FADE_NAMES[0]).container]);
       });
 
@@ -954,7 +994,7 @@ describe('VJamFXEngine', () => {
         expect(engine.currentPresetName).toBe(FADE_NAMES[0]);
         expect(engine.blendMode).toBe('difference');
         expect(engine.activeFilters.has('sepia')).toBe(true);
-        vi.advanceTimersByTime(5000);
+        vi.advanceTimersByTime(FADE_MS + 1000);
         expect(layerDivs(FADE_NAMES[0])[0].isConnected).toBe(true);
         expect(destroyed).toEqual([]);
       });
@@ -992,7 +1032,7 @@ describe('VJamFXEngine', () => {
         vi.spyOn(Math, 'random').mockReturnValue(0);
         engine.startAutoCycle(FADE_NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL, ...options });
         engine._autoRestAt = 1;
-        vi.advanceTimersByTime(300); // 最初の切り替えの dip
+        vi.advanceTimersByTime(DIP); // 最初の切り替えの dip
         expect(engine.overlay.style.mixBlendMode).toBe('lighten');
         expect(engine.overlay.style.filter).toBe('saturate(2)');
       }
@@ -1001,7 +1041,7 @@ describe('VJamFXEngine', () => {
         startUntilRest();
         const old = [...engine._stage.querySelectorAll('[data-vjam-layer]')];
         expect(old.length).toBeGreaterThan(0);
-        vi.advanceTimersByTime(8000 - 300); // 休み
+        vi.advanceTimersByTime(8000 - DIP); // 休み
         expect(engine.activeLayers.size).toBe(0);
         // フェードアウト中: まだ DOM にあり、blend / filter も変えない(消えてから戻す)
         for (const div of old) {
@@ -1012,7 +1052,7 @@ describe('VJamFXEngine', () => {
         expect(engine.overlay.style.filter).toBe('saturate(2)');
         // 休みの間の拍では切り替えない
         for (let i = 0; i < 40; i++) engine._onBeat();
-        vi.advanceTimersByTime(1499);
+        vi.advanceTimersByTime(FADE_MS - 1);
         expect(engine.overlay.style.filter).toBe('saturate(2)');
         vi.advanceTimersByTime(1);
         // 消えた: blend / filter を既定に戻す(見えていないので dip しない)
@@ -1030,18 +1070,29 @@ describe('VJamFXEngine', () => {
         expect(engine.activeLayers.size).toBeGreaterThan(0);
         for (const [, layer] of engine.activeLayers) {
           expect(layer.container.style.opacity).toBe('0');
-          expect(layer.container.style.transition).toContain('opacity 1.5s');
+          expect(layer.container.style.transition).toContain('opacity 5s');
         }
-        // そのあとは普通に拍で切り替わる
+        // そのあとは普通に秒数で切り替わる
         const tick = vi.spyOn(engine, '_autoCycleTick');
-        for (let i = 0; i < 16; i++) engine._onBeat();
+        vi.advanceTimersByTime(7999);
+        expect(tick).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
         expect(tick).toHaveBeenCalledTimes(1);
+      });
+
+      it('slows and stops the layers fading out for the rest the same way', () => {
+        startUntilRest();
+        const old = [...engine.activeLayers.values()].map(l => l.preset.p5);
+        vi.advanceTimersByTime(8000 - DIP); // 休み
+        for (const p of old) expect(p.frameRate).toHaveBeenCalledWith(20);
+        vi.advanceTimersByTime(FADE_MS / 2);
+        for (const p of old) expect(p.noLoop).toHaveBeenCalledTimes(1);
       });
 
       it('follows the fade duration setting', () => {
         engine.handleMessage({ action: 'setFadeDuration', duration: 3 });
         startUntilRest();
-        vi.advanceTimersByTime(8000 - 300);
+        vi.advanceTimersByTime(8000 - DIP);
         vi.advanceTimersByTime(2999);
         expect(engine.overlay.style.filter).toBe('saturate(2)');
         vi.advanceTimersByTime(1);
@@ -1071,20 +1122,27 @@ describe('VJamFXEngine', () => {
       it('keeps locked layers and resets blend / filter right away with a dip', () => {
         startUntilRest({ locks: { effect: true } });
         const names = engine.getActiveLayerNames();
-        vi.advanceTimersByTime(8000 - 300); // 休み
+        vi.advanceTimersByTime(8000 - DIP); // 休み
         expect(engine.getActiveLayerNames()).toEqual(names);
         expect(engine.blendMode).toBe('screen');
         expect(stage().style.opacity).toBe('0');
         expect(engine.overlay.style.filter).toBe('saturate(2)');
-        vi.advanceTimersByTime(300);
+        vi.advanceTimersByTime(DIP);
         expect(engine.overlay.style.mixBlendMode).toBe('screen');
         expect(engine.overlay.style.filter).toBe('none');
         expect(stage().style.opacity).toBe('1');
+        // dip が戻りきってから 0.5 秒で次の切り替え(既定が見えている間がある)
+        const tick = vi.spyOn(engine, '_autoCycleTick');
+        vi.advanceTimersByTime(DIP + 499);
+        expect(stage().style.opacity).toBe('');
+        expect(tick).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(tick).toHaveBeenCalledTimes(1);
       });
 
       it('does not switch after Auto is stopped during the fade-out', () => {
         startUntilRest();
-        vi.advanceTimersByTime(8000 - 300);
+        vi.advanceTimersByTime(8000 - DIP);
         engine.kill({});
         vi.advanceTimersByTime(10000);
         expect(engine.activeLayers.size).toBe(0);
@@ -1099,14 +1157,14 @@ describe('VJamFXEngine', () => {
         // 状態はすぐ変わる(popup が読む値)。CSS は暗くなってから
         expect(engine._rndFilter).toBe('sepia(1)');
         expect(engine.overlay.style.filter).toBe('');
-        expect(stage().style.transition).toBe('opacity 300ms linear');
+        expect(stage().style.transition).toBe('opacity 1250ms linear');
         expect(stage().style.opacity).toBe('0');
-        vi.advanceTimersByTime(299);
+        vi.advanceTimersByTime(DIP - 1);
         expect(engine.overlay.style.filter).toBe('');
         vi.advanceTimersByTime(1);
         expect(engine.overlay.style.filter).toBe('sepia(1)');
         expect(stage().style.opacity).toBe('1');
-        vi.advanceTimersByTime(300);
+        vi.advanceTimersByTime(DIP);
         expect(stage().style.opacity).toBe('');
         expect(stage().style.transition).toBe('');
         // 人が設定した不透明度(ホスト)には触らない
@@ -1122,7 +1180,7 @@ describe('VJamFXEngine', () => {
         expect(engine.overlay.style.mixBlendMode).toBe('screen');
         expect(canvas.style.mixBlendMode).toBe('screen');
         expect(stage().style.opacity).toBe('0');
-        vi.advanceTimersByTime(300);
+        vi.advanceTimersByTime(DIP);
         expect(engine.overlay.style.mixBlendMode).toBe('lighten');
         expect(canvas.style.mixBlendMode).toBe('lighten');
       });
@@ -1131,37 +1189,37 @@ describe('VJamFXEngine', () => {
         vi.spyOn(Math, 'random').mockReturnValue(0);
         engine.startAutoCycle(FADE_NAMES, 8000, { autoBlend: true, autoFilters: true, pool: POOL });
         expect(stage().style.opacity).toBe('0');
-        vi.advanceTimersByTime(300);
+        vi.advanceTimersByTime(DIP);
         expect(engine.overlay.style.mixBlendMode).toBe('lighten');
         expect(engine.overlay.style.filter).toBe('saturate(2)');
         expect(stage().style.opacity).toBe('1');
-        vi.advanceTimersByTime(300);
+        vi.advanceTimersByTime(DIP);
         expect(stage().style.opacity).toBe('');
       });
 
       it('dips on the standalone Rnd tick', () => {
         vi.spyOn(Math, 'random').mockReturnValue(0);
-        engine.startAutoFX({ autoBlend: true, autoFilters: true, pool: POOL });
+        engine.startAutoFX({ autoBlend: true, autoFilters: true, pool: POOL, interval: 8000 });
         vi.advanceTimersByTime(8000);
         expect(engine.blendMode).toBe('lighten');
         expect(stage().style.opacity).toBe('0');
         expect(engine.overlay.style.mixBlendMode).toBe('screen');
-        vi.advanceTimersByTime(300);
+        vi.advanceTimersByTime(DIP);
         expect(engine.overlay.style.mixBlendMode).toBe('lighten');
         expect(engine.overlay.style.filter).toBe('saturate(2)');
       });
 
       it('goes down again when a change comes while coming back up', () => {
         engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
-        vi.advanceTimersByTime(400);
+        vi.advanceTimersByTime(DIP + 100);
         expect(stage().style.opacity).toBe('1');
         engine._randomizeFilter({ filters: ['saturate(2)'] }, true);
         expect(stage().style.opacity).toBe('0');
         expect(engine.overlay.style.filter).toBe('sepia(1)');
-        vi.advanceTimersByTime(300);
+        vi.advanceTimersByTime(DIP);
         expect(engine.overlay.style.filter).toBe('saturate(2)');
         // 最初の dip の戻りのタイマーは捨てている
-        vi.advanceTimersByTime(299);
+        vi.advanceTimersByTime(DIP - 1);
         expect(stage().style.opacity).toBe('1');
         vi.advanceTimersByTime(1);
         expect(stage().style.opacity).toBe('');
@@ -1183,7 +1241,7 @@ describe('VJamFXEngine', () => {
         engine._randomizeBlend({ blends: ['lighten'] }, true);
         engine.setBlendMode('exclusion');
         expect(engine.overlay.style.mixBlendMode).toBe('exclusion');
-        vi.advanceTimersByTime(600);
+        vi.advanceTimersByTime(DIP * 2);
         expect(engine.blendMode).toBe('exclusion');
         expect(engine.overlay.style.mixBlendMode).toBe('exclusion');
       });
@@ -1193,9 +1251,23 @@ describe('VJamFXEngine', () => {
         engine.handleMessage({ action: 'setOpacity', opacity: 0.3 });
         expect(engine.overlay.style.opacity).toBe('0.3');
         expect(stage().style.opacity).toBe('0');
-        vi.advanceTimersByTime(600);
+        vi.advanceTimersByTime(DIP * 2);
         expect(engine.overlay.style.opacity).toBe('0.3');
         expect(stage().style.opacity).toBe('');
+      });
+
+      it('makes the dip a quarter of the fade, within 0.3-1.5 s', () => {
+        for (const [fade, dip] of [[3, 750], [8, 1500], [12, 1500], [1, 300]]) {
+          engine.handleMessage({ action: 'setFadeDuration', duration: fade });
+          engine._randomizeFilter({ filters: ['sepia(1)'] }, true);
+          expect(stage().style.transition).toBe(`opacity ${dip}ms linear`);
+          vi.advanceTimersByTime(dip - 1);
+          expect(stage().style.opacity).toBe('0');
+          vi.advanceTimersByTime(1);
+          expect(stage().style.opacity).toBe('1');
+          vi.advanceTimersByTime(dip);
+          expect(stage().style.opacity).toBe('');
+        }
       });
 
       it('does not dip with fade duration 0', () => {
@@ -1215,7 +1287,7 @@ describe('VJamFXEngine', () => {
         expect(stage().style.transition).toBe('');
         expect(engine.overlay.style.filter).toBe('none');
         expect(engine.overlay.style.mixBlendMode).toBe('screen');
-        vi.advanceTimersByTime(600);
+        vi.advanceTimersByTime(DIP * 2);
         expect(engine.overlay.style.filter).toBe('none');
         expect(engine.overlay.style.mixBlendMode).toBe('screen');
         expect(stage().style.opacity).toBe('');
@@ -1236,7 +1308,7 @@ describe('VJamFXEngine', () => {
         expect(engine.overlay).toBeNull();
         expect(engine._dipDownTimer).toBeNull();
         expect(engine._dipUpTimer).toBeNull();
-        expect(() => vi.advanceTimersByTime(600)).not.toThrow();
+        expect(() => vi.advanceTimersByTime(DIP * 2)).not.toThrow();
       });
     });
   });
@@ -1603,19 +1675,25 @@ describe('VJamFXEngine', () => {
   });
 
   describe('fadeDuration validation', () => {
+    it('defaults to 5 s', () => {
+      expect(engine._fadeDuration).toBe(5);
+      engine.handleMessage({ action: 'setFadeDuration' });
+      expect(engine._fadeDuration).toBe(5);
+    });
+
     it('should reject negative fadeDuration', () => {
       engine.handleMessage({ action: 'setFadeDuration', duration: -1 });
-      expect(engine._fadeDuration).toBe(1.5);
+      expect(engine._fadeDuration).toBe(5);
     });
 
     it('should reject NaN fadeDuration', () => {
       engine.handleMessage({ action: 'setFadeDuration', duration: NaN });
-      expect(engine._fadeDuration).toBe(1.5);
+      expect(engine._fadeDuration).toBe(5);
     });
 
     it('should reject Infinity fadeDuration', () => {
       engine.handleMessage({ action: 'setFadeDuration', duration: Infinity });
-      expect(engine._fadeDuration).toBe(1.5);
+      expect(engine._fadeDuration).toBe(5);
     });
 
     it('should accept zero fadeDuration', () => {
@@ -1888,16 +1966,14 @@ describe('VJamFXEngine', () => {
       expect(onBeat).toHaveBeenCalledTimes(1);
     });
 
-    it('uses the MSE BPM for the Auto / Rnd interval', () => {
+    it('uses the MSE BPM to wait for the beat in Auto / Rnd', () => {
       startLoop();
       tick(1000);
       expect(engine._tempoBpm()).toBe(124);
-      expect(engine._beatsInterval(16, 8000)).toBeCloseTo(16 * 60 / 124 * 1000);
-      // データが無くなったら使わない
+      // データが無くなったら使わない(拍を待たずに秒数で切り替える)
       window.__vjamMse.frameAt = vi.fn(() => null);
       tick(2000);
       expect(engine._tempoBpm()).toBe(0);
-      expect(engine._beatsInterval(16, 8000)).toBe(8000);
     });
   });
 
@@ -2126,39 +2202,114 @@ describe('VJamFXEngine', () => {
       });
     });
 
-    describe('beat counting', () => {
-      it('defaults Auto to 16 beats', () => {
-        engine.startAutoCycle(NAMES, 100000, {});
-        expect(engine._barsPerCycle).toBe(16);
+    describe('switch timing (seconds, then the next beat)', () => {
+      const withBpm = () => { engine._externalAudioData = { bpm: 120 }; };
+
+      it('defaults Auto / Rnd to 15 s, and ignores a bad interval', () => {
+        engine.startAutoCycle(NAMES, undefined, {});
+        expect(engine._autoCycleInterval).toBe(15000);
+        engine.startAutoFX({ autoFilters: true });
+        expect(engine._autoFXInterval).toBe(15000);
+        for (const bad of [0, -1, NaN, Infinity, null, '30000']) {
+          engine.handleMessage({ action: 'startAutoCycle', presets: NAMES, interval: bad });
+          expect(engine._autoCycleInterval).toBe(15000);
+          engine.handleMessage({ action: 'startAutoFX', autoFilters: true, interval: bad });
+          expect(engine._autoFXInterval).toBe(15000);
+        }
+        engine.handleMessage({ action: 'startAutoCycle', presets: NAMES, interval: 30000 });
+        expect(engine._autoCycleInterval).toBe(30000);
+        engine.handleMessage({ action: 'startAutoFX', autoFilters: true, interval: 60000 });
+        expect(engine._autoFXInterval).toBe(60000);
       });
 
-      it('switches Auto every barsPerCycle beats and restarts the time fallback', () => {
+      it('switches Auto after the seconds when there is no BPM (no beat wait)', () => {
         vi.useFakeTimers();
-        engine.startAutoCycle(NAMES, 8000, { barsPerCycle: 16 });
+        engine.startAutoCycle(NAMES, 15000, {});
         engine._autoRestAt = 100;
         const tick = vi.spyOn(engine, '_autoCycleTick');
-        for (let i = 0; i < 15; i++) engine._onBeat();
-        vi.advanceTimersByTime(7000);
+        vi.advanceTimersByTime(14999);
         expect(tick).not.toHaveBeenCalled();
-        engine._onBeat();
+        vi.advanceTimersByTime(1);
         expect(tick).toHaveBeenCalledTimes(1);
-        // 拍で切り替えたので、時間 fallback はここから数え直し
-        vi.advanceTimersByTime(7000);
-        expect(tick).toHaveBeenCalledTimes(1);
-        vi.advanceTimersByTime(1000);
+        vi.advanceTimersByTime(15000);
         expect(tick).toHaveBeenCalledTimes(2);
       });
 
-      it('switches standalone Rnd every 16 beats', () => {
+      it('switches Auto on the first beat after the seconds, and counts the next seconds from there', () => {
         vi.useFakeTimers();
-        engine.startAutoFX({ autoFilters: true });
-        const tick = vi.spyOn(engine, '_autoFXTick');
-        for (let i = 0; i < 15; i++) engine._onBeat();
+        withBpm();
+        engine.startAutoCycle(NAMES, 15000, {});
+        engine._autoRestAt = 100;
+        const tick = vi.spyOn(engine, '_autoCycleTick');
+        // 秒数がたつまでは拍が来ても切り替えない(BPM で長さは変わらない)
+        for (let i = 0; i < 100; i++) engine._onBeat();
+        vi.advanceTimersByTime(15000);
         expect(tick).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(400);
         engine._onBeat();
         expect(tick).toHaveBeenCalledTimes(1);
-        for (let i = 0; i < 16; i++) engine._onBeat();
+        engine._onBeat();
+        expect(tick).toHaveBeenCalledTimes(1);
+        // 次の秒数は切り替えたところから
+        vi.advanceTimersByTime(14999);
+        engine._onBeat();
+        expect(tick).toHaveBeenCalledTimes(1);
+        vi.advanceTimersByTime(1);
+        engine._onBeat();
         expect(tick).toHaveBeenCalledTimes(2);
+      });
+
+      it('waits for the beat at most 1 s', () => {
+        vi.useFakeTimers();
+        withBpm();
+        engine.startAutoCycle(NAMES, 8000, {});
+        engine._autoRestAt = 100;
+        const tick = vi.spyOn(engine, '_autoCycleTick');
+        vi.advanceTimersByTime(8999);
+        expect(tick).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(tick).toHaveBeenCalledTimes(1);
+        // 1 秒待って切り替えたあとの拍では切り替えない
+        engine._onBeat();
+        expect(tick).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not switch on a beat after Auto is stopped while waiting', () => {
+        vi.useFakeTimers();
+        withBpm();
+        engine.startAutoCycle(NAMES, 8000, {});
+        const tick = vi.spyOn(engine, '_autoCycleTick');
+        vi.advanceTimersByTime(8000);
+        engine.kill({});
+        engine._onBeat();
+        vi.advanceTimersByTime(2000);
+        expect(tick).not.toHaveBeenCalled();
+      });
+
+      it('switches standalone Rnd the same way (seconds, then the next beat)', () => {
+        vi.useFakeTimers();
+        engine.startAutoFX({ autoFilters: true, interval: 8000 });
+        const fx = vi.spyOn(engine, '_autoFXTick');
+        // BPM が無ければ秒数で
+        vi.advanceTimersByTime(7999);
+        expect(fx).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(fx).toHaveBeenCalledTimes(1);
+        // BPM があれば秒数のあとの拍で(最大 1 秒待つ)
+        withBpm();
+        for (let i = 0; i < 40; i++) engine._onBeat();
+        vi.advanceTimersByTime(8000);
+        expect(fx).toHaveBeenCalledTimes(1);
+        engine._onBeat();
+        expect(fx).toHaveBeenCalledTimes(2);
+        vi.advanceTimersByTime(8999);
+        expect(fx).toHaveBeenCalledTimes(2);
+        vi.advanceTimersByTime(1);
+        expect(fx).toHaveBeenCalledTimes(3);
+        engine._stopAutoFX();
+        vi.advanceTimersByTime(8000);
+        engine._onBeat();
+        expect(fx).toHaveBeenCalledTimes(3);
       });
 
       it('ignores beats when Auto / Rnd are off', () => {
@@ -2167,20 +2318,6 @@ describe('VJamFXEngine', () => {
         for (let i = 0; i < 40; i++) engine._onBeat();
         expect(auto).not.toHaveBeenCalled();
         expect(fx).not.toHaveBeenCalled();
-      });
-
-      it('keeps the 4-15 s clamp for the time fallback', () => {
-        engine._videoAudioAnalyser = { disconnect() {} };
-        engine._videoAudioTempo = 120;
-        expect(engine._beatsInterval(16, 8000)).toBe(8000);
-        engine._videoAudioTempo = 60;
-        expect(engine._beatsInterval(16, 8000)).toBe(15000);
-        engine._videoAudioTempo = 300;
-        expect(engine._beatsInterval(16, 8000)).toBe(4000);
-        engine._videoAudioAnalyser = null;
-        expect(engine._beatsInterval(16, 12345)).toBe(12345);
-        engine._externalAudioData = { bpm: 128 };
-        expect(engine._beatsInterval(16, 8000)).toBe(7500);
       });
     });
 
@@ -2217,16 +2354,20 @@ describe('VJamFXEngine', () => {
         expect(engine.activeLayers.size).toBeGreaterThan(0);
         expect(engine._autoRestAt).toBeGreaterThanOrEqual(4);
         expect(engine._autoRestAt).toBeLessThanOrEqual(6);
-        // そのあとは普通に拍で切り替わる
+        // そのあとは普通に秒数で切り替わる
         const tick = vi.spyOn(engine, '_autoCycleTick');
-        for (let i = 0; i < 16; i++) engine._onBeat();
+        vi.advanceTimersByTime(8000);
         expect(tick).toHaveBeenCalledTimes(1);
       });
 
-      it('also rests when the switch comes from beats', () => {
-        engine.startAutoCycle(NAMES, 100000, { barsPerCycle: 4 });
+      it('also rests when the switch comes from a beat', () => {
+        vi.useFakeTimers();
+        engine._externalAudioData = { bpm: 120 };
+        engine.startAutoCycle(NAMES, 8000, {});
         engine._autoRestAt = 1;
-        for (let i = 0; i < 4; i++) engine._onBeat();
+        vi.advanceTimersByTime(8000);
+        expect(engine.activeLayers.size).toBeGreaterThan(0);
+        engine._onBeat();
         expect(engine.activeLayers.size).toBe(0);
         engine._stopAutoCycle();
       });
@@ -2940,9 +3081,9 @@ describe('VJamFXEngine', () => {
       // 古い方はフェードアウト中(DOM に残る)。フェードが終わったら destroy
       expect(old.isConnected).toBe(true);
       expect(old.style.opacity).toBe('0');
-      expect(old.style.transition).toBe('opacity 1.5s linear');
+      expect(old.style.transition).toBe('opacity 5s linear');
       expect(destroyed).toEqual([]);
-      vi.advanceTimersByTime(1700);
+      vi.advanceTimersByTime(5200);
       expect(old.isConnected).toBe(false);
       expect(destroyed).toEqual([GL[0]]);
     });

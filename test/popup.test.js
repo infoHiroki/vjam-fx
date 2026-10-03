@@ -212,16 +212,17 @@ describe('PopupController', () => {
       expect(call[0].state.audioEnabled).toBe(false);
     });
 
-    // SW がページ遷移後に Auto / Rnd を再開するとき、同じ拍数で回す
-    it('should include barsPerCycle in saved state', async () => {
+    // SW がページ遷移後に Auto / Rnd を再開するとき、同じ秒数で回す
+    it('should include cycleSeconds in saved state', async () => {
       controller.isActive = true;
-      controller.settings.barsPerCycle = 32;
+      controller.settings.cycleSeconds = 30;
       await controller._saveState();
       const call = chrome.runtime.sendMessage.mock.calls[0];
-      expect(call[0].state.barsPerCycle).toBe(32);
+      expect(call[0].state.cycleSeconds).toBe(30);
+      expect(call[0].state).not.toHaveProperty('barsPerCycle');
     });
 
-    it('should save state when barsPerCycle is changed while active', async () => {
+    it('should save state when cycleSeconds is changed while active', async () => {
       const cycleEl = document.createElement('input');
       cycleEl.id = 'setting-cycle';
       container.querySelector('.popup').appendChild(cycleEl);
@@ -232,10 +233,12 @@ describe('PopupController', () => {
       cycleEl.dispatchEvent(new Event('change'));
       await vi.waitFor(() => expect(chrome.runtime.sendMessage.mock.calls.some(c => c[0].type === 'setState')).toBe(true));
       const call = chrome.runtime.sendMessage.mock.calls.find(c => c[0].type === 'setState');
-      expect(call[0].state.barsPerCycle).toBe(8);
+      expect(call[0].state.cycleSeconds).toBe(8);
+      // フェード(既定 5 秒)は Cycle の半分まで
+      expect(call[0].state.fadeDuration).toBe(4);
     });
 
-    it('should not save state when barsPerCycle is changed while inactive', async () => {
+    it('should not save state when cycleSeconds is changed while inactive', async () => {
       const cycleEl = document.createElement('input');
       cycleEl.id = 'setting-cycle';
       container.querySelector('.popup').appendChild(cycleEl);
@@ -257,6 +260,17 @@ describe('PopupController', () => {
       const call = chrome.runtime.sendMessage.mock.calls[0];
       expect(call[0].state.fadeDuration).toBe(3);
       expect(call[0].state.audioSensitivity).toBe(2.0);
+    });
+
+    it('should save the fade capped at half of Cycle', async () => {
+      controller.isActive = true;
+      controller.settings.fadeDuration = 12;
+      controller.settings.cycleSeconds = 8;
+      await controller._saveState();
+      expect(chrome.runtime.sendMessage.mock.calls[0][0].state.fadeDuration).toBe(4);
+      controller.settings.cycleSeconds = 30;
+      await controller._saveState();
+      expect(chrome.runtime.sendMessage.mock.calls[1][0].state.fadeDuration).toBe(12);
     });
 
     for (const [id, value, key, expected] of [
@@ -505,7 +519,7 @@ describe('PopupController', () => {
   });
 
   describe('bug fix: settings validation', () => {
-    it('should reject NaN fadeDuration and use default 1.5', () => {
+    it('should reject NaN fadeDuration and use default 5', () => {
       const fadeEl = document.createElement('input');
       fadeEl.id = 'setting-fade';
       container.querySelector('.popup').appendChild(fadeEl);
@@ -515,10 +529,10 @@ describe('PopupController', () => {
       fadeEl.value = 'abc';
       fadeEl.dispatchEvent(new Event('change'));
 
-      expect(controller.settings.fadeDuration).toBe(1.5);
+      expect(controller.settings.fadeDuration).toBe(5);
     });
 
-    it('should reject NaN barsPerCycle and use default 16', () => {
+    it('should reject NaN cycleSeconds and use default 15', () => {
       const cycleEl = document.createElement('input');
       cycleEl.id = 'setting-cycle';
       container.querySelector('.popup').appendChild(cycleEl);
@@ -528,10 +542,10 @@ describe('PopupController', () => {
       cycleEl.value = 'not-a-number';
       cycleEl.dispatchEvent(new Event('change'));
 
-      expect(controller.settings.barsPerCycle).toBe(16);
+      expect(controller.settings.cycleSeconds).toBe(15);
     });
 
-    it('should reject barsPerCycle < 1 and use default 16', () => {
+    it('should reject cycleSeconds < 1 and use default 15', () => {
       const cycleEl = document.createElement('input');
       cycleEl.id = 'setting-cycle';
       container.querySelector('.popup').appendChild(cycleEl);
@@ -541,7 +555,7 @@ describe('PopupController', () => {
       cycleEl.value = '0';
       cycleEl.dispatchEvent(new Event('change'));
 
-      expect(controller.settings.barsPerCycle).toBe(16);
+      expect(controller.settings.cycleSeconds).toBe(15);
     });
 
     it('should clamp fadeDuration to minimum 0', () => {
@@ -555,6 +569,129 @@ describe('PopupController', () => {
       fadeEl.dispatchEvent(new Event('change'));
 
       expect(controller.settings.fadeDuration).toBe(0);
+    });
+  });
+
+  // フェード・Cycle を秒に(#58)
+  describe('fade / Cycle in seconds (#58)', () => {
+    const sentCommands = () => chrome.scripting.executeScript.mock.calls
+      .map(c => c[0].args && c[0].args[0])
+      .filter(m => m && m.action);
+    const html = readFileSync(resolve(__dirname, '../popup/popup.html'), 'utf-8');
+    const settingsSection = () => new DOMParser().parseFromString(html, 'text/html').getElementById('settings-section');
+    const options = (id) => [...settingsSection().querySelectorAll(`#${id} option`)].map(o => [o.value, o.textContent, o.selected]);
+    const load = async (saved) => {
+      chrome.storage.local.get.mockResolvedValueOnce({ vjamfx_settings: saved });
+      await controller._loadSettings();
+    };
+
+    beforeEach(() => {
+      container.querySelector('.popup').insertAdjacentHTML('beforeend', settingsSection().outerHTML + `
+        <button id="btn-auto-cycle"></button>
+        <button id="auto-blend"></button>
+        <button id="auto-filters"></button>
+      `);
+    });
+
+    it('popup.html offers Fade 0 / 3 / 5 / 8 / 12 s (5 s) and Cycle 8 / 15 / 30 / 60 s (15 s), no bars / beats', () => {
+      expect(options('setting-fade')).toEqual([
+        ['0', '0s', false], ['3', '3s', false], ['5', '5s', true], ['8', '8s', false], ['12', '12s', false],
+      ]);
+      expect(options('setting-cycle')).toEqual([
+        ['8', '8s', false], ['15', '15s', true], ['30', '30s', false], ['60', '60s', false],
+      ]);
+      expect(settingsSection().outerHTML).not.toMatch(/bars?\b|beats?\b/i);
+    });
+
+    it('defaults to fade 5 s and Cycle 15 s', () => {
+      expect(controller.settings.fadeDuration).toBe(5);
+      expect(controller.settings.cycleSeconds).toBe(15);
+      expect(controller.settings).not.toHaveProperty('barsPerCycle');
+    });
+
+    it('moves settings saved with the previous defaults (fade 1.5 / 16 beats) to the new ones', async () => {
+      await load({ autoOnStart: false, fadeDuration: 1.5, barsPerCycle: 16, sensitivity: 'hi' });
+      expect(controller.settings).toEqual({
+        autoOnStart: false, allTabs: false, fadeDuration: 5, cycleSeconds: 15, sensitivity: 'hi', version: 2,
+      });
+      expect(document.getElementById('setting-fade').value).toBe('5');
+      expect(document.getElementById('setting-cycle').value).toBe('15');
+    });
+
+    it('reads the old fade 0.5 as 3 s and drops the old beats (Cycle goes to the default)', async () => {
+      await load({ fadeDuration: 0.5, barsPerCycle: 32 });
+      expect(controller.settings.fadeDuration).toBe(3);
+      expect(controller.settings.cycleSeconds).toBe(15);
+      expect(controller.settings).not.toHaveProperty('barsPerCycle');
+    });
+
+    it('keeps a fade the user chose before (not the previous default)', async () => {
+      for (const fade of [0, 3, 5]) {
+        await load({ fadeDuration: fade, barsPerCycle: 8 });
+        expect(controller.settings.fadeDuration).toBe(fade);
+      }
+    });
+
+    it('moves the previous default only once (settings saved after #58 stay as they are)', async () => {
+      await load({ version: 2, fadeDuration: 12, cycleSeconds: 60 });
+      expect(controller.settings.fadeDuration).toBe(12);
+      expect(controller.settings.cycleSeconds).toBe(60);
+      expect(document.getElementById('setting-fade').value).toBe('12');
+      expect(document.getElementById('setting-cycle').value).toBe('60');
+      // 選択肢に無い値は読み替える(1.5 は 3、Cycle は既定)
+      await load({ version: 2, fadeDuration: 1.5, cycleSeconds: 45 });
+      expect(controller.settings.fadeDuration).toBe(3);
+      expect(controller.settings.cycleSeconds).toBe(15);
+    });
+
+    it('saves the version with the settings, without the old beats', async () => {
+      await load({ fadeDuration: 1.5, barsPerCycle: 16 });
+      controller._bindEvents();
+      const el = document.getElementById('setting-auto-start');
+      el.value = 'off';
+      el.dispatchEvent(new Event('change'));
+      const saved = chrome.storage.local.set.mock.calls.map(c => c[0].vjamfx_settings).filter(Boolean).pop();
+      expect(saved).toMatchObject({ version: 2, fadeDuration: 5, cycleSeconds: 15 });
+      expect(saved).not.toHaveProperty('barsPerCycle');
+    });
+
+    it('sends the fade capped at half of Cycle when the fade changes', async () => {
+      controller._bindEvents();
+      controller.isActive = true;
+      controller.settings.cycleSeconds = 8;
+      const fadeEl = document.getElementById('setting-fade');
+      fadeEl.value = '12';
+      fadeEl.dispatchEvent(new Event('change'));
+      expect(controller.settings.fadeDuration).toBe(12);
+      await vi.waitFor(() => expect(sentCommands().some(m => m.action === 'setFadeDuration')).toBe(true));
+      expect(sentCommands().find(m => m.action === 'setFadeDuration').duration).toBe(4);
+    });
+
+    it('changing Cycle while Auto runs restarts Auto with the new seconds and re-sends the capped fade', async () => {
+      controller._bindEvents();
+      controller.isActive = true;
+      controller.autoCycleActive = true;
+      controller.settings.fadeDuration = 12;
+      const cycleEl = document.getElementById('setting-cycle');
+      cycleEl.value = '30';
+      cycleEl.dispatchEvent(new Event('change'));
+      await vi.waitFor(() => expect(sentCommands().some(m => m.action === 'startAutoCycle')).toBe(true));
+      expect(sentCommands().find(m => m.action === 'startAutoCycle').interval).toBe(30000);
+      expect(sentCommands().find(m => m.action === 'setFadeDuration').duration).toBe(12);
+      expect(controller.settings.cycleSeconds).toBe(30);
+    });
+
+    it('changing Cycle while only Rnd runs restarts Rnd with the new seconds', async () => {
+      controller._bindEvents();
+      controller.isActive = true;
+      controller.autoFilters = true;
+      const cycleEl = document.getElementById('setting-cycle');
+      cycleEl.value = '8';
+      cycleEl.dispatchEvent(new Event('change'));
+      await vi.waitFor(() => expect(sentCommands().some(m => m.action === 'startAutoFX')).toBe(true));
+      expect(sentCommands().find(m => m.action === 'startAutoFX')).toMatchObject({ autoFilters: true, interval: 8000 });
+      expect(sentCommands().find(m => m.action === 'setFadeDuration').duration).toBe(4);
+      expect(sentCommands().some(m => m.action === 'startAutoCycle')).toBe(false);
     });
   });
 
@@ -752,7 +889,8 @@ describe('PopupController', () => {
       const cmd = sentCommands().find(m => m.action === 'startAutoCycle');
       expect(cmd.presets.sort()).toEqual(['neon-tunnel', 'rain']);
       expect(cmd.pool).toEqual(controller.pool);
-      expect(cmd.barsPerCycle).toBe(16);
+      expect(cmd.interval).toBe(15000);
+      expect(cmd).not.toHaveProperty('barsPerCycle');
       // Auto 用の inject もプールの分だけ
       const injected = chrome.scripting.executeScript.mock.calls
         .map(c => c[0].files && c[0].files[0])
@@ -770,7 +908,7 @@ describe('PopupController', () => {
       btn.click();
       await vi.waitFor(() => expect(sentCommands().some(m => m.action === 'startAutoFX')).toBe(true));
       const cmd = sentCommands().find(m => m.action === 'startAutoFX');
-      expect(cmd).toEqual({ action: 'startAutoFX', autoBlend: false, autoFilters: true, pool: controller.pool });
+      expect(cmd).toEqual({ action: 'startAutoFX', autoBlend: false, autoFilters: true, pool: controller.pool, interval: 15000 });
     });
 
     it('saves the pool presets as autoCyclePresets (SW re-injects them after navigation)', async () => {

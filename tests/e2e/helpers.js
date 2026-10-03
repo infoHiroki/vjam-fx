@@ -242,7 +242,7 @@ export function readCanvases(page) {
   });
 }
 
-// レイヤーのフェードイン(既定 1.5 秒)が終わるまで待つ
+// レイヤーのフェードイン(既定 5 秒)が終わるまで待つ
 export function waitLayersFadedIn(page) {
   return page.waitForFunction(() => {
     const e = window._vjamFxEngine;

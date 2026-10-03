@@ -79,7 +79,7 @@ test.describe.serial('トグル ON だけで Auto が始まる(既定の設定)'
   test('Auto でプリセットが入れ替わり、Rnd が blend / filter を選び直す', async () => {
     const layersNow = async () => (await readState(page)).layers.join(',');
     const before = await layersNow();
-    // 最初の場面(トグル ON で選んだレイヤー)の次から、拍(16 拍)か時間の fallback(4〜15 秒)で切り替わる
+    // 最初の場面(トグル ON で選んだレイヤー)の次から、Cycle の 15 秒がたった後の拍(待つのは最大 1 秒)で切り替わる
     await expect.poll(layersNow, { timeout: 25_000 }).not.toBe(before);
     await expect.poll(() => page.evaluate(() => window.__vjRnd.blend > 0 && window.__vjRnd.filter > 0)).toBe(true);
   });

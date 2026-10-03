@@ -1,14 +1,14 @@
 /**
  * 切り替えのフェード(#38)を実物の Chromium + 拡張で確かめる。
- * - Next: 押した直後は古いキャンバスが残ってフェードアウト中で、フェード時間(既定 1.5 秒)の後に消える
+ * - Next: 押した直後は古いキャンバスが残ってフェードアウト中で、フェード時間(既定 5 秒)の後に消える
  * - Rnd / Auto の blend・filter: オーバーレイの中身が一度 0 近くまで下がり、暗い間に変わって、また戻る(dip)
  * フェードの途中の不透明度はページの rAF で毎フレーム getComputedStyle して記録する(CSS の transition が本当に動いているか)
  */
 import { test, expect } from '@playwright/test';
 import { startSite, launchWithExtension, openPopup, readState, waitLayersFadedIn, isAudioPlaying } from './helpers.js';
 
-const FADE_MS = 1500; // popup の既定のフェード時間
-const DIP_MS = 300;
+const FADE_MS = 5000; // popup の既定のフェード時間(既定の Cycle 15 秒の半分より短いのでそのまま)
+const DIP_MS = 1250; // dip の片道 = フェードの 1/4
 
 test.describe.serial('切り替えのフェード', () => {
   let site, ext, page, popup;
@@ -108,7 +108,7 @@ test.describe.serial('切り替えのフェード', () => {
 
   test('Rnd の blend / filter は、オーバーレイの中身を一度下げて、暗い間に変えて戻す', async () => {
     await waitLayersFadedIn(page);
-    const rec = await page.evaluate(() => new Promise((resolve) => {
+    const rec = await page.evaluate((dipMs) => new Promise((resolve) => {
       const e = window._vjamFxEngine;
       const stage = e._stage;
       const hostOpacity = e.overlay.style.opacity;
@@ -127,11 +127,11 @@ test.describe.serial('切り替えのフェード', () => {
           blend: e.overlay.style.mixBlendMode,
           host: e.overlay.style.opacity,
         });
-        if (now - t0 < 900) requestAnimationFrame(frame);
+        if (now - t0 < dipMs * 2 + 300) requestAnimationFrame(frame);
         else resolve({ samples, hostOpacity, end: { opacity: getComputedStyle(stage).opacity, transition: stage.style.transition } });
       };
       requestAnimationFrame(frame);
-    }));
+    }), DIP_MS);
     const { samples } = rec;
 
     // 下がって、戻る
