@@ -260,8 +260,8 @@ describe('Service Worker', () => {
       });
     });
 
-    // 遷移後も popup と同じように回す: Auto が OFF でも Rnd だけ ON なら Rnd を再開、拍数の設定も引き継ぐ
-    describe('Rnd / barsPerCycle on re-inject', () => {
+    // 遷移後も popup と同じように回す: Auto が OFF でも Rnd だけ ON なら Rnd を再開、Cycle の秒数も引き継ぐ
+    describe('Rnd / cycleSeconds on re-inject', () => {
       const POOL = { filters: ['saturate(2)'], blends: ['screen', 'difference'] };
 
       it('restarts Rnd (startAutoFX) when only Rnd was on', async () => {
@@ -300,28 +300,30 @@ describe('Service Worker', () => {
         expect(messages.some(m => m.action === 'startAutoFX')).toBe(false);
       });
 
-      it('passes the saved barsPerCycle to startAutoCycle', async () => {
+      it('passes the saved Cycle seconds to startAutoCycle as the interval', async () => {
         const messages = await messagesAfterNavigation({
           active: true, layers: ['rain'], blendMode: 'screen',
-          autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true, pool: POOL, barsPerCycle: 32,
+          autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true, pool: POOL, cycleSeconds: 30,
         });
-        expect(messages.find(m => m.action === 'startAutoCycle').barsPerCycle).toBe(32);
+        const cmd = messages.find(m => m.action === 'startAutoCycle');
+        expect(cmd.interval).toBe(30000);
+        expect(cmd).not.toHaveProperty('barsPerCycle');
       });
 
-      it('passes the saved barsPerCycle to startAutoFX', async () => {
+      it('passes the saved Cycle seconds to startAutoFX as the interval', async () => {
         const messages = await messagesAfterNavigation({
           active: true, layers: ['rain'], blendMode: 'screen',
-          autoCyclePresets: null, autoBlend: true, autoFilters: true, pool: POOL, barsPerCycle: 8,
+          autoCyclePresets: null, autoBlend: true, autoFilters: true, pool: POOL, cycleSeconds: 8,
         });
-        expect(messages.find(m => m.action === 'startAutoFX').barsPerCycle).toBe(8);
+        expect(messages.find(m => m.action === 'startAutoFX').interval).toBe(8000);
       });
 
-      it('passes null when no barsPerCycle was saved (engine uses its default 16)', async () => {
+      it('passes null when no Cycle was saved (old state: engine uses its default 15 s, ignores the old beats)', async () => {
         const messages = await messagesAfterNavigation({
           active: true, layers: ['rain'], blendMode: 'screen',
-          autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true, pool: POOL,
+          autoCyclePresets: ['rain'], autoBlend: true, autoFilters: true, pool: POOL, barsPerCycle: 16,
         });
-        expect(messages.find(m => m.action === 'startAutoCycle').barsPerCycle).toBeNull();
+        expect(messages.find(m => m.action === 'startAutoCycle').interval).toBeNull();
       });
     });
 
@@ -633,7 +635,7 @@ describe('Service Worker', () => {
       active: true, layers: ['rain', 'radar'], blendMode: 'difference', filters: ['sepia'], opacity: 0.6, audioEnabled: true,
       autoCyclePresets: ['rain', 'radar'], autoBlend: true, autoFilters: true,
       pool: { filters: ['saturate(2)'], blends: ['screen', 'difference'] },
-      barsPerCycle: 8, fadeDuration: 3, audioSensitivity: 2.0, locks: { effect: false, blend: false, filter: false }, textState: null,
+      cycleSeconds: 30, fadeDuration: 3, audioSensitivity: 2.0, locks: { effect: false, blend: false, filter: false }, textState: null,
     };
     let tabs; // id → { id, windowId, url, active, status }
 
@@ -696,7 +698,7 @@ describe('Service Worker', () => {
       expect(messages.find(m => m.action === 'setFilter')).toMatchObject({ filter: 'sepia', enabled: true });
       expect(messages.find(m => m.action === 'setOpacity').opacity).toBe(0.6);
       expect(messages.find(m => m.action === 'startAutoCycle')).toMatchObject({
-        presets: ['rain', 'radar'], pool: STATE.pool, autoBlend: true, autoFilters: true, barsPerCycle: 8,
+        presets: ['rain', 'radar'], pool: STATE.pool, autoBlend: true, autoFilters: true, interval: 30000,
       });
       expect(messages.find(m => m.action === 'setFadeDuration').duration).toBe(3);
       expect(messages.find(m => m.action === 'setAudioSensitivity').sensitivity).toBe(2.0);

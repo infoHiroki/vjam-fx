@@ -34,14 +34,22 @@
   // invert はオーバーレイの黒を白にしてページを潰し、blur は iPad で重いので外す
   const FALLBACK_RND_FILTERS = ['hue-rotate', 'grayscale', 'saturate', 'brightness', 'contrast', 'sepia'].map(n => FILTER_VALUES[n]);
 
-  // VJam 本体と同じ回し方: 拍で数えて切り替え、blend は 90%・filter は 60% で変え、4〜6 回に 1 回 0.5 秒休む
-  const SWITCH_BEATS = 16;
+  // VJam 本体と同じ回し方: blend は 90%・filter は 60% で変え、4〜6 回に 1 回 0.5 秒休む。
+  // 切り替えは秒数(popup の Cycle、既定 15 秒)がたった後の次の拍。拍を待つのは最大 1 秒(長さは BPM で変わらない)
+  const DEFAULT_CYCLE_MS = 15000;
+  const BEAT_WAIT_MS = 1000;
   const BLEND_CHANGE_RATE = 0.9;
   const FILTER_CHANGE_RATE = 0.6;
   const REST_MS = 500;
 
-  // Rnd / Auto で blend・filter を変えるときの dip: オーバーレイ全体をこの時間で 0 へ下げ、変えてから同じ時間で戻す
-  const DIP_MS = 300;
+  // Rnd / Auto で blend・filter を変えるときの dip: オーバーレイ全体を片道(フェード時間の 1/4、この範囲に収める)で 0 へ下げ、変えてから同じ時間で戻す
+  const DIP_MIN_MS = 300;
+  const DIP_MAX_MS = 1500;
+
+  // 消えていくレイヤー(フェードアウト)は軽くする: p5 をこの fps まで落とし、フェードのこの割合を過ぎたら止める
+  // (最後の絵のまま CSS の opacity だけで消える。合成は GPU なので CPU はほぼ使わない)
+  const FADE_OUT_FPS = 20;
+  const FADE_OUT_STOP = 0.5;
 
   // 45fps を 2 秒続けて割ったら p5 を 30fps に落とす
   const LOW_FPS = 45;
@@ -295,7 +303,7 @@
       this._textOverlay = null;
 
       // Settings
-      this._fadeDuration = 1.5; // seconds for layer fade in/out
+      this._fadeDuration = 5; // seconds for layer fade in/out(popup が Cycle の半分までにして送る)
       this._audioSensitivity = 1.0; // multiplier for audio levels
 
       // dip の段階(_dip 参照)。下げている間は _dipDownTimer、戻している間は _dipUpTimer
@@ -860,8 +868,8 @@
       }
     }
 
-    // Rnd / Auto の blend・filter の切り替えを目立たせない(dip): オーバーレイの中身(shadow root の入れ物)を DIP_MS で 0 まで下げ、
-    // 下がりきったら今の blend / filter を CSS に掛けて、DIP_MS で戻す。人が設定した不透明度(ホストの opacity)には触らない。
+    // Rnd / Auto の blend・filter の切り替えを目立たせない(dip): オーバーレイの中身(shadow root の入れ物)を片道(_dipMs)で 0 まで下げ、
+    // 下がりきったら今の blend / filter を CSS に掛けて、同じ時間で戻す。人が設定した不透明度(ホストの opacity)には触らない。
     // 下げている途中に来た切り替えは同じ dip に乗る。フェード時間 0・オーバーレイが無いときは dip しない(false。呼び出し側がすぐ掛ける)
     _dip() {
       if (!(this._fadeDuration > 0) || !this._stage) return false;
@@ -869,7 +877,8 @@
       clearTimeout(this._dipUpTimer);
       this._dipUpTimer = null;
       const stage = this._stage;
-      stage.style.transition = 'opacity ' + DIP_MS + 'ms linear';
+      const dipMs = this._dipMs();
+      stage.style.transition = 'opacity ' + dipMs + 'ms linear';
       stage.style.opacity = '0';
       this._dipDownTimer = setTimeout(() => {
         this._dipDownTimer = null;
@@ -880,9 +889,14 @@
           this._dipUpTimer = null;
           stage.style.transition = '';
           stage.style.opacity = '';
-        }, DIP_MS);
-      }, DIP_MS);
+        }, dipMs);
+      }, dipMs);
       return true;
+    }
+
+    // dip の片道(ms): フェード時間の 1/4 を DIP_MIN_MS〜DIP_MAX_MS に収める
+    _dipMs() {
+      return Math.max(DIP_MIN_MS, Math.min(DIP_MAX_MS, this._fadeDuration * 1000 / 4));
     }
 
     // dip をやめて、今の blend / filter をすぐ掛ける(kill・オーバーレイを外すとき)
@@ -1041,16 +1055,30 @@
       }
       container.style.transition = 'opacity ' + fadeSec + 's linear';
       container.style.opacity = '0';
+      const stopTimer = this._calmFadingLayer(layer.preset, fadeSec * 1000 * FADE_OUT_STOP);
       let cleaned = false;
       const onEnd = () => {
         if (cleaned) return;
         cleaned = true;
+        clearTimeout(stopTimer);
         try { layer.preset.destroy(); } catch (e) { console.warn('VJam FX: destroy error', e); }
         container.remove();
       };
       container.addEventListener('transitionend', onEnd, { once: true });
       // Fallback: force remove after fade + 200ms
       setTimeout(onEnd, (fadeSec * 1000) + 200);
+    }
+
+    // フェードアウトするレイヤーの p5 を軽くする: fps を FADE_OUT_FPS まで落とし(もっと低ければそのまま)、stopMs 後に noLoop。
+    // 止めたタイマーを返す(先に外したら clearTimeout)。WebGL も同じ(外すときに今までどおり loseContext)
+    _calmFadingLayer(preset, stopMs) {
+      const p = preset && preset.p5;
+      if (!p) return null;
+      const target = typeof p.getTargetFrameRate === 'function' ? p.getTargetFrameRate() : Infinity;
+      if (!(target <= FADE_OUT_FPS)) this._setLayerFps(preset, FADE_OUT_FPS);
+      return setTimeout(() => {
+        if (typeof p.noLoop === 'function') p.noLoop();
+      }, stopMs);
     }
 
     /**
@@ -1485,11 +1513,9 @@
       this._randomizeFilter(pool, true);
     }
 
-    // N 拍ぶんの長さ(4〜15 秒にクランプ)。BPM が取れなければ base
-    _beatsInterval(beats, base) {
-      const bpm = this._tempoBpm();
-      if (!(bpm > 0)) return base;
-      return Math.max(4000, Math.min(15000, (60 / bpm) * beats * 1000));
+    // 切り替えの秒数(ms)。渡らない・おかしいときは既定 15 秒
+    _cycleMs(ms) {
+      return (Number.isFinite(ms) && ms > 0) ? ms : DEFAULT_CYCLE_MS;
     }
 
     // 今の BPM。音声ループと同じ優先順(MSE タップ → analyser → bridge)。取れなければ 0
@@ -1500,17 +1526,14 @@
       return 0;
     }
 
-    // 音声ループで拍が来るたびに呼ぶ。Auto / Rnd の拍を数え、届いたら切り替える
+    // 音声ループで拍が来るたびに呼ぶ。Auto / Rnd が秒数を過ぎて拍を待っていれば、ここで切り替える
     _onBeat() {
-      if (this._autoCycleTimer && ++this._autoCycleBeats >= this._barsPerCycle) this._autoSwitch();
-      if (this._autoFXTimer && ++this._autoFXBeats >= SWITCH_BEATS) {
-        this._autoFXTick();
-        this._scheduleAutoFX();
-      }
+      if (this._autoCycleDue) this._autoSwitch();
+      if (this._autoFXDue) this._autoFXSwitch();
     }
 
     // --- Auto-Cycle ---
-    // 拍で数えて切り替える(barsPerCycle 拍、既定 16)。拍が取れないときは時間の fallback(同じ拍数ぶん、4〜15 秒)。
+    // 秒数(intervalMs、既定 15 秒)がたったら次の拍で切り替える。拍を待つのは最大 1 秒、BPM が取れないときは待たない。
     // 4〜6 回に 1 回は休む(フェードアウトして、消えてから 0.5 秒後に切り替え)
 
     startAutoCycle(presetNames, intervalMs, options) {
@@ -1518,10 +1541,9 @@
       if (!presetNames || presetNames.length === 0) return;
 
       this._autoCyclePresets = presetNames;
-      this._autoCycleBaseInterval = intervalMs || 8000;
+      this._autoCycleInterval = this._cycleMs(intervalMs);
       this._autoBlend = !!(options && options.autoBlend);
       this._autoFilters = !!(options && options.autoFilters);
-      this._barsPerCycle = (options && options.barsPerCycle) || SWITCH_BEATS;
       this._autoCycleLocks = (options && options.locks) || {};
       this._autoCyclePool = (options && options.pool) || null;
       this._poolPresets = presetNames;
@@ -1538,19 +1560,21 @@
       this._scheduleAutoCycle();
     }
 
-    // 拍を数え直し、拍が取れないときの時間 fallback を張り直す。切り替えるたびに呼ぶ
+    // 次の切り替えを張る(切り替えるたびに呼ぶ)。秒数がたったら拍を待ち(_onBeat)、1 秒来なければそこで切り替える
     _scheduleAutoCycle() {
-      clearTimeout(this._autoCycleTimer);
-      this._autoCycleBeats = 0;
-      const timerId = setTimeout(() => {
-        // Guard: don't tick if cycle was stopped between schedule and fire
-        if (this._autoCycleTimer !== timerId) return;
-        this._autoSwitch();
-      }, this._beatsInterval(this._barsPerCycle, this._autoCycleBaseInterval));
-      this._autoCycleTimer = timerId;
+      this._autoCycleDue = false;
+      this._autoCycleLater(this._autoCycleInterval, () => {
+        if (!(this._tempoBpm() > 0)) {
+          this._autoSwitch();
+          return;
+        }
+        this._autoCycleDue = true;
+        this._autoCycleLater(BEAT_WAIT_MS, () => this._autoSwitch());
+      });
     }
 
     _autoSwitch() {
+      this._autoCycleDue = false;
       this._autoSwitchCount++;
       if (this._autoSwitchCount < this._autoRestAt) {
         this._autoCycleTick();
@@ -1560,12 +1584,12 @@
       // 休み(その間の拍では切り替えない)
       this._autoSwitchCount = 0;
       this._autoRestAt = 4 + Math.floor(Math.random() * 3);
-      this._autoCycleBeats = -Infinity;
       this._autoCycleRest();
     }
 
     // 休み: ロックされていないレイヤーをフェードアウトし、消えたら Rnd が回している blend / filter を既定(screen / なし)に戻す。
     // その 0.5 秒後に普通の切り替え(次のセットがフェードイン)。エフェクトのロック中はレイヤーが残るので、待たずに dip で戻す
+    // (dip が戻りきってから 0.5 秒。dip は 0.5 秒より長いことがあり、途中で次の切り替えが来ると既定が見えないまま 1 つの dip になる)
     _autoCycleRest() {
       const locks = this._autoCycleLocks || {};
       this._autoResting = true;
@@ -1575,7 +1599,8 @@
       this._autoCycleLater(locks.effect ? 0 : this._fadeDuration * 1000, () => {
         if (this._autoBlend && !locks.blend) this.setBlendMode('screen', locks.effect);
         if (this._autoFilters && !locks.filter) this.clearFilters(locks.effect);
-        this._autoCycleLater(REST_MS, () => {
+        const dipping = this._dipDownTimer || this._dipUpTimer;
+        this._autoCycleLater((dipping ? this._dipMs() * 2 : 0) + REST_MS, () => {
           this._autoResting = false;
           this._autoCycleTick();
           this._scheduleAutoCycle();
@@ -1659,30 +1684,48 @@
         clearTimeout(this._autoCycleTimer);
         this._autoCycleTimer = null;
       }
+      this._autoCycleDue = false;
       this._autoResting = false;
     }
 
     // --- Standalone Auto Blend/Filter (without preset Auto-Cycle) ---
-    // 16 拍ごと(拍が取れないときは 16 拍ぶんの時間、4〜15 秒)
+    // Auto と同じ: 秒数(options.interval、既定 15 秒)がたったら次の拍で変える。拍を待つのは最大 1 秒
 
     startAutoFX(options) {
       this._stopAutoFX();
       this._autoFXBlend = !!(options && options.autoBlend);
       this._autoFXFilters = !!(options && options.autoFilters);
       this._autoFXPool = (options && options.pool) || null;
+      this._autoFXInterval = this._cycleMs(options && options.interval);
       if (!this._autoFXBlend && !this._autoFXFilters) return;
       this._scheduleAutoFX();
     }
 
     _scheduleAutoFX() {
+      this._autoFXDue = false;
+      this._autoFXLater(this._autoFXInterval, () => {
+        if (!(this._tempoBpm() > 0)) {
+          this._autoFXSwitch();
+          return;
+        }
+        this._autoFXDue = true;
+        this._autoFXLater(BEAT_WAIT_MS, () => this._autoFXSwitch());
+      });
+    }
+
+    // Rnd のタイマーで ms 後に fn。その前に止めたら(_stopAutoFX)呼ばない
+    _autoFXLater(ms, fn) {
       clearTimeout(this._autoFXTimer);
-      this._autoFXBeats = 0;
       const timerId = setTimeout(() => {
         if (this._autoFXTimer !== timerId) return;
-        this._autoFXTick();
-        this._scheduleAutoFX();
-      }, this._beatsInterval(SWITCH_BEATS, 8000));
+        fn();
+      }, ms);
       this._autoFXTimer = timerId;
+    }
+
+    _autoFXSwitch() {
+      this._autoFXTick();
+      this._scheduleAutoFX();
     }
 
     _autoFXTick() {
@@ -1695,6 +1738,7 @@
         clearTimeout(this._autoFXTimer);
         this._autoFXTimer = null;
       }
+      this._autoFXDue = false;
     }
 
     getActiveLayerNames() {
@@ -1757,8 +1801,8 @@
           this.randomizeFX({ skipBlend: !!msg.skipBlend, pool: msg.pool });
           break;
         case 'setFadeDuration': {
-          var fd = msg.duration != null ? msg.duration : 1.5;
-          this._fadeDuration = (isFinite(fd) && fd >= 0) ? fd : 1.5;
+          var fd = msg.duration != null ? msg.duration : 5;
+          this._fadeDuration = (isFinite(fd) && fd >= 0) ? fd : 5;
           break;
         }
         case 'setAudioSensitivity': {
@@ -1767,7 +1811,7 @@
           break;
         }
         case 'startAutoCycle':
-          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, barsPerCycle: msg.barsPerCycle, locks: msg.locks, skipFirstTick: msg.skipFirstTick, pool: msg.pool });
+          this.startAutoCycle(msg.presets, msg.interval, { autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, locks: msg.locks, skipFirstTick: msg.skipFirstTick, pool: msg.pool });
           break;
         case 'stopAutoCycle':
           this._stopAutoCycle();
@@ -1779,7 +1823,7 @@
           this._heavyPresets.clear();
           break;
         case 'startAutoFX':
-          this.startAutoFX({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, pool: msg.pool });
+          this.startAutoFX({ autoBlend: msg.autoBlend, autoFilters: msg.autoFilters, pool: msg.pool, interval: msg.interval });
           break;
         case 'stopAutoFX':
           this._stopAutoFX();

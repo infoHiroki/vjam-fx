@@ -101,11 +101,11 @@ test.describe.serial('重いプリセットを飛ばす(#40)', () => {
 
     popup = await openPopup(ext, `${site.base}/index.html`);
     expect(await heavyPresets(ext)).toBeNull();
-    // 切り替えを 32 拍(120 BPM で 16 秒)にして、重さを測る間(フェード 1.5 + 2 + 3 秒)に入れ替わらないようにする
+    // 切り替えを 60 秒にして、重さを測る間(フェード 5 + 2 + 3 秒、外したあとも同じだけ)に入れ替わらないようにする
     await popup.click('#btn-settings');
     await expect(popup.locator('#heavy-count')).toHaveText('0');
     await expect(popup.locator('#btn-heavy-reset')).toBeDisabled();
-    await popup.selectOption('#setting-cycle', '32');
+    await popup.selectOption('#setting-cycle', '60');
     await popup.click('.toggle-switch');
     await expect.poll(() => readAuto(page), { timeout: 20_000 }).toMatchObject({ cycling: true, presets: 3 });
 
@@ -121,11 +121,11 @@ test.describe.serial('重いプリセットを飛ばす(#40)', () => {
 
   test('3 秒続けて 24fps を割ると飛ばされ、軽くなったのを確かめてから SW が heavyPresets に入れる', async () => {
     test.setTimeout(60_000);
-    // 足してから: フェードイン 1.5 秒 + 2 秒待って + 3 秒で外す
+    // 足してから: フェードイン 5 秒 + 2 秒待って + 3 秒で外す
     await expect.poll(() => layersOf(page), { timeout: 20_000, intervals: [200] }).not.toContain(HEAVY);
-    // 外しただけではまだ覚えない(外したあと: フェードアウト 1.5 秒 + 2 秒待って + 3 秒の fps で決める)
+    // 外しただけではまだ覚えない(外したあと: フェードアウト 5 秒 + 2 秒待って + 3 秒の fps で決める)
     expect(await heavyPresets(ext)).toBeNull();
-    await expect.poll(() => heavyPresets(ext), { timeout: 15_000, intervals: [500] }).not.toBeNull();
+    await expect.poll(() => heavyPresets(ext), { timeout: 20_000, intervals: [500] }).not.toBeNull();
     const heavy = await heavyPresets(ext);
     expect(Object.keys(heavy)).toEqual([HEAVY]);
     expect(heavy[HEAVY].fps).toBeGreaterThan(0);
@@ -186,7 +186,7 @@ test.describe.serial('重いプリセットを飛ばす(#40)', () => {
   });
 
   test('Next 直後の重いレイヤーも飛ばす。入れ替え先がまだ読み込まれていなければ SW が読み込む', async () => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
     // 新しいタブ: Next で選んだものしか読み込まれない
     const page2 = await ext.context.newPage();
     await page2.goto(`${site.base}/page2.html`);
@@ -203,7 +203,8 @@ test.describe.serial('重いプリセットを飛ばす(#40)', () => {
     const loaded = await page2.evaluate((names) => names.filter((n) => window.VJamFX.presets[n]), LIGHT);
     expect(loaded).toEqual([]);
 
-    await expect.poll(() => heavyPresets(ext), { timeout: 30_000, intervals: [500] }).not.toBeNull();
+    // フェードイン 5 + 2 + 3 秒で外し、フェードアウト 5 + 2 + 3 秒で覚える
+    await expect.poll(() => heavyPresets(ext), { timeout: 40_000, intervals: [500] }).not.toBeNull();
     expect(Object.keys(await heavyPresets(ext))).toEqual([HEAVY]);
     // 入れ替え先は SW が読み込んでから入る
     await expect.poll(() => layersOf(page2), { timeout: 5_000 }).toHaveLength(1);

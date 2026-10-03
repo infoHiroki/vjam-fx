@@ -227,7 +227,7 @@ async function injectAndStart(tabId, state) {
     await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      func: (layers, blendMode, filters, autoCyclePresets, opacity, autoBlend, autoFilters, locks, textState, pool, barsPerCycle, fadeDuration, audioSensitivity) => {
+      func: (layers, blendMode, filters, autoCyclePresets, opacity, autoBlend, autoFilters, locks, textState, pool, interval, fadeDuration, audioSensitivity) => {
         if (!window._vjamFxEngine) return;
         const engine = window._vjamFxEngine;
 
@@ -265,11 +265,11 @@ async function injectAndStart(tabId, state) {
         }
 
         // Restart auto-cycle if it was active(Rnd の filter / blend は popup と同じデフォルトプールから)
-        // Auto が OFF でも Rnd が ON なら、Rnd だけ再開する(popup と同じ)
+        // Auto が OFF でも Rnd が ON なら、Rnd だけ再開する(popup と同じ)。interval は popup の Cycle(無ければエンジン既定の 15 秒)
         if (autoCyclePresets && autoCyclePresets.length > 0) {
-          engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: 8000, autoBlend: autoBlend, autoFilters: autoFilters, barsPerCycle: barsPerCycle, locks: locks || {}, pool: pool });
+          engine.handleMessage({ action: 'startAutoCycle', presets: autoCyclePresets, interval: interval, autoBlend: autoBlend, autoFilters: autoFilters, locks: locks || {}, pool: pool });
         } else if (autoBlend || autoFilters) {
-          engine.handleMessage({ action: 'startAutoFX', autoBlend: autoBlend, autoFilters: autoFilters, barsPerCycle: barsPerCycle, pool: pool });
+          engine.handleMessage({ action: 'startAutoFX', autoBlend: autoBlend, autoFilters: autoFilters, interval: interval, pool: pool });
         }
 
         // Restore text state
@@ -281,7 +281,7 @@ async function injectAndStart(tabId, state) {
           }
         }
       },
-      args: [layers, state.blendMode || 'screen', state.filters || [], autoCyclePresets, state.opacity, !!state.autoBlend, !!state.autoFilters, state.locks || {}, state.textState || null, state.pool || null, state.barsPerCycle || null, state.fadeDuration ?? null, state.audioSensitivity ?? null],
+      args: [layers, state.blendMode || 'screen', state.filters || [], autoCyclePresets, state.opacity, !!state.autoBlend, !!state.autoFilters, state.locks || {}, state.textState || null, state.pool || null, state.cycleSeconds > 0 ? state.cycleSeconds * 1000 : null, state.fadeDuration ?? null, state.audioSensitivity ?? null],
     });
 
     return true;

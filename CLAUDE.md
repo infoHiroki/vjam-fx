@@ -58,7 +58,7 @@ VJamの無料Chrome拡張。任意のWebページにVJエフェクトを重ね�
 - **いつもの画面**(上から): ヘッダー(ロゴ `popup/lockup.png`・設定・ON/OFF)→ ステージ → `Next` / `Auto` → チップ → Opacity → `Manual` の行 → フッター
 - **ステージ**: `AUTO` / `MANUAL` / `OFF`、BPM(取れるときだけ)と拍の点(60 / BPM 秒で脈打つ)、出ているレイヤー名(最大 5)。名前と BPM は popup が開いている間 1 秒おきにエンジンから読む(表示だけ。popup の状態には入れない)
 - **Next**: ランダム1-3プリセット（選択分のみinject、FX維持）
-- **Auto** / **Stop Auto**: プリセットローテーション（BPM連動、16ビート、4-15秒クランプ）
+- **Auto** / **Stop Auto**: プリセットローテーション(設定の Cycle 秒数=既定 15 秒がたった後の次の拍で切り替え。拍を待つのは最大 1 秒、BPM が取れなければ秒数で。Rnd も同じ)。フェード既定 5 秒(Cycle の半分まで)、dip の片道はフェードの 1/4(0.3〜1.5 秒)。消えていくレイヤーは 20fps に落とし、フェードの半分で `noLoop()`
 - **チップ**: `Blend Rnd` / `Filter Rnd` / `All tabs`。ON は緑の点
   - **Blend Rnd** / **Filter Rnd**: ランダム変更（Auto ON/OFF問わず独立動作）。手動の Blend / Filters の `Rnd` と同じもの
   - Auto ONでBlend Rnd / Filter Rndも自動ON、Auto OFFでも独立動作を継続

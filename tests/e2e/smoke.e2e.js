@@ -145,10 +145,10 @@ test.describe.serial('ダークページ → ライトページ遷移', () => {
     const layersNow = async () => (await readState(page)).layers.join(',');
     const before = await layersNow();
     await popup.click('#btn-auto-cycle');
-    // 押した直後に 1 回入れ替わり、その後はタイマー(BPM 連動、4〜15 秒)で入れ替わる
+    // 押した直後に 1 回入れ替わり、その後は Cycle の 15 秒がたった後の拍(待つのは最大 1 秒)で入れ替わる
     let first;
     await expect.poll(async () => (first = await layersNow()), { timeout: 15_000 }).not.toBe(before);
-    await expect.poll(layersNow, { timeout: 20_000 }).not.toBe(first);
+    await expect.poll(layersNow, { timeout: 25_000 }).not.toBe(first);
   });
 
   test('ページ遷移の後に状態が戻る', async () => {
@@ -240,7 +240,7 @@ test.describe.serial('背景未指定のライトページ', () => {
     await expect.poll(async () => (await readState(page)).layers.length).toBe(0);
     await popup.locator('#preset-list input[value="radar"]').check();
     await expect.poll(async () => (await readState(page)).layers, { timeout: 15_000 }).toEqual(['radar']);
-    // フェードイン(1.5 秒)が終わってから測る
+    // フェードイン(5 秒)が終わってから測る
     await waitLayersFadedIn(page);
     expect((await readState(page)).isLight).toBe(true);
     // 覆われると 0.2 倍前後まで落ちる。合成できていればほぼベースラインのまま
