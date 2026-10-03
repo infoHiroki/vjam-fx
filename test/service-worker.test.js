@@ -232,6 +232,24 @@ describe('Service Worker', () => {
         expect(cmd.autoFilters).toBe(true);
       });
 
+      // #59: 戻したレイヤーから 1 手ずつ続ける(1 枚から始め直さない)
+      it('continues Auto from the restored layers (skipFirstTick)', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: ['rain'], blendMode: 'screen',
+          autoCyclePresets: ['rain', 'neon-tunnel'], autoBlend: true, autoFilters: true, pool: POOL,
+        });
+        expect(messages.find(m => m.action === 'startAutoCycle').skipFirstTick).toBe(true);
+      });
+
+      it('with no saved layers, restores the first pool preset and continues from it', async () => {
+        const messages = await messagesAfterNavigation({
+          active: true, layers: [], blendMode: 'screen',
+          autoCyclePresets: ['rain', 'neon-tunnel'], autoBlend: true, autoFilters: true, pool: POOL,
+        });
+        expect(messages.find(m => m.action === 'start').preset).toBe('rain');
+        expect(messages.find(m => m.action === 'startAutoCycle').skipFirstTick).toBe(true);
+      });
+
       it('re-injects the pool presets', async () => {
         await messagesAfterNavigation({
           active: true, layers: ['rain'], blendMode: 'screen',
