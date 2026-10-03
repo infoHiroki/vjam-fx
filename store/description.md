@@ -1,64 +1,62 @@
-# Chrome Web Store Listing
+# Chrome ウェブストア — ストアの掲載情報
 
-## Name
+デベロッパー ダッシュボードの「ストアの掲載情報」に入れるもの。v1.1.0 の機能に合わせてある。
+文面は App Store(`appstore/en.md` / `ja.md`)とそろえて、Chrome の使い方とタブの音声キャプチャのことを足した。
+他社の名前(動画サイトなど)は書かない(App Store と同じ方針)。
+
+## 名前
+
+manifest の `name` がそのまま出る。
+
+```text
 VJam FX — VJ Effects for Any Website
+```
 
-## Short Description (132 chars max)
-Overlay 191 music-reactive VJ visuals on any webpage. Beat detection, auto-cycle, multi-layer, filters, blend modes, scenes. Free.
+## 概要(Summary)— 125 / 132
 
-## Detailed Description
+manifest の `description` がそのまま出る(ダッシュボードでは変えられない。`_locales` が無いので日本語のページも英語のまま)。
 
-Turn any webpage into a VJ performance!
+```text
+Overlay 370 music-reactive VJ visuals on any webpage. Auto mode, beat detection, layers, blend modes, filters, scenes & text.
+```
 
-VJam FX overlays real-time music-reactive visual effects on top of any website. Audio is captured directly from video/audio elements on the page — no microphone needed.
+## 説明(Description)— 上限 16,000
 
-**191 Presets in 13 Categories:**
-- Immersive (25): Wormhole, Warp Speed, Portal Ring, Aurora, Crystal Cave, and more
-- Frames & Film (13): Neon Frame, Light Leak, Film Burn, VHS Noise, Scan Line
-- Patterns (16): Kaleidoscope, Mandala, Sacred Geometry, Moire
-- Organic (17): Cellular, Liquid, Voronoi, Coral Reef, Flow Field
-- Nature (17): Aurora Borealis, Ocean Waves, Fire, Lightning
-- Water (10): Waterfall, Ripple, Rain Puddle, Deep Sea
-- Grid & Tech (20): Glitch Grid, Circuit Board, CRT Monitor
-- Space (11): Starfield, Constellation, Nebula, Black Hole
-- Neon & Glow (15): Neon Pulse, Laser Grid, Glow Worm, Light Trail
-- Glitch & Retro (19): Data Corruption, Pixel Sort, VHS Tracking
-- Audio Reactive (16): Frequency Rings, Equalizer, Sine Waves, Waveform
-- Particles (8): Particle Storm, Fireflies, Confetti, Sparks
-- Weather (4): Rain, Neon Rain, Cyber Rain, Snow
+| 言語 | ファイル | 字数 |
+|---|---|---|
+| English(既定) | `description.txt` | 2,015 |
+| 日本語 | `description-ja.txt`(ダッシュボードで言語に日本語を足して貼る) | 1,013 |
 
-**Features:**
-- Multi-layer: up to 3 presets running simultaneously with smooth fade transitions
-- Real-time beat detection from video/audio elements — no microphone required
-- Tab audio capture fallback for full audio coverage
-- 8 CSS filters: Invert, Hue Rotate, Grayscale, Saturate, Brightness, Contrast, Sepia, Blur
-- 4 blend modes: Lighten, Difference, Exclusion, Color Dodge
-- Auto-cycle: BPM-connected automatic preset rotation
-- Auto Blend / Auto Filter: randomize blend modes and filters during Auto
-- 12 Scene slots: save and load preset+filter+blend configurations
-- Text Effects: random text overlays with auto font/position/color
-- Lock: lock presets, filters, or blend mode independently
-- Effects persist across page navigations
-- Zero impact when OFF — no background processes
+## 画像
 
-**How to use:**
-1. Click the VJam FX icon in your toolbar
-2. Toggle ON and press "Auto" for instant BPM-synced visuals
-3. Or press "Next" for random presets, or select manually from 191 presets
-4. Play a video — audio-reactive visuals start automatically (no microphone needed)
-5. Customize with filters, blend modes, and opacity
-6. Save your favorite configurations to 12 Scene slots
+| 項目 | ファイル | 大きさ |
+|---|---|---|
+| ストアのアイコン | `../icons/icon-128.png` | 128 × 128 |
+| スクリーンショット | `screenshots/01-effects.png` 〜 `05-settings.png`(この順で) | 1280 × 800 |
+| プロモーション タイル(小) | `promo-small.png` | 440 × 280 |
+| マーキー プロモーション タイル | `promo-marquee.png` | 1400 × 560 |
 
-**Privacy:**
-- Audio is captured directly from video/audio elements on the page — no microphone needed
-- Tab audio capture (fallback) processes audio locally — no data is sent anywhere
-- No tracking, no analytics, no data collection
-- Only accesses the current tab when you click the icon
+スクショ 5 枚の中身:
 
-**Part of the VJam ecosystem.** Want HDMI output, mic input, GLSL shaders, and 270+ presets? → VJam Full (vjam.vercel.app)
+1. `01-effects.png` — エフェクトだけ(暗いページ)
+2. `02-popup-auto.png` — popup(Auto 中:AUTO・BPM・レイヤー名)
+3. `03-light-page.png` — 明るいページ(ブレンドが自動で変わる)
+4. `04-manual.png` — Manual を開いたところ(Effect・Filters・Blend・Scenes)
+5. `05-settings.png` — 設定(Auto start・All tabs・Fade・Cycle・Sensitivity・Too heavy)
 
-## Category
-Fun
+撮り直し・作り直しは `README.md`。
 
-## Language
-English
+## カテゴリ・言語
+
+- カテゴリ:今の設定のまま(v1.0.2 で選んだもの)
+- 言語:English
+
+## URL
+
+| 項目 | URL |
+|---|---|
+| ホームページ URL | https://infohiroki.github.io/vjam-fx/ |
+| サポート URL | https://infohiroki.github.io/vjam-fx/support.html |
+| プライバシー ポリシー(「プライバシーへの取り組み」タブ) | https://infohiroki.github.io/vjam-fx/privacy-policy.html |
+
+権限の説明・単一用途・データの使用は `permissions.md`。
