@@ -7,7 +7,7 @@ const PRESET_DIR = { fx: '../content/presets/', candidates: 'bench/candidates/',
 const BASE = ['../lib/p5.min.js', '../content/base-preset.js'];
 const ENGINE = '../content/content.js';
 const BATCH = 20; // プリセットの読み込みを何本ずつ並べるか(popup の _injectAllPresets と同じ)
-const FADE_AUTO = 1.5; // Auto で見るときのフェード(製品の既定)
+const FADE_AUTO = 5; // Auto で見るときのフェード(製品の既定)
 const url = p => new URL(p, location.href).href;
 
 function addScript(doc, src) {
