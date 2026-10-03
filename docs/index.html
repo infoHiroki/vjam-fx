@@ -91,9 +91,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 /* ═══ Gallery ═══ */
 #s-gallery{background:#030303;padding:3rem 0;position:relative;z-index:10;isolation:isolate}
 #s-gallery .sec-h,#s-gallery .sec-sub{padding:0 2rem}
-.gal-track{display:flex;gap:1.2rem;overflow-x:auto;scroll-snap-type:x mandatory;padding:1rem max(2rem,calc((100vw - 720px)/2)) 1.5rem;scrollbar-width:none}
+.gal-wrap{position:relative;max-width:880px;margin:1rem auto 0;padding:0 1rem}
+.gal-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:12px;border:1px solid rgba(255,255,255,.07);box-shadow:0 6px 30px rgba(0,0,0,.5);background:#0b0b0b}
 .gal-track::-webkit-scrollbar{display:none}
-.gal-item{flex:0 0 min(86vw,720px);scroll-snap-align:center;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.07);box-shadow:0 6px 30px rgba(0,0,0,.5);position:relative;background:#0b0b0b}
+.gal-item{flex:0 0 100%;scroll-snap-align:center;position:relative}
+.gal-arrow{position:absolute;top:calc(50% - 40px);width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(3,3,3,.7);color:#f0f0f0;display:grid;place-items:center;cursor:pointer;transition:opacity .2s}
+.gal-arrow svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.gal-arrow.prev{left:-40px}.gal-arrow.next{right:-40px}
+.gal-arrow:disabled{opacity:.25;cursor:default}
+@media (max-width:980px){.gal-arrow{display:none}}
 .gal-item img{width:100%;height:auto;display:block}
 .gal-cap{padding:.7rem 1rem;font-size:.8rem;color:var(--dim)}
 .gal-nav{display:flex;justify-content:center;gap:.4rem;margin-top:.8rem}
@@ -227,12 +233,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div id="s-gallery">
   <h2 class="sec-h" style="text-align:center;padding:0 2rem"><span data-lang="en">See it in action</span><span data-lang="ja" hidden>実際の動作を見る</span></h2>
   <p class="sec-sub" style="text-align:center;padding:0 2rem"><span data-lang="en">Works on any web page with a video or music.</span><span data-lang="ja" hidden>動画や音楽のあるページなら、どこでも。</span></p>
+  <div class="gal-wrap">
+  <button class="gal-arrow prev" id="galPrev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+  <button class="gal-arrow next" id="galNext" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
   <div class="gal-track" id="galTrack">
     <div class="gal-item"><img src="images/01-effects.jpg" alt="VJam FX effects layered over a web page" width="1280" height="800" loading="lazy"><div class="gal-cap"><span data-lang="en">Effects layered over a page</span><span data-lang="ja" hidden>ページに重なるエフェクト</span></div></div>
     <div class="gal-item"><img src="images/02-popup-auto.jpg" alt="VJam FX popup in Auto mode" width="1280" height="800" loading="lazy"><div class="gal-cap"><span data-lang="en">Auto mode: BPM and the layers on screen</span><span data-lang="ja" hidden>Auto 中:BPM と、いま出ているレイヤー</span></div></div>
     <div class="gal-item"><img src="images/03-light-page.jpg" alt="VJam FX on a light page" width="1280" height="800" loading="lazy"><div class="gal-cap"><span data-lang="en">On light pages, the blend adapts automatically</span><span data-lang="ja" hidden>明るいページでは、ブレンドが自動で切り替わる</span></div></div>
     <div class="gal-item"><img src="images/04-manual.jpg" alt="VJam FX Manual panel" width="1280" height="800" loading="lazy"><div class="gal-cap"><span data-lang="en">Manual: effects, filters, blend and 12 scenes</span><span data-lang="ja" hidden>Manual:エフェクト・フィルタ・ブレンド・12 シーン</span></div></div>
     <div class="gal-item"><img src="images/05-settings.jpg" alt="VJam FX settings" width="1280" height="800" loading="lazy"><div class="gal-cap"><span data-lang="en">Settings: Auto start, All tabs, fade, cycle, sensitivity</span><span data-lang="ja" hidden>設定:Auto start・All tabs・フェード・間隔・感度</span></div></div>
+  </div>
   </div>
   <div class="gal-nav" id="galNav"></div>
   <h3 class="steps-h"><span data-lang="en">How it works</span><span data-lang="ja" hidden>使い方</span></h3>
@@ -306,12 +316,19 @@ applyLang();
   items.forEach((_, i) => {
     const d = document.createElement('button');
     d.className = 'gal-dot' + (i === 0 ? ' on' : '');
-    d.onclick = () => items[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    d.onclick = () => track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
     nav.appendChild(d);
   });
   const dots = nav.querySelectorAll('.gal-dot');
+  const prev = document.getElementById('galPrev'), next = document.getElementById('galNext');
+  let cur = 0;
+  const go = (i) => track.scrollTo({ left: Math.max(0, Math.min(items.length - 1, i)) * track.clientWidth, behavior: 'smooth' });
+  prev.onclick = () => go(cur - 1);
+  next.onclick = () => go(cur + 1);
+  const show = (idx) => { cur = idx; dots.forEach((d, i) => d.classList.toggle('on', i === idx)); prev.disabled = idx === 0; next.disabled = idx === items.length - 1; };
+  show(0);
   items.forEach(it => new IntersectionObserver(es => es.forEach(e => {
-    if (e.isIntersecting) { const idx = [...items].indexOf(e.target); dots.forEach((d, i) => d.classList.toggle('on', i === idx)); }
+    if (e.isIntersecting) show([...items].indexOf(e.target));
   }), { root: track, threshold: 0.6 }).observe(it));
 })();
 
