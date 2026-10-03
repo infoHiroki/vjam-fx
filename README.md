@@ -1,23 +1,36 @@
 # VJam FX — VJ Effects for Any Website
 
-Chrome extension that overlays music-reactive VJ visuals on any webpage.
+Chrome extension that overlays music-reactive VJ visuals on any webpage. Open a page with a video or music, turn VJam FX on, and the effects follow the beat.
+
+**Website**: https://infohiroki.github.io/vjam-fx/
+
+![Effects layered over a page](store/screenshots/01-effects.png)
+
+| | |
+|---|---|
+| ![Auto mode](store/screenshots/02-popup-auto.png) | ![Light page](store/screenshots/03-light-page.png) |
+| Auto mode: BPM and the layers on screen | On light pages, the blend adapts automatically |
+| ![Manual](store/screenshots/04-manual.png) | ![Settings](store/screenshots/05-settings.png) |
+| Manual: effects, filters, blend and 12 scenes | Settings: Auto start, All tabs, fade, cycle, sensitivity |
 
 ## Features
 
-- **191 visual presets** in 13 categories
-- **Multi-layer**: up to 3 presets running simultaneously with fade transitions
-- **CSS filters**: Invert, Hue Rotate, Grayscale, Saturate, Brightness, Contrast, Sepia, Blur
-- **4 blend modes**: Screen, Lighten, Difference, Exclusion (toggle selection)
-- **Light page detection**: auto-switches blend to Difference on light-themed pages
-- **Auto-cycle**: BPM-connected automatic preset rotation (16 beats, 4-15s clamp)
-- **Blend Rnd**: randomize blend modes independently (works with or without Auto)
-- **Filter Rnd**: randomize filters independently (works with or without Auto)
-- **Beat detection**: video/audio element analysis + tab audio capture — no microphone needed (Web Audio API)
-- **Text Effects**: random text effects with auto font/position/color
-- **Scenes**: save/load preset+filter+blend configurations to 12 slots
-- **Lock**: lock current preset selection to prevent changes
-- **Navigation persistence**: effects survive page navigations via Service Worker
-- **Zero impact when OFF**: no background scripts, no content scripts
+- **370 visual effects** in 13 categories — neon tunnels, kaleidoscopes, particles, aurora, glitch, plasma and more
+- **Beat detection**: reads the sound of the video or music on the page and finds the BPM — no microphone needed
+- **Auto mode**: every 15 seconds, on the beat, it adds, swaps or clears one effect at a time — starting from one, building up to 3, then breaking back down — with 5-second fades and random blend modes & filters
+- **Next**: a fresh combination of effects with one click — Auto carries on from there
+- **Default pool**: Next / Auto pick from a curated pool of 331 effects (`content/default-pool.json`). Any of the 370 can be chosen by hand
+- **Layers**: stack up to 5 effects and mix them with blend modes (Lighten, Difference, Exclusion, Dodge; default Screen)
+- **Filters**: Invert, Hue Rotate, Saturate, Grayscale, Contrast
+- **Blend Rnd / Filter Rnd**: randomize blend modes and filters (with or without Auto)
+- Adjustable **opacity, fade time, cycle length and sensitivity**
+- **12 scenes**: save your favorite combinations and recall them instantly
+- **Text**: put your own words on screen with animated fonts and colors
+- **All tabs**: the effects follow you to the tab you switch to or open
+- **Navigation persistence**: effects stay on as you move between pages of the same site (Service Worker)
+- **Light page detection**: the blend adapts automatically on light-themed pages
+- **Heavy effects skipped**: effects too heavy for the computer are left out automatically (`N skipped` in the popup, Restore in the settings)
+- **On-demand injection**: p5.js, the engine and the effects are injected only when you turn VJam FX on
 
 ## Install (Development)
 
@@ -30,27 +43,34 @@ Chrome extension that overlays music-reactive VJ visuals on any webpage.
 
 ## Usage
 
-1. Click the extension icon in the toolbar
-2. Select presets from the categorized list (multi-select for layers)
-3. Toggle ON — effects appear on the current page
-4. Audio-reactive visuals auto-start when a `<video>` or `<audio>` element is playing (no microphone needed)
-5. **Reset** — full reset (all layers, filters, blend, auto, toggle OFF)
-6. **Next** — random 1-3 presets (FX unchanged)
-7. **Auto** — preset rotation on repeat (BPM-connected interval, FX unchanged)
-8. **Blend Rnd** / **Filter Rnd** — randomize blend/filters independently
-9. **Save** — save current configuration to a scene slot
-10. **Text** — toggle random text effects
-11. **Lock** — lock current preset selection
-12. Change blend mode and CSS filters manually
-13. Light pages auto-switch to Difference blend
+1. Open a page with a video or music and play it
+2. Click the VJam FX icon in the toolbar (first time: pin VJam FX from the Extensions menu)
+3. Turn the switch on — Auto starts right away (Auto start in the settings)
+
+| Control | Behavior |
+|---------|----------|
+| **ON / OFF** | Turn the effects on the current tab on or off |
+| **Stage** | `AUTO` / `MANUAL` / `OFF`, the BPM (when detected) and the layers on screen |
+| **Next** | Random 1–3 effects. If Auto is on, Auto carries on from them |
+| **Auto** / **Stop Auto** | Build up and swap effects one step at a time (Cycle seconds, on the beat) |
+| **Blend Rnd** / **Filter Rnd** | Randomize blend modes / filters (independent of Auto; turned on with Auto) |
+| **All tabs** | Keep the effects on the tab you switch to or open |
+| **Opacity** | Effect opacity |
+| **Manual** | Effect list (search, Lock), Filters, Blend, Scenes (Save / click to load / right-click to clear), Text, Reset, Audio |
+| **Settings** (gear) | Auto start, All tabs, Fade, Cycle, Sensitivity, Too heavy (Restore) |
+
+## Safari (iPad)
+
+Coming soon to the App Store. Built from the same source — see [`safari/README.md`](safari/README.md) for the build steps.
 
 ## Development
 
 ```bash
 npm install
-npm test            # Run all 1729 tests
+npm test            # Vitest + jsdom (4068 tests)
 npm run test:watch  # Watch mode
-npm run test:e2e    # Real-Chromium smoke test: loads the extension and drives the popup (Playwright, headless)
+npm run test:e2e    # Playwright: loads the real extension in Chromium and drives the popup (103 tests)
+npm run package     # Chrome Web Store zip → dist/ (see store/README.md)
 ```
 
 ## Architecture
@@ -59,53 +79,49 @@ npm run test:e2e    # Real-Chromium smoke test: loads the extension and drives t
 vjam-fx/
 ├── manifest.json          # Manifest V3
 ├── background/
-│   └── service-worker.js  # State persistence across page navigations
+│   └── service-worker.js  # State persistence across page navigations, All tabs
 ├── popup/                 # Extension popup UI
-│   ├── popup.html         # Preset list, toggle, blend, filters, scenes, text
+│   ├── popup.html         # Stage, Next / Auto, chips, Manual, settings
 │   ├── popup.css          # Dark theme UI
-│   └── popup.js           # Controller (injects via chrome.scripting)
+│   ├── popup.js           # Controller (injects via chrome.scripting)
+│   └── lockup.png         # Logo
 ├── content/               # Injected into pages (MAIN world)
-│   ├── content.js         # VJamFXEngine — overlay, multi-layer, filters, auto-cycle
+│   ├── content.js         # VJamFXEngine — overlay, multi-layer, filters, Auto
 │   ├── base-preset.js     # Base class for all presets
 │   ├── audio-bridge.js    # ISOLATED world — SW→MAIN audioData relay
+│   ├── mse-tap.js         # Safari only — beat detection from MediaSource audio
 │   ├── text-overlay.js    # Text effects overlay
-│   └── presets/           # 191 visual presets (IIFE pattern)
+│   ├── default-pool.json  # Default pool for Next / Auto / Rnd (331 effects)
+│   └── presets/           # 370 visual presets (IIFE pattern)
 ├── offscreen/             # Offscreen document for tabCapture audio
 ├── lib/p5.min.js          # p5.js graphics engine
-├── icons/                 # Extension icons (16/48/128px)
-└── test/                  # Vitest + jsdom tests (1729 tests)
+├── icons/                 # Extension icons (16/32/48/128px)
+├── safari/                # Safari (iPad) app — Xcode project
+├── store/                 # Chrome Web Store / App Store listing, screenshots
+├── docs/                  # Website (GitHub Pages): LP, support, privacy policy
+├── scripts/               # Packaging and Safari build scripts
+├── tools/                 # Default pool curation and benchmarks
+├── test/                  # Vitest + jsdom tests
+└── tests/e2e/             # Playwright tests (real extension in Chromium)
 ```
 
 ### Preset Categories
 
 | Category | Count | Examples |
 |----------|-------|---------|
-| Immersive | 25 | Wormhole, Warp Speed, Helix Tunnel, Portal Ring, Aurora |
-| Frames & Film | 13 | Neon Frame, Light Leak, Film Burn, VHS Noise, Scan Line |
-| Patterns | 16 | Kaleidoscope, Mandala, Sacred Geometry, Moire |
-| Organic | 17 | Cellular, Liquid, Voronoi, Coral Reef, Flow Field |
-| Nature | 17 | Aurora Borealis, Ocean Waves, Fire, Lightning |
-| Water | 10 | Waterfall, Ripple, Rain Puddle, Deep Sea |
-| Grid & Tech | 20 | Glitch Grid, Hexgrid Pulse, Circuit Board, CRT Monitor |
-| Space | 11 | Starfield, Constellation, Nebula, Black Hole |
-| Neon & Glow | 15 | Neon Pulse, Laser Grid, Glow Worm, Light Trail |
-| Glitch & Retro | 19 | Data Corruption, Pixel Sort, VHS Tracking, CRT Warp |
-| Audio Reactive | 16 | Frequency Rings, Equalizer, Sine Waves, Waveform |
-| Particles | 8 | Particle Storm, Fireflies, Confetti, Sparks |
-| Weather | 4 | Rain, Neon Rain, Cyber Rain, Snow |
-
-### Action Buttons
-
-| Button | Behavior |
-|--------|----------|
-| **Reset** | Full reset: all layers removed, filters cleared, blend → screen, auto-cycle OFF, toggle OFF |
-| **Next** | Random 1-3 presets (FX unchanged). User's filters/blend preserved. |
-| **Auto** | Preset rotation on repeat. BPM-connected interval (16 beats, clamped 4-15s). FX unchanged. |
-| **Blend Rnd** | Randomize blend modes independently (works with or without Auto) |
-| **Filter Rnd** | Randomize filters independently (works with or without Auto) |
-| **Save** | Save current configuration to a scene slot. Click slot to load, right-click to clear. |
-| **Text** | Toggle random text effects with auto font/position/color |
-| **Lock** | Lock current preset selection to prevent changes |
+| Immersive | 44 | Neon Tunnel, Laser Tunnel, Infinite Zoom, Hypnotic, Wormhole |
+| Frames & Film | 19 | Neon Frame, Light Leak, Film Burn, Film Scratch, Scan Line |
+| Patterns | 49 | Kaleidoscope, Mandala, Sacred Geometry, Moire, Prism |
+| Organic | 47 | Cellular, Liquid, Voronoi, Smoke |
+| Nature | 22 | Fractal Tree, Flower Bloom, Autumn Fall, Dandelion Seeds, Petal Storm |
+| Water | 22 | Water Surface, River Stream, Waterfall Mist, Tide Wave, Tide Pool |
+| Grid & Tech | 32 | Glitch Grid, Hexgrid Pulse, Grid Warp, Gravity Cloth, Circuit Board |
+| Space | 25 | Starfield, Constellation, Deep Nebula, Bokeh, Terrain |
+| Neon & Glow | 25 | Neon 80s, Neon Bars, Neon Dust, Neon Jellyfish, Neon Smoke |
+| Glitch & Retro | 31 | Glitch 8bit, Glitch Wave, Cyber Glitch, Digital Noise, Corrupted Archive |
+| Audio Reactive | 32 | Frequency Rings, Equalizer, Sine Waves, Ridge Lines, Gradient Sweep |
+| Particles | 14 | Snowfall, Confetti Burst, Hanabi Dusk, Particle Storm, Dust Motes |
+| Weather | 8 | Rain, Neon Rain, Cyber Rain, Ceiling Drip, Rain Window |
 
 ## Permissions
 
@@ -114,7 +130,8 @@ vjam-fx/
 - **webNavigation** — maintain visual effects across page navigations
 - **tabCapture** — capture tab audio for beat detection (fallback when video element audio is unavailable)
 - **offscreen** — create offscreen document for tab audio processing
-- **storage** — save scene configurations and extension state
+- **storage** — save scenes, settings and extension state
+- **Optional host permission `<all_urls>`** — requested only when you turn on All tabs
 
 ## Tech Stack
 
@@ -122,7 +139,7 @@ vjam-fx/
 - p5.js for 2D canvas graphics
 - Web Audio API for video/tab audio frequency analysis
 - Chrome Extension Manifest V3
-- Vitest + jsdom for testing
+- Vitest + jsdom, Playwright for testing
 
 ## License
 
