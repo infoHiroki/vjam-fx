@@ -1,5 +1,7 @@
 # App Review への返信(2026-10、Guideline 2.1 Information Needed)
 
+2026-10-05 に送った(録画 `tools/ios-record/` で撮った 2 分 15 秒・無音を添付)。同じ内容を審査メモにも足した。
+
 1.1.0(1)の初回審査で、実機の録画と次の 1〜6 を求められた(開発者アカウントの審査履歴が少ないため)。
 App Store Connect の App Review のページで返信し、同じ文を「App Review に関する情報」のメモにも足す。
 

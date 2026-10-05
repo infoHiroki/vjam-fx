@@ -82,7 +82,7 @@ HOW TO ENABLE
 (On iOS / iPadOS 17: Settings > Safari > Extensions.)
 
 HOW TO TEST
-1. In Safari, open any web page that plays a video with sound, and start playing the video.
+1. In Safari, open our test page https://infohiroki.github.io/vjam-fx/demo/ (an original drum loop) and tap Play. Any web page that plays a video with sound also works.
 2. Tap the page menu button (AA) in the address bar, then tap VJam FX.
 3. Turn on the switch at the top right of the VJam FX panel.
 4. Visual effects appear over the page and change with the beat of the music (Auto mode starts automatically). The panel shows the detected BPM. Tap "Next" for a different set of effects.

@@ -1,0 +1,39 @@
+name: VJamRecorder
+options:
+  bundleIdPrefix: com.vjam.recorder
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: CFUU3B5W94
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "2"
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  Host:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vjam.recorder.host
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+  RecorderUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Host
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vjam.recorder.uitests
+        TEST_TARGET_NAME: Host
+schemes:
+  Recorder:
+    build:
+      targets:
+        Host: all
+        RecorderUITests: [test]
+    test:
+      targets: [RecorderUITests]
