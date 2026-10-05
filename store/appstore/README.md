@@ -5,7 +5,7 @@ App Store Connect に入れるものの置き場。出す手順は `safari/READM
 - `en.md` / `ja.md` — 名前・サブタイトル・プロモーションテキスト・説明・キーワード・URL(字数つき)。審査メモは `en.md`
 - サポート URL のページは `docs/support.html`、プライバシーポリシーは `docs/privacy-policy.html`(GitHub Pages)
 - `app-screen-en.png` / `app-screen-ja.png` — アプリを開いたときの画面(シミュレータの iPad で撮ったもの。App Store 用の大きさではない)
-- `demo/` — スクショ撮影用のページ(架空の Web マガジン + 自作のドラムループ)
+- `demo/` — スクショ撮影用のページ(架空の Web マガジン + 自作のドラムループ)。同じものを `docs/demo/` に置いて公開している(https://infohiroki.github.io/vjam-fx/demo/。審査担当と、実機の録画で使う)。直したら両方に写す
   - `index.html` — ページ本体。言語は端末に合わせる(`#en` / `#ja` で固定)、`#light` で明るいページ
   - `audio/` — `make_loop.py` で作った音(120 BPM・16 秒のループ)。HLS(`loop.m3u8` + `loop*.ts`)と `loop.m4a`
   - `make_loop.py` — 音を合成して `audio/` を作り直す(要 ffmpeg)。種を固定しているので毎回同じ音
