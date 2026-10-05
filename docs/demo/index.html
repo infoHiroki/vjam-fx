@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>After Hours — Every screen can be a stage</title>
+<!--
+  App Store のスクショ撮影用のページ(架空の Web マガジン)。他社の映像・音・画像・フォントは使わない。
+  音は make_loop.py で合成したドラムループ。Safari 版は MediaSource と標準 HLS の音しか読まないので、Safari では HLS を流す。
+  言語は端末に合わせる(#en / #ja で固定)。#light で明るいページ(ライトページ用のブレンドの確認)
+-->
+<style>
+:root {
+  --bg: #0b0a10; --paper: #13111b; --ink: #f3f0f7; --sub: #a8a1b8; --faint: #6d6680; --line: #2a2536;
+  --pink: #ff3d8b; --violet: #8b5cf6; --cyan: #22d3ee; --amber: #fbbf24;
+}
+:root.light {
+  --bg: #f6f3ee; --paper: #ffffff; --ink: #1d1a22; --sub: #57505f; --faint: #8f8898; --line: #e4ded6;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 18px/1.7 -apple-system, "Hiragino Sans", "Helvetica Neue", sans-serif; -webkit-text-size-adjust: 100%; }
+html:not([lang="ja"]) [data-lang="ja"], html[lang="ja"] [data-lang="en"] { display: none; }
+a { color: inherit; }
+
+.top { display: flex; align-items: center; gap: 24px; padding: 18px 32px; border-bottom: 1px solid var(--line); }
+.brand { font-weight: 900; letter-spacing: .18em; font-size: 20px; }
+.brand span { color: var(--pink); }
+.nav { display: flex; gap: 20px; color: var(--sub); font-size: 15px; }
+.nav b { color: var(--ink); font-weight: 600; }
+.top .date { margin-left: auto; color: var(--faint); font-size: 14px; }
+
+.hero { position: relative; overflow: hidden; min-height: 420px; display: flex; align-items: flex-end; padding: 48px 32px; isolation: isolate; }
+.hero::before { content: ""; position: absolute; inset: -20%; z-index: -2;
+  background:
+    radial-gradient(40% 50% at 20% 30%, rgba(255, 61, 139, .55), transparent 70%),
+    radial-gradient(35% 45% at 75% 25%, rgba(139, 92, 246, .6), transparent 70%),
+    radial-gradient(45% 50% at 60% 85%, rgba(34, 211, 238, .45), transparent 70%),
+    linear-gradient(160deg, #1a1030, #07060c);
+  filter: blur(8px); }
+.hero::after { content: ""; position: absolute; inset: 0; z-index: -1;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.04) 0 1px, transparent 1px 4px); }
+.hero-in { max-width: 860px; color: #fff; }
+.kicker { display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: .2em; padding: 4px 10px; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; }
+.hero h1 { font-size: clamp(40px, 7vw, 76px); line-height: 1.05; margin: 18px 0 14px; letter-spacing: -.01em; }
+html[lang="ja"] .hero h1 { font-size: clamp(34px, 6vw, 62px); }
+.hero p { font-size: 20px; margin: 0; color: rgba(255,255,255,.85); max-width: 640px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 48px; max-width: 1120px; margin: 0 auto; padding: 40px 32px 80px; }
+.byline { color: var(--faint); font-size: 15px; margin-bottom: 28px; }
+.byline b { color: var(--sub); }
+article h2 { font-size: 28px; line-height: 1.3; margin: 40px 0 12px; }
+article p { margin: 0 0 20px; color: var(--sub); }
+html:not([lang="ja"]) article p:first-of-type::first-letter { float: left; font-size: 64px; line-height: .9; padding: 6px 10px 0 0; font-weight: 800; color: var(--pink); }
+blockquote { margin: 32px 0; padding: 4px 0 4px 24px; border-left: 4px solid var(--violet); font-size: 26px; line-height: 1.45; font-weight: 700; color: var(--ink); }
+
+/* 再生カード */
+.player { position: sticky; top: 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
+.cover { aspect-ratio: 1; border-radius: 12px; margin-bottom: 16px; position: relative; overflow: hidden;
+  background: conic-gradient(from 200deg, var(--pink), var(--violet), var(--cyan), var(--amber), var(--pink)); }
+.cover::after { content: ""; position: absolute; inset: 22%; border-radius: 50%; background: radial-gradient(circle, var(--paper) 0 18%, #000 19% 100%); box-shadow: 0 0 0 2px rgba(255,255,255,.15); }
+.track { font-weight: 800; font-size: 20px; }
+.meta { color: var(--faint); font-size: 14px; }
+.play { margin-top: 16px; width: 100%; height: 52px; border: 0; border-radius: 26px; background: var(--ink); color: var(--bg); font: 700 17px/1 -apple-system, "Hiragino Sans", sans-serif; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; }
+.play svg { width: 18px; height: 18px; fill: currentColor; }
+.play .i-pause, .playing .play .i-play, .play .pause, .playing .play .start { display: none; }
+.playing .play .i-pause { display: block; }
+.playing .play .pause { display: inline; }
+.bars { display: flex; gap: 4px; height: 28px; align-items: flex-end; margin-top: 16px; }
+.bars i { flex: 1; background: var(--line); border-radius: 2px; height: 30%; }
+.playing .bars i { background: var(--violet); animation: bar .5s infinite ease-out; }
+.bars i:nth-child(2n) { animation-delay: -.25s !important; }
+.bars i:nth-child(3n) { animation-delay: -.125s !important; }
+@keyframes bar { 0% { height: 100%; } 100% { height: 25%; } }
+.note { color: var(--faint); font-size: 13px; margin: 12px 0 0; line-height: 1.5; }
+.more { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.more h3 { font-size: 13px; letter-spacing: .16em; color: var(--faint); margin: 0 0 10px; }
+.more div { font-size: 15px; font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.more div:last-child { border-bottom: 0; }
+
+/* 縦長の画面:再生カードを記事の上に、横並びで小さく */
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; gap: 32px; }
+  aside { order: -1; }
+  .player { position: static; display: grid; grid-template-columns: 120px 1fr; column-gap: 20px; align-items: center; }
+  .cover { grid-row: 1 / span 4; margin: 0; }
+  .play { margin-top: 10px; }
+  .bars { display: none; }
+  .note { margin-top: 8px; }
+  .more { display: none; }
+  .nav { display: none; }
+}
+</style>
+<script>
+  (function () {
+    var h = location.hash, root = document.documentElement;
+    var lang = /ja/.test(h) ? 'ja' : /en/.test(h) ? 'en' : /^ja\b/i.test(navigator.language || '') ? 'ja' : 'en';
+    root.lang = lang;
+    if (/light/.test(h)) root.classList.add('light');
+  })();
+</script>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">AFTER<span>/</span>HOURS</div>
+  <nav class="nav">
+    <b data-lang="en">Music</b><b data-lang="ja">音楽</b>
+    <span data-lang="en">Culture</span><span data-lang="ja">カルチャー</span>
+    <span data-lang="en">Nights</span><span data-lang="ja">ナイト</span>
+    <span data-lang="en">Gear</span><span data-lang="ja">機材</span>
+  </nav>
+  <div class="date"><span data-lang="en">Issue 12</span><span data-lang="ja">第 12 号</span></div>
+</header>
+
+<section class="hero">
+  <div class="hero-in">
+    <span class="kicker"><span data-lang="en">SOUND &amp; VISION</span><span data-lang="ja">音と映像</span></span>
+    <h1><span data-lang="en">Every screen can be a stage</span><span data-lang="ja">どの画面も、ステージになる</span></h1>
+    <p><span data-lang="en">Turn the lights down, press play, and let the visuals follow the beat. Notes from a night of living-room VJing.</span><span data-lang="ja">明かりを落として、再生を押す。あとは映像がビートについてくる。リビングで VJ をした夜のメモ。</span></p>
+  </div>
+</section>
+
+<div class="layout">
+  <article>
+    <div class="byline"><span data-lang="en">By <b>the After Hours desk</b> · 4 min read</span><span data-lang="ja"><b>After Hours 編集部</b> · 4 分で読めます</span></div>
+
+    <div data-lang="en">
+      <p>The night started with a tablet propped against a stack of records and a loop that would not stop. Nobody planned a party. Someone pressed play, the lights went down, and the wall behind the sofa became the brightest thing in the room.</p>
+      <p>VJing used to mean a projector, a mixer and a bag of cables. Tonight it was a web page. The words stayed where they were, and the colors moved over them in time with the kick drum, switching on every fourth bar.</p>
+      <blockquote>The best visuals do not ask for attention. They breathe with the music.</blockquote>
+      <h2>Start with the groove</h2>
+      <p>A steady four-on-the-floor gives the visuals something to hold on to. At 120 beats per minute, every bar is exactly two seconds long — long enough to notice a change, short enough to keep the room awake.</p>
+      <p>Keep the layers simple. One wash of color, one shape that follows the bass, one detail that catches the hi-hats. When the drop comes, change everything at once.</p>
+      <h2>Let it run</h2>
+      <p>The trick is to stop touching it. Put the screen somewhere everyone can see, let the music choose the timing, and go and dance.</p>
+    </div>
+
+    <div data-lang="ja">
+      <p>はじまりは、レコードの山に立てかけたタブレットと、止まらないループだった。パーティーの予定なんて無かった。誰かが再生を押して、明かりが落ちて、ソファの後ろの壁が部屋でいちばん明るくなった。</p>
+      <p>VJ といえば、プロジェクターとミキサーとケーブルの山だった。今夜は Web ページひとつ。文字はそのままに、キックに合わせて色が流れ、4 小節ごとに切り替わる。</p>
+      <blockquote>いい映像は、目を奪いにこない。音楽と一緒に息をする。</blockquote>
+      <h2>まずはグルーヴから</h2>
+      <p>4 つ打ちのキックがあると、映像がつかまる場所ができる。120 BPM なら 1 小節はちょうど 2 秒。変化に気づけて、部屋が眠くならない長さだ。</p>
+      <p>重ねるのは少しでいい。色の層をひとつ、ベースに合わせて動く形をひとつ、ハイハットを拾う細かいものをひとつ。サビが来たら、全部いっぺんに変える。</p>
+      <h2>あとは流しっぱなしで</h2>
+      <p>コツは、触るのをやめること。みんなから見える場所に画面を置いて、タイミングは音楽にまかせて、踊りに行こう。</p>
+    </div>
+  </article>
+
+  <aside>
+    <div class="player" id="player">
+      <div class="cover"></div>
+      <div class="track">Demo Loop</div>
+      <div class="meta">120 BPM · 0:16 · <span data-lang="en">loop</span><span data-lang="ja">ループ</span></div>
+      <button class="play" id="play" type="button">
+        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+        <span class="start"><span data-lang="en">Play</span><span data-lang="ja">再生</span></span>
+        <span class="pause"><span data-lang="en">Pause</span><span data-lang="ja">一時停止</span></span>
+      </button>
+      <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="note"><span data-lang="en">An original drum loop made for this page.</span><span data-lang="ja">このページのために作ったドラムループ。</span></p>
+      <!-- Safari は HLS(VJam FX が音を読める)、それ以外は m4a -->
+      <audio id="audio" loop preload="auto">
+        <source src="audio/loop.m3u8" type="application/vnd.apple.mpegurl">
+        <source src="audio/loop.m4a" type="audio/mp4">
+      </audio>
+      <div class="more">
+        <h3><span data-lang="en">MORE FROM NIGHTS</span><span data-lang="ja">ナイトの記事</span></h3>
+        <div><span data-lang="en">Ten loops for a slow Sunday</span><span data-lang="ja">ゆっくりした日曜のための 10 のループ</span></div>
+        <div><span data-lang="en">How to light a small room</span><span data-lang="ja">小さな部屋の照らし方</span></div>
+        <div><span data-lang="en">The quiet joy of 120 BPM</span><span data-lang="ja">120 BPM のささやかな楽しみ</span></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+  (function () {
+    var audio = document.getElementById('audio');
+    var player = document.getElementById('player');
+    document.getElementById('play').addEventListener('click', function () {
+      if (audio.paused) audio.play(); else audio.pause();
+    });
+    audio.addEventListener('play', function () { player.classList.add('playing'); });
+    audio.addEventListener('pause', function () { player.classList.remove('playing'); });
+  })();
+</script>
+</body>
+</html>
