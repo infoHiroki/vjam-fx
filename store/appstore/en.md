@@ -21,7 +21,7 @@ VJ effects for any web page
 Turn any web page into a VJ stage. Play a video with sound, switch VJam FX on, and 370 visual effects move with the beat — right inside Safari.
 ```
 
-## Description — 1,691 / 4,000
+## Description — 1,805 / 4,000
 
 ```text
 VJam FX is a Safari extension that lays music-reactive VJ visuals over any web page. Open a page with a video, turn VJam FX on, and the effects follow the beat of the music.
@@ -43,6 +43,7 @@ FEATURES
 • Text: put your own words on screen with animated fonts and colors
 • Light and dark pages: the blend adapts automatically
 • Heavy effects are skipped automatically on devices that can't keep up
+• iPhone and iPad: on iPhone, a video's full-screen button makes it fill the screen with the effects still on top
 
 PRIVATE BY DESIGN
 • The sound is analyzed only on your device
@@ -53,6 +54,14 @@ WHY IT ASKS FOR ALL WEBSITES
 To read the sound of a video, VJam FX needs to start together with the page. You choose which websites it can access in Settings › Apps › Safari › Extensions.
 
 Free. From the makers of VJam, the browser-based VJ app.
+```
+
+## What's New in This Version — 216 / 4,000
+
+```text
+VJam FX now works on iPhone.
+• On iPhone, the VJam FX panel opens as a sheet from the bottom of the screen.
+• Tap a video's full-screen button and it fills the screen, with the effects still on top. Tap × to go back.
 ```
 
 ## Keywords — 97 / 100
@@ -71,7 +80,7 @@ visuals,beat,BPM,party,DJ,club,rave,neon,glitch,trippy,psychedelic,overlay,exten
 | Marketing URL | https://infohiroki.github.io/vjam-fx/ |
 | Privacy Policy URL | https://infohiroki.github.io/vjam-fx/privacy-policy.html |
 
-## App Review Information — Notes — 1,274 / 4,000
+## App Review Information — Notes — 1,461 / 4,000
 
 ```text
 VJam FX is a Safari web extension. The app itself shows how to turn the extension on and use it.
@@ -83,7 +92,7 @@ HOW TO ENABLE
 
 HOW TO TEST
 1. In Safari, open our test page https://infohiroki.github.io/vjam-fx/demo/ (an original drum loop) and tap Play. Any web page that plays a video with sound also works.
-2. Tap the page menu button (AA) in the address bar, then tap VJam FX.
+2. Tap the page menu button (AA) in the address bar, then tap VJam FX. On iPhone, the address bar is at the bottom of the screen and the VJam FX panel opens as a sheet.
 3. Turn on the switch at the top right of the VJam FX panel.
 4. Visual effects appear over the page and change with the beat of the music (Auto mode starts automatically). The panel shows the detected BPM. Tap "Next" for a different set of effects.
 

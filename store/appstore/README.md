@@ -52,7 +52,30 @@ App Store Connect が受け付ける大きさで撮る(違うと上げられな�
 
 - iPad 13 インチ:2064 × 2752 / 2048 × 2732(横向きはその逆)。13 インチの iPad で撮るのがいちばん楽
 - 手元に 13 インチが無いとき:Xcode のシミュレータ(iPad Pro 13-inch)に入れて、`xcrun simctl io booted screenshot <ファイル>.png` で撮ると、ちょうどの大きさになる(保存先は内蔵ディスクの絶対パスに。外付けのディスクには書けないことがある)
-- 今は iPad だけ(`TARGETED_DEVICE_FAMILY` = 2)なので iPad のスクショだけでよい。iPhone を足したら 6.9 インチ:1320 × 2868 / 1290 × 2796 も要る
+- iPhone 6.9 インチ:1320 × 2868 / 1290 × 2796。iPhone 17 Pro Max のシミュレータで撮るとちょうど 1320 × 2868(1.2.0 から iPhone も出すので要る)
+
+### シミュレータで撮る(iPhone 6.9 インチ・1.2.0 のやり方)
+
+撮影ページを開いて Play を押し(ミュート)、選んだエフェクトを入れてから撮る(`tools/ios-sim/shot.mjs`。拡張は使わないので popup は写らない)。
+
+```bash
+xcrun simctl create "VJam iPhone 69" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max com.apple.CoreSimulator.SimRuntime.iOS-26-4
+xcrun simctl boot "VJam iPhone 69"
+xcrun simctl spawn "VJam iPhone 69" defaults write -g AppleLanguages -array en   # 英語(やり直すときは shutdown → boot)
+xcrun simctl status_bar "VJam iPhone 69" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+python3 store/appstore/demo/serve.py 8000 &
+xcrun simctl openurl "VJam iPhone 69" "http://localhost:8000/#en"
+# Web Inspector の口(tools/ios-sim/README.md の準備と同じ)
+SOCK=$(lsof -U 2>/dev/null | grep -o '/private/var/tmp/com.apple.launchd[^ ]*webinspectord_sim.socket' | head -1)
+ios_webkit_debug_proxy -s unix:$SOCK -c null:9530,:9531-9600 --no-frontend &
+bash scripts/build-safari-ext.sh
+SIMPORT=9531 node tools/ios-sim/shot.mjs "http://localhost:8000/#en" build/shots/01-effects.png neon-tunnel,fireflies,neon-frame
+```
+
+- 初めて Safari を開くと、下に「View Bookmarks, Share Menu…」の吹き出しが出る。× で閉じてから撮る
+- WebGL(`tunnel-shader`)は光が強い瞬間だと白く飛ぶ。何回か撮って選ぶ
+- アプリの案内画面は `xcrun simctl launch "VJam iPhone 69" com.vjam.fx` → `xcrun simctl io "VJam iPhone 69" screenshot`
+- App Store には JPEG(`sips -s format jpeg -s formatOptions 90 x.png --out x.jpg`)で上げた
 
 ## 音を作り直す
 
@@ -67,3 +90,12 @@ python3 store/appstore/demo/make_loop.py   # brew install ffmpeg が要る
   - iPad Pro 13 インチのシミュレータ(英語)で撮影ページを開き、`tools/ios-sim/` と同じやり方でエンジンを入れて撮った(拡張の popup は写っていない)
   - 01 エフェクト(neon-tunnel / fireflies / neon-frame)・02 kaleidoscope / pulse-ring・03 明るいページ(synth-wave / radial-burst)・04 WebGL(tunnel-shader / neon-frame)・05 アプリの案内画面
 - App Store Connect の設定:価格 無料・配信 147 の国と地域(EU 27 か国と中国本土は外した。EU はデジタルサービス法の申告、中国は ICP 届出が要るため)・Mac / Vision Pro での配信オフ・データの収集なし・他社のコンテンツなし・年齢 4+・審査に通ったら自動で公開
+
+## iPhone を足す(1.2.0・2026-11-16〜)
+
+- iPhone の実機では試さずに出す(user が決めた。出してから友達に触ってもらう。一度出した端末は外せない)
+- `TARGETED_DEVICE_FAMILY` = `1,2`、`MARKETING_VERSION` 1.2.0、`CURRENT_PROJECT_VERSION` 1
+- `screenshots-iphone69/`:iPhone 6.9 インチのスクショ 5 枚(1320 × 2868、この順)。iPad と同じ組み合わせ
+  - 01 neon-tunnel / fireflies / neon-frame・02 kaleidoscope / pulse-ring・03 明るいページ(synth-wave / radial-burst)・04 WebGL(tunnel-shader / neon-frame)・05 アプリの案内画面
+- iPad のスクショは 1.1.0 のまま(App Store Connect で前のバージョンから引き継がれる)
+- 新機能の欄は `en.md` / `ja.md` の What's New(このバージョンの新機能)

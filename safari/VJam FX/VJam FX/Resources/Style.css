@@ -253,3 +253,27 @@ b {
         zoom: 1.2;
     }
 }
+
+/* iPhone など狭い画面:余白を詰めて、Pro Max ならスクロールせずに全部見える */
+@media (max-width: 500px) {
+    .lead {
+        margin: 18px auto 20px;
+        font-size: 16px;
+    }
+
+    .cards {
+        gap: 12px;
+    }
+
+    .card {
+        padding: 16px 16px 14px;
+    }
+
+    .steps {
+        gap: 10px;
+    }
+
+    .foot {
+        margin-top: 16px;
+    }
+}
