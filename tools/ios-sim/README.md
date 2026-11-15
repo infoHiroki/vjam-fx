@@ -57,3 +57,32 @@ iPhone ではフルスクリーンの代わりに、video を画面いっぱい(
 - WebKit は CSSOM で変えた style を属性へ遅れて書き戻す。書き戻す前に `removeAttribute('style')` すると後から `style=""` が残る(先に `getAttribute('style')`)
 - PiP(`webkitSetPresentationMode('picture-in-picture')`)では `webkitbeginfullscreen` は来ない
 - 白いページ(`native.html`)では既定の blend が difference のまま。黒い帯の上は screen と同じ見た目、明るい動画の上もエフェクトが見える(screen だと白に溶ける)
+
+## 拡張ごと入れて確かめる(`ui/`、2026-11-15、iOS 26.4)
+エンジンを外から入れるのではなく、VJam FX のアプリ(拡張)をシミュレータに入れて、Safari のパネルから操作する。設定アプリと Safari は UI テスト(XCUITest)で動かす。
+
+```bash
+# アプリを iPhone にも入る形でビルドして入れる(プロジェクトは iPad だけのまま。ビルドのときだけ 1,2 に)
+bash scripts/build-safari-ext.sh
+xcodebuild -project "safari/VJam FX/VJam FX.xcodeproj" -scheme "VJam FX" -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath build/sim-dd TARGETED_DEVICE_FAMILY=1,2 CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= build
+xcrun simctl install "VJam iPhone" "build/sim-dd/Build/Products/Debug-iphonesimulator/VJam FX.app"
+# UI テスト(testFill の動画ページを 8823 番で配っておく)
+(cd tools/ios-sim/www && python3 -m http.server 8823 --bind 127.0.0.1 &)
+cd tools/ios-sim/ui && xcodegen generate
+xcodebuild test -project VJamSimUI.xcodeproj -scheme SimUI -destination 'platform=iOS Simulator,name=VJam iPhone' \
+  -derivedDataPath dd -resultBundlePath r.xcresult
+xcrun xcresulttool export attachments --path r.xcresult --output-path att   # スクショ
+```
+- `testEnable`:設定 → アプリ → Safari → 機能拡張 → VJam FX をオン・すべての Web サイトを許可
+- `testPanel`:撮影ページで再生 → パネルで ON(`AUTO`・BPM)→ Next → Manual → 設定
+- `testFill`:動画の全画面ボタン → 画面いっぱい + エフェクト → × で戻る(iPhone だけ。iPad では `-skip-testing:SimUITests/SimTests/testFill`)
+- 拡張のプロジェクトは iPad だけなので、iPhone のシミュレータをビルドの行き先に選べない。汎用のシミュレータ向けにビルドして `simctl install` で入れる
+- ラベルはシミュレータの言語が日本語の前提。Safari の中のボタンは `.tap()` が効かないことがあるので座標で押す
+
+### 分かったこと(iPhone 17)
+- パネルはページメニュー(ぁあ)→「VJam FX — VJ Effects for Any Website」で、画面の下から出るシート(iPad は吹き出し)。上へ引くと縦いっぱい
+- popup の幅が 280px のままだと右が空いていたので、iPhone のシートだけ横いっぱいにした(`popup.css` の `@media (pointer: coarse) and (min-width: 340px)`)。iPad の吹き出しは 280 × 352 のまま(iPad (A16) で確認)
+- 撮影ページ(HLS)で `AUTO`・`120 BPM`・Next・Manual・設定が動く
+- 動画の全画面ボタン → 画面いっぱい + エフェクト、× で戻って再生が続く(#51 の作りが拡張でも動く)。Safari のアドレスバーは下に残る
+- 重さ(fps)は実機でないと分からない(#75)
