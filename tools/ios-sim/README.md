@@ -22,6 +22,7 @@ node tools/ios-sim/run.mjs "http://localhost:8823/mms.html?wait" 12  # ManagedMe
 node tools/ios-sim/fill.mjs                                           # 画面いっぱい表示(#51)。スクショは build/ios-sim/
 node tools/ios-sim/fill.mjs http://localhost:8823/trap.html          # 祖先に transform・低い z-index、上に固定ヘッダーが被るページで
 node tools/ios-sim/ev.mjs 'document.title'                           # 表示中のタブで JS を 1 つ評価
+node tools/ios-sim/shot.mjs <URL> <出力.png> <プリセット,...>         # App Store のスクショ(撮影ページで Play → エフェクト → 撮る。store/appstore/README.md)
 xcrun simctl io "VJam iPhone" screenshot --type=png "$PWD/shot.png"  # 画面
 ```
 - 動画はいつもミュート(`sim.mjs` が play を差し替える)
@@ -62,10 +63,10 @@ iPhone ではフルスクリーンの代わりに、video を画面いっぱい(
 エンジンを外から入れるのではなく、VJam FX のアプリ(拡張)をシミュレータに入れて、Safari のパネルから操作する。設定アプリと Safari は UI テスト(XCUITest)で動かす。
 
 ```bash
-# アプリを iPhone にも入る形でビルドして入れる(プロジェクトは iPad だけのまま。ビルドのときだけ 1,2 に)
+# アプリをビルドして入れる(1.2.0 からプロジェクトが iPhone・iPad 両方)
 bash scripts/build-safari-ext.sh
 xcodebuild -project "safari/VJam FX/VJam FX.xcodeproj" -scheme "VJam FX" -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath build/sim-dd TARGETED_DEVICE_FAMILY=1,2 CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= build
+  -derivedDataPath build/sim-dd CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= build
 xcrun simctl install "VJam iPhone" "build/sim-dd/Build/Products/Debug-iphonesimulator/VJam FX.app"
 # UI テスト(testFill の動画ページを 8823 番で配っておく)
 (cd tools/ios-sim/www && python3 -m http.server 8823 --bind 127.0.0.1 &)
@@ -77,7 +78,7 @@ xcrun xcresulttool export attachments --path r.xcresult --output-path att   # �
 - `testEnable`:設定 → アプリ → Safari → 機能拡張 → VJam FX をオン・すべての Web サイトを許可
 - `testPanel`:撮影ページで再生 → パネルで ON(`AUTO`・BPM)→ Next → Manual → 設定
 - `testFill`:動画の全画面ボタン → 画面いっぱい + エフェクト → × で戻る(iPhone だけ。iPad では `-skip-testing:SimUITests/SimTests/testFill`)
-- 拡張のプロジェクトは iPad だけなので、iPhone のシミュレータをビルドの行き先に選べない。汎用のシミュレータ向けにビルドして `simctl install` で入れる
+- 汎用のシミュレータ向けにビルドして `simctl install` で入れる(1.1.0 までは iPad だけで、iPhone のシミュレータを行き先に選べなかった名残)
 - ラベルはシミュレータの言語が日本語の前提。Safari の中のボタンは `.tap()` が効かないことがあるので座標で押す
 
 ### 分かったこと(iPhone 17)

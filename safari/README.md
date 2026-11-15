@@ -1,4 +1,4 @@
-# VJam FX — Safari(iPad)版
+# VJam FX — Safari(iPhone・iPad)版
 
 Chrome 版と同じソースから Safari 用の拡張を組み立て、Xcode で iOS アプリとしてビルドする。
 
@@ -57,13 +57,14 @@ iPad 側:設定 → アプリ → Safari → 機能拡張 → VJam FX をオン�
 アップロードと App Store Connect の操作は人(か lead)がやる。
 文面・URL・審査メモは `store/appstore/en.md`・`ja.md`、スクショの撮り方は `store/appstore/README.md`。
 
-- バージョン:`MARKETING_VERSION`(1.1.0)・`CURRENT_PROJECT_VERSION`(1)。アプリと拡張は同じ値にそろえる
+- バージョン:`MARKETING_VERSION`(1.2.0)・`CURRENT_PROJECT_VERSION`(1)。アプリと拡張は同じ値にそろえる
+  - `manifest.json` の version は Chrome 版と共通なので、ここではそろえない
   - 同じバージョンを上げ直すときは `CURRENT_PROJECT_VERSION` を 1 つ増やす(同じ番号は二度と上げられない)
 - 暗号:`Info.plist`(アプリ)の `ITSAppUsesNonExemptEncryption` = NO。輸出コンプライアンスの質問は出ない
 - iOS の下限:`IPHONEOS_DEPLOYMENT_TARGET` = 17.0(プロジェクト・アプリ・拡張とも)。Manifest V3 と content_scripts の `world: "MAIN"`(`content/mse-tap.js`)を確実に動かすため
-- 対応端末:`TARGETED_DEVICE_FAMILY` = 2(iPad だけ。2026-10-03 決定)
-  - iPhone は実機で試していないので、最初は出さない。iPhone はあとのアップデートで足せる(一度出した端末は外せない)
-  - iPhone を足すときは `1,2` にする。その前に TestFlight で iPhone の実機を確かめる(シミュレータでの確認は `tools/ios-sim/`)
+- 対応端末:`TARGETED_DEVICE_FAMILY` = `1,2`(iPhone と iPad。1.2.0 から。1.1.0 は iPad だけ)
+  - iPhone は実機で試さずに出した(2026-11-16 決定、#75)。シミュレータで確かめたことは `tools/ios-sim/README.md`
+  - 一度出した端末は外せない
 
 ### 1. archive
 
@@ -123,7 +124,7 @@ xcodebuild -exportArchive -archivePath build/VJamFX.xcarchive \
    - プライバシーポリシー URL:`https://infohiroki.github.io/vjam-fx/privacy-policy.html`
    - データの収集:「データを収集しない」
 5. **バージョン 1.1.0**(言語ごと)
-   - スクショ(iPad 13 インチ。iPhone を足したら 6.9 インチも)
+   - スクショ(iPad 13 インチと iPhone 6.9 インチ)
    - プロモーションテキスト・説明・キーワード・サポート URL(`docs/support.html`)・マーケティング URL(`en.md` / `ja.md`)
    - 著作権(例 `2026 VJam`)
    - ビルド:3 で上げたものを選ぶ
