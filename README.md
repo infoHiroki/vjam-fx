@@ -2,7 +2,8 @@
 
 Chrome extension that overlays music-reactive VJ visuals on any webpage. Open a page with a video or music, turn VJam FX on, and the effects follow the beat.
 
-**Chrome Web Store**: https://chromewebstore.google.com/detail/gflgnfgemeniehmjjpcbhdphdppnmoaf
+**Chrome Web Store**: https://chromewebstore.google.com/detail/gflgnfgemeniehmjjpcbhdphdppnmoaf  
+**App Store (Safari on iPad)**: https://apps.apple.com/app/vjam-fx-music-visualizer/id6818703407
 
 **Website**: https://infohiroki.github.io/vjam-fx/
 
@@ -67,7 +68,7 @@ Add it from the [Chrome Web Store](https://chromewebstore.google.com/detail/gflg
 
 ## Safari (iPad)
 
-Coming soon to the App Store. Built from the same source — see [`safari/README.md`](safari/README.md) for the build steps.
+Get it free on the [App Store](https://apps.apple.com/app/vjam-fx-music-visualizer/id6818703407) (iPad). Built from the same source — see [`safari/README.md`](safari/README.md) for the build steps.
 
 ## Development
 
