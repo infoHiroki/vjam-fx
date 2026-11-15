@@ -94,7 +94,8 @@ python3 store/appstore/demo/make_loop.py   # brew install ffmpeg が要る
 ## iPhone を足す(1.2.0・2026-11-16〜)
 
 - iPhone の実機では試さずに出す(user が決めた。出してから友達に触ってもらう。一度出した端末は外せない)
-- `TARGETED_DEVICE_FAMILY` = `1,2`、`MARKETING_VERSION` 1.2.0、`CURRENT_PROJECT_VERSION` 1
+- `TARGETED_DEVICE_FAMILY` = `1,2`、`MARKETING_VERSION` 1.2.0、`CURRENT_PROJECT_VERSION` 2(1 は案内が「AA」のままで上げたので使わない)
+- 案内の「AA」:iOS 26 の Safari では、長方形の下に線 2 本のアイコン(ページメニュー)になった。アプリの案内・説明・審査メモ・サポートのページを「ページメニューのボタン(iOS 17〜18 は AA)」に
 - `screenshots-iphone69/`:iPhone 6.9 インチのスクショ 5 枚(1320 × 2868、この順)。iPad と同じ組み合わせ
   - 01 neon-tunnel / fireflies / neon-frame・02 kaleidoscope / pulse-ring・03 明るいページ(synth-wave / radial-burst)・04 WebGL(tunnel-shader / neon-frame)・05 アプリの案内画面
 - iPad のスクショは 1.1.0 のまま(App Store Connect で前のバージョンから引き継がれる)
