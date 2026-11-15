@@ -62,6 +62,7 @@ python3 store/appstore/demo/make_loop.py   # brew install ffmpeg が要る
 
 ## 出したもの(1.1.0・2026-10-03)
 
+- **公開**:2026-10-21 に 1.1.0 (2) が審査を通り、自動で公開(https://apps.apple.com/app/vjam-fx-music-visualizer/id6818703407)。初回の 2.1 への返信は `review-reply-2026-10.md`
 - `screenshots-ipad13/`:App Store に上げた iPad 13 インチのスクショ 5 枚(2064 × 2752、この順)
   - iPad Pro 13 インチのシミュレータ(英語)で撮影ページを開き、`tools/ios-sim/` と同じやり方でエンジンを入れて撮った(拡張の popup は写っていない)
   - 01 エフェクト(neon-tunnel / fireflies / neon-frame)・02 kaleidoscope / pulse-ring・03 明るいページ(synth-wave / radial-burst)・04 WebGL(tunnel-shader / neon-frame)・05 アプリの案内画面
