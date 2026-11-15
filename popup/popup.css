@@ -36,6 +36,14 @@ body {
   color: var(--text);
 }
 
+/* iPhone の Safari:パネルは画面の下から出るシートで、幅は端末で決まる。280px のままだと右が空くので、シートの幅いっぱいに。
+   Chrome(マウス)と iPad(中身の幅に合わせた吹き出し = 280px)は当たらない */
+@media (pointer: coarse) and (min-width: 340px) {
+  body {
+    width: auto;
+  }
+}
+
 button {
   font: inherit;
   color: inherit;
