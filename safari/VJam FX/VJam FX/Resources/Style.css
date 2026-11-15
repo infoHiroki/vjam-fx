@@ -204,6 +204,23 @@ b {
     vertical-align: 1px;
 }
 
+/* iOS 26 の Safari のページメニューのボタン(長方形の下に線 2 本)。iOS 17〜18 では AA */
+.key .pm {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    vertical-align: -2px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+}
+
+/* カッコ書きは途中で折り返さない */
+.nw {
+    white-space: nowrap;
+}
+
 /* ON のスイッチ(popup のヘッダーと同じ形) */
 .sw {
     display: inline-block;
