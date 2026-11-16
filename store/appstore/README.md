@@ -100,6 +100,6 @@ python3 store/appstore/demo/make_loop.py   # brew install ffmpeg が要る
 - `screenshots-iphone63/`:App Store Connect に入れた iPhone のスクショ 5 枚(1206 × 2622、この順)。`screenshots-iphone69/`(1320 × 2868、iPhone 17 Pro Max のシミュレータで撮った元)を縮めたもの。iPad と同じ組み合わせ
   - 01 neon-tunnel / fireflies / neon-frame・02 kaleidoscope / pulse-ring・03 明るいページ(synth-wave / radial-burst)・04 WebGL(tunnel-shader / neon-frame)・05 アプリの案内画面
 - iPad のスクショは 1.1.0 のまま(App Store Connect で前のバージョンから引き継がれる)
-- 新機能の欄は `en.md` の What's New
-- App Store Connect の言語は英語(アメリカ)だけ(1.1.0 から)。`ja.md` はまだ使っていない
+- 新機能の欄は `en.md` の What's New(日本語は `ja.md` のこのバージョンの新機能)
+- App Store Connect の言語は 1.1.0 まで英語(アメリカ)だけ。1.2.0 で日本語を足した(名前・サブタイトル・説明などは `ja.md`、スクショは英語のものがそのまま使われる、プライバシーポリシーの URL も英語から引き継ぎ)
 - 審査メモは `en.md` の本文 + 前回の返信(`review-reply-2026-10.md` の 2〜6)が App Store Connect に入っている。1.2.0 では「AA」の 2 か所をページメニューの言い方に直し、iPhone の 1 文を足した
