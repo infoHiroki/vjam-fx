@@ -52,9 +52,10 @@ App Store Connect が受け付ける大きさで撮る(違うと上げられな�
 
 - iPad 13 インチ:2064 × 2752 / 2048 × 2732(横向きはその逆)。13 インチの iPad で撮るのがいちばん楽
 - 手元に 13 インチが無いとき:Xcode のシミュレータ(iPad Pro 13-inch)に入れて、`xcrun simctl io booted screenshot <ファイル>.png` で撮ると、ちょうどの大きさになる(保存先は内蔵ディスクの絶対パスに。外付けのディスクには書けないことがある)
-- iPhone 6.9 インチ:1320 × 2868 / 1290 × 2796。iPhone 17 Pro Max のシミュレータで撮るとちょうど 1320 × 2868(1.2.0 から iPhone も出すので要る)
+- iPhone:**必須は「Dynamic Island 搭載 iPhone(中型ディスプレイ)」= 6.1 / 6.3 インチ**(1206 × 2622 / 1179 × 2556。2026-11 の App Store Connect)。ここに入れたものが iPhone の全サイズ・全言語に使われる。6.9 インチ(1320 × 2868、「大型ディスプレイ」)は任意
+  - 1.2.0 は 6.9 インチで撮った画像を 1206 × 2622 に縮めて入れた(縦横比の差 0.07%)。撮り直すなら iPhone 17(6.3 インチ)のシミュレータでちょうどの大きさになる
 
-### シミュレータで撮る(iPhone 6.9 インチ・1.2.0 のやり方)
+### シミュレータで撮る(iPhone・1.2.0 のやり方)
 
 撮影ページを開いて Play を押し(ミュート)、選んだエフェクトを入れてから撮る(`tools/ios-sim/shot.mjs`。拡張は使わないので popup は写らない)。
 
@@ -96,7 +97,9 @@ python3 store/appstore/demo/make_loop.py   # brew install ffmpeg が要る
 - iPhone の実機では試さずに出す(user が決めた。出してから友達に触ってもらう。一度出した端末は外せない)
 - `TARGETED_DEVICE_FAMILY` = `1,2`、`MARKETING_VERSION` 1.2.0、`CURRENT_PROJECT_VERSION` 2(1 は案内が「AA」のままで上げたので使わない)
 - 案内の「AA」:iOS 26 の Safari では、長方形の下に線 2 本のアイコン(ページメニュー)になった。アプリの案内・説明・審査メモ・サポートのページを「ページメニューのボタン(iOS 17〜18 は AA)」に
-- `screenshots-iphone69/`:iPhone 6.9 インチのスクショ 5 枚(1320 × 2868、この順)。iPad と同じ組み合わせ
+- `screenshots-iphone63/`:App Store Connect に入れた iPhone のスクショ 5 枚(1206 × 2622、この順)。`screenshots-iphone69/`(1320 × 2868、iPhone 17 Pro Max のシミュレータで撮った元)を縮めたもの。iPad と同じ組み合わせ
   - 01 neon-tunnel / fireflies / neon-frame・02 kaleidoscope / pulse-ring・03 明るいページ(synth-wave / radial-burst)・04 WebGL(tunnel-shader / neon-frame)・05 アプリの案内画面
 - iPad のスクショは 1.1.0 のまま(App Store Connect で前のバージョンから引き継がれる)
-- 新機能の欄は `en.md` / `ja.md` の What's New(このバージョンの新機能)
+- 新機能の欄は `en.md` の What's New
+- App Store Connect の言語は英語(アメリカ)だけ(1.1.0 から)。`ja.md` はまだ使っていない
+- 審査メモは `en.md` の本文 + 前回の返信(`review-reply-2026-10.md` の 2〜6)が App Store Connect に入っている。1.2.0 では「AA」の 2 か所をページメニューの言い方に直し、iPhone の 1 文を足した
