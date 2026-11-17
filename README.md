@@ -3,7 +3,7 @@
 Chrome extension that overlays music-reactive VJ visuals on any webpage. Open a page with a video or music, turn VJam FX on, and the effects follow the beat.
 
 **Chrome Web Store**: https://chromewebstore.google.com/detail/gflgnfgemeniehmjjpcbhdphdppnmoaf  
-**App Store (Safari on iPad)**: https://apps.apple.com/app/vjam-fx-music-visualizer/id6818703407
+**App Store (Safari on iPhone & iPad)**: https://apps.apple.com/app/vjam-fx-music-visualizer/id6818703407
 
 **Website**: https://infohiroki.github.io/vjam-fx/
 
@@ -66,9 +66,9 @@ Add it from the [Chrome Web Store](https://chromewebstore.google.com/detail/gflg
 | **Manual** | Effect list (search, Lock), Filters, Blend, Scenes (Save / click to load / right-click to clear), Text, Reset, Audio |
 | **Settings** (gear) | Auto start, All tabs, Fade, Cycle, Sensitivity, Too heavy (Restore) |
 
-## Safari (iPad)
+## Safari (iPhone & iPad)
 
-Get it free on the [App Store](https://apps.apple.com/app/vjam-fx-music-visualizer/id6818703407) (iPad). Built from the same source — see [`safari/README.md`](safari/README.md) for the build steps.
+Get it free on the [App Store](https://apps.apple.com/app/vjam-fx-music-visualizer/id6818703407) (iPhone & iPad). Built from the same source — see [`safari/README.md`](safari/README.md) for the build steps.
 
 ## Development
 
@@ -103,7 +103,7 @@ vjam-fx/
 ├── offscreen/             # Offscreen document for tabCapture audio
 ├── lib/p5.min.js          # p5.js graphics engine
 ├── icons/                 # Extension icons (16/32/48/128px)
-├── safari/                # Safari (iPad) app — Xcode project
+├── safari/                # Safari (iPhone & iPad) app — Xcode project
 ├── store/                 # Chrome Web Store / App Store listing, screenshots
 ├── docs/                  # Website (GitHub Pages): LP, support, privacy policy
 ├── scripts/               # Packaging and Safari build scripts
